@@ -14,7 +14,7 @@
 
 **链内红窗（有意，已登记）**：这是同一功能的**模型重建**——旧常量、旧端点（`/practice/targets*`）与旧练习表被删，消费方在后续卡里跟上。**中间卡允许全仓 `pnpm typecheck` 变红**；每卡判据 = **本包 build + 本包测试 + 本卡改动范围**；全仓 `typecheck` / `lint` / `pnpm -r test` 由**卡 8 收口**。
 
-**卡序重切（2026-10，文件冲突驱动的调整）**：原 3–6 拆分会让多张卡同时写 `shared/types/api.ts`、`server/routes/practice.ts`、`client/lib/api.ts`（同一批文件），worktree 并行反而要人工解冲突 ⇒ 收成「一张端点卡 + 三张客户端卡」并改为顺序推进（**不并行 worktree**）。已完成并通过独立验证的卡：卡 1（commit `6955d833`）、卡 2（commit `387f72f5`，含偏离裁定：`012_practice.ts` 不再建旧索引，口径已落 `docs/db/schema.md`）。
+**卡序重切（2026-10，文件冲突驱动的调整）**：原 3–6 拆分会让多张卡同时写 `shared/types/api.ts`、`server/routes/practice.ts`、`client/lib/api.ts`（同一批文件），worktree 并行反而要人工解冲突 ⇒ 收成「一张端点卡 + 三张客户端卡」并改为顺序推进（**不并行 worktree**）。已完成并通过独立验证的卡：卡 1（`6955d833`）、卡 2（`387f72f5`，含偏离裁定：`012_practice.ts` 不再建旧索引，口径已落 `docs/db/schema.md`）、卡 3（`163095d2`，含裁定 A：chat 样本侧注入本卡改完；被删的 details 用例归卡 7 恢复）。
 
 **每卡硬完成判据（缺一不可，汇报必附原始输出）**：
 1. `git log --oneline -1` 含**本卡的新 commit**（无 commit 不许报 PASS），`git status --porcelain` 干净；
@@ -22,22 +22,6 @@
 3. 汇报写明改动的文件清单 + 与卡内任一条不对应的实现说明（如有）。
 
 **环境备注（2026-10，影响 server 测试判据）**：端口 `3500` 被一个**外部先占进程**（`node packages/server/dist/index.js test-project`）占用 ⇒ `packages/server/src/index.test.ts` 的「端口策略」用例会 `EADDRINUSE` 超时。该用例与练习改版无关：server 判据 = **除该用例外全绿 + 附占用证据（进程 cmdline / 监听端口命令输出）**；若该进程已停，完整全绿。
-
----
-
-### 卡 3：全部端点 + shared 契约（服务端 + 契约层）
-
-**改动范围**：`packages/shared/src/types/api.ts`（练习三组端点 schema 全量重写 + `projectListRes` 条目 `authorId` / `projectConfigRes` `authorId` / `projectCreateReq` `author_id` / chat `context` 加 `practice_free_piece_id` 字段（**仅字段**，注入逻辑归卡 7））、`packages/shared/src/types/project.ts`（`author_id`）、`packages/server/src/routes/practice.ts`（全量重写）+ `practice.test.ts`、`packages/server/src/routes/project.ts` + `project.test.ts`、`packages/server/src/routes/chat.ts`（**只改样本侧注入**：`practice_sample_id` → 样本 id + 作家名 + 作品名（`PRACTICE_OTHER_WORK_LABEL` 兜底）+ 片段说明；删净 target 耦合）+ `chat.test.ts`（练习注入 describe 改新口径；**小说侧注入断言一律不动**）、`packages/client/src/lib/api.ts`（练习新端点的客户端函数；**页面卡片只消费它，不再各自改它**）。**不得改任何页面 / 组件 / 导航 / 自由练习注入逻辑**。
-
-**实现**（契约 = `120-api-practice.md` 全篇、`10-api-project.md`、`60-practice.md` §2）：
-1. 练习前置守卫：`kind !== "practice"` → 400 `KIND_MISMATCH`；`author_id` 解析不到预置作家 → 400 `VALIDATION_ERROR`「练习工作区未关联预置作家」（单点函数，两组端点共用）。
-2. 样本五端点（列表投影 / 新建含 `work_id` 校验与 `excerpt_label` / 详情 / PUT 写稿 / DELETE）、素材包三端点（GET 生效内容 + `customized` / PUT strict 非空 / DELETE 幂等恢复预置）、自由练习五端点（列表 / 新建含 `topic_source` 两种分支 / 详情 / PUT 写稿 / DELETE）。
-3. project 侧：`POST /project/create` 接受并落 `author_id`（仅 `kind = "practice"`；novel 传入或值不在预置清单 → 400 `VALIDATION_ERROR`）；`GET /project/list` 条目回 `authorId`；`GET /project/config` 回 `authorId`（无 → `null`）。
-4. `client/lib/api.ts`：新端点函数（含 `ApiError` 语义与既有风格一致）。
-
-**验收命令**：`pnpm -r build` → `pnpm --filter @whispering233/ai-editor-shared test` → `pnpm --filter @whispering233/ai-editor-server test`。
-
-**Commit**：`feat(practice): 端点契约全量改版（样本 / 风格说明 / 自由练习 + author_id）`
 
 ---
 
@@ -113,11 +97,15 @@
 **改动范围**：缺陷修复（仅限改版链路内的真实缺陷）、`docs/design/tasks.md` 清卡、`CHANGELOG.md` 校对。**不新增功能**。
 
 **实现**：
-1. `pnpm -r build` → `pnpm typecheck` → `pnpm lint` → `pnpm -r test` **全绿**（红窗在此关闭）；把命令与输出摘要写进汇报。
+1. `pnpm -r build` → `pnpm typecheck` → `pnpm lint` → `pnpm -r test` **全绿**（红窗在此关闭；端口 `3500` 若仍被外部进程占用，按顶部环境备注判据）；把命令与输出摘要写进汇报。
 2. 逐条核对实现 ↔ 文档（`60-practice.md` / `120-api-practice.md` / `schema.md` / `DESIGN.md`），发现漂移就地修并在汇报中列出。
-3. **补测试覆盖（卡 2 oracle 的 P2-2 / P2-3）**：在 `packages/db/src/migrations/013_author_practice.test.ts` 的 v12 fixture 里显式造出将被 013 删除的旧索引（`CREATE INDEX idx_practice_samples_target ON practice_samples(target_id)`），迁移前断言它存在、迁移后断言为空——否则 013 的 `DROP INDEX IF EXISTS` 在当前测试里只走 no-op 分支，索引名写错也发现不了；同时把该测试里「三表只断言 `columns.length > 0`」补成显式列名断言（与同文件第一个用例口径一致）。
-4. **浏览器像素走查委托 `ui-verifier`**（核验项：根首页练习分区预置卡与懒创建 / 左栏五项 / 风格说明渲染与编辑 / 文风练习分组列表与新建样本（含导入文件）/ 自由练习出题与点评 / 详情页排版）；发现问题回到对应卡修完再复验。
-5. 清空本批卡片；确认 `CHANGELOG.md` Unreleased 段与最终实现一致（含迁移 013 说明）。
+3. **补测试覆盖（卡 2 oracle 的 P2-2 / P2-3）**：在 `packages/db/src/migrations/013_author_practice.test.ts` 的 v12 fixture 里显式造出将被 013 删除的旧索引，迁移前断言存在、迁移后断言为空（否则 `DROP INDEX IF EXISTS` 只走 no-op 分支）；并把该测试里「三表只断言 `columns.length > 0`」补成显式列名断言。
+4. **收口卡 3 oracle 的 P2（全部为本卡范围内的最小修）**：
+   - `packages/shared/src/types/api.test.ts`：`"d".repeat(20001)` 改为用 `MAX_PRACTICE_DRAFT_CHARS + 1`（数值单源）；该文件里「包含全部 10 个现行错误码」标题去掉数字（实际已 13 条）。
+   - `packages/server/src/routes/practice.test.ts`：`expect([400,409]).not.toContain(res.status)`（新增的守卫用例）改为能拒 500 的断言（如 `expect(res.status).toBeLessThan(500)` 或按端点断言期望状态集）。
+   - **空白文本口径**：`excerpt_label` / `brief` 入库前 `trim`（shared schema 加 `.trim()`；同时把 server 侧断言「`" 节选 "` 原样存」改为存 trim 后的值），避免纯空白片段说明 / 写作要求在注入里产生空内容行（`chat.ts` 的 `!== ""` 判据由此变实）；改完同步检查 `120-api-practice.md` 是否需补一句「两端点字段写入前 trim」。
+5. **浏览器像素走查委托 `ui-verifier`**（核验项：根首页练习分区预置卡与懒创建 / 左栏五项 / 风格说明渲染与编辑 / 文风练习分组列表与新建样本（含导入文件）/ 自由练习出题与点评 / 详情页排版）；发现问题回到对应卡修完再复验。
+6. 清空本批卡片；确认 `CHANGELOG.md` Unreleased 段与最终实现一致（含迁移 013 说明）。
 
 **验收命令**：上列四条 + ui-verifier 报告（无未 proven 项）。
 
