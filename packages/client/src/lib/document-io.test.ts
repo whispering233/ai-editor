@@ -5,6 +5,7 @@
 // 与下载的系统文件行为由浏览器走查承担——同 tasks.md 卡 12.5 口径）。
 import { describe, expect, it } from "vitest";
 import {
+  decodeTextFileBytes,
   exportDocumentJson,
   exportDocumentMarkdown,
   MARKDOWN_LOSSY_NOTICE,
@@ -154,5 +155,23 @@ describe("readTextFile（<input type=\"file\"> 的 File → 文本）", () => {
   it("按 UTF-8 读全文（含中文与换行）", async () => {
     const file = new File(["第一段\n第二段\n"], "章.md", { type: "text/markdown" });
     await expect(readTextFile(file)).resolves.toBe("第一段\n第二段\n");
+  });
+});
+
+describe("decodeTextFileBytes（编码：先 UTF-8 严格，失败回落 GB18030）", () => {
+  it("合法 UTF-8 → 按 UTF-8 解（不走回落）", () => {
+    const bytes = new TextEncoder().encode("路明非站在走廊尽头。");
+    expect(decodeTextFileBytes(bytes.buffer as ArrayBuffer)).toBe("路明非站在走廊尽头。");
+  });
+
+  it("GB18030 字节（非法 UTF-8 序列）→ 回落解码出可读中文", () => {
+    // 你 好 的 GBK / GB18030 编码：0xC4 0xE3 / 0xBA 0xC3（0xC4 0xE3 不是合法 UTF-8 起始）
+    const bytes = new Uint8Array([0xc4, 0xe3, 0xba, 0xc3]);
+    expect(decodeTextFileBytes(bytes.buffer as ArrayBuffer)).toBe("你好");
+  });
+
+  it("纯 ASCII（两种编码同形）→ 不受回落影响", () => {
+    const bytes = new TextEncoder().encode("hello\nworld");
+    expect(decodeTextFileBytes(bytes.buffer as ArrayBuffer)).toBe("hello\nworld");
   });
 });

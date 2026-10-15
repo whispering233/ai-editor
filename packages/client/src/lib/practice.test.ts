@@ -1,7 +1,9 @@
-// 练习展示口径单测（卡 9 / 卡 10）：状态徽标三态映射 + 「我的观察」空值取舍 + 点评卡可渲染视图 + 点评帧刷新判定。
-// 契约：docs/ui/DESIGN.md §文风练习区（徽标文案三态 / 点评卡渲染）、docs/api/120-api-practice.md（列表项字段 + 卡体形状）。
+// 练习展示口径单测（卡 9 / 卡 10 / 卡 4 改版）：状态徽标三态映射 + 作品显示名与列表分组 + 点评卡可渲染视图 + 点评帧刷新判定。
+// 契约：docs/ui/DESIGN.md §作家文风练习区（徽标文案三态 / 列表按作品分组 / 点评卡渲染）、
+// docs/api/120-api-practice.md（列表项字段 + 卡体形状）、docs/design/60-practice.md §3（作品清单封闭 + 「其他」兜底）。
 // 页面级 DOM 断言在 pages/practice.test.tsx 与 pages/practice-detail.test.tsx（SSR 走查）；本文件只钉纯函数口径。
 import { describe, expect, it, vi } from "vitest";
+import type { AuthorEntry, PracticeSampleSummary } from "@whispering233/ai-editor-shared";
 import { ApiError } from "./api";
 
 // 保存动作要真发 PUT ⇒ mock 掉 api 模块（保留 ApiError 真实实现，错误码断言才有意义）
@@ -15,8 +17,9 @@ import {
   canRequestPracticeReview,
   practiceFeedbackSignalSampleId,
   practiceFeedbackView,
-  practiceObservationText,
+  practiceSampleGroups,
   practiceSampleStatus,
+  practiceWorkLabel,
   savePracticeDraft,
   shouldRefreshPracticeCard,
 } from "./practice";
@@ -87,16 +90,74 @@ describe("practiceSampleStatus（样本状态徽标三态）", () => {
   });
 });
 
-describe("practiceObservationText（我的观察：空值不占位）", () => {
-  it("null / 空串 / 纯空白 → null（页面据此不渲染观察行）", () => {
-    for (const input of [null, "", "   ", "\n\t "]) {
-      expect(practiceObservationText(input)).toBeNull();
-    }
+/** 测试用作家（作品顺序 = 分组断言的前提：龙族 → 上海堡垒；不需要真实预置素材） */
+const author: AuthorEntry = {
+  id: "jiangnan",
+  name: "江南",
+  intro: "",
+  styleNotes: "",
+  works: [
+    { id: "dragon-raja", name: "龙族", intro: "" },
+    { id: "shanghai-fortress", name: "上海堡垒", intro: "" },
+  ],
+};
+
+describe("practiceWorkLabel（作品显示名：预置清单 + 「其他」兜底）", () => {
+  it("命中预置作品 → 作品名；null / 未知 id / 作家未解析 → 「其他」", () => {
+    expect(practiceWorkLabel(author, "dragon-raja")).toBe("龙族");
+    expect(practiceWorkLabel(author, null)).toBe("其他");
+    expect(practiceWorkLabel(author, "gone")).toBe("其他");
+    expect(practiceWorkLabel(null, "dragon-raja")).toBe("其他");
+  });
+});
+
+describe("practiceSampleGroups（列表分组：预置顺序 + 末尾「其他」）", () => {
+  const sample = (
+    id: string,
+    workId: string | null,
+    updatedAt: string,
+  ): PracticeSampleSummary => ({
+    id,
+    workId,
+    excerptLabel: id,
+    charCount: 10,
+    hasDraft: false,
+    hasFeedback: false,
+    createdAt: updatedAt,
+    updatedAt,
   });
 
-  it("有内容 → 去首尾空白后原样给（换行等内部空白保留）", () => {
-    expect(practiceObservationText("  多用短句  ")).toBe("多用短句");
-    expect(practiceObservationText("短句\n少形容词")).toBe("短句\n少形容词");
+  it("顺序 = 预置作品清单顺序，末尾「其他」；空组不出现；未知 workId 归「其他」", () => {
+    const groups = practiceSampleGroups(author, [
+      sample("s1", null, "2026-10-01T00:00:00.000Z"),
+      sample("s2", "dragon-raja", "2026-10-02T00:00:00.000Z"),
+      sample("s3", "gone", "2026-10-03T00:00:00.000Z"),
+    ]);
+    // 作品清单 = [龙族, 上海堡垒]，但 上海堡垒 无样本 → 不出现
+    expect(groups.map((g) => [g.workId, g.name])).toEqual([
+      ["dragon-raja", "龙族"],
+      [null, "其他"],
+    ]);
+    // 未知 id 与 null 同组（组内按 updatedAt 倒序：s3 比 s1 新）
+    expect(groups[1].samples.map((s) => s.id)).toEqual(["s3", "s1"]);
+  });
+
+  it("组内按 updatedAt 倒序（不依赖服务端整体序）", () => {
+    const groups = practiceSampleGroups(author, [
+      sample("old", "dragon-raja", "2026-09-01T00:00:00.000Z"),
+      sample("new", "dragon-raja", "2026-10-01T00:00:00.000Z"),
+    ]);
+    expect(groups[0].samples.map((s) => s.id)).toEqual(["new", "old"]);
+  });
+
+  it("作家未解析（author = null）→ 全部归「其他」一组", () => {
+    const groups = practiceSampleGroups(null, [
+      sample("a", "dragon-raja", "2026-10-01T00:00:00.000Z"),
+      sample("b", null, "2026-10-02T00:00:00.000Z"),
+    ]);
+    expect(groups).toHaveLength(1);
+    expect(groups[0].workId).toBeNull();
+    expect(groups[0].samples.map((s) => s.id)).toEqual(["b", "a"]);
   });
 });
 

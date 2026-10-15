@@ -135,7 +135,20 @@ export function downloadTextFile({ fileName, body }: DocumentFile): void {
   setTimeout(() => URL.revokeObjectURL(url), 0);
 }
 
-/** 读取用户选择的文本文件（`<input type="file">` 的 File → 文本；编码同写侧 UTF-8） */
+/**
+ * 解码文件字节：**先 UTF-8 严格解码**（`fatal: true` 才会把非法字节序列抛出来），失败回落 GB18030。
+ * 为什么回落：用户导入的 `.txt` / `.md` 常是 Windows 下用 GBK / GB18030 存的（中文文本文件的主流旧编码），
+ * 只按 UTF-8 解会得到一屏乱码；而 UTF-8 解码失败正是区分两种编码的可靠信号。
+ */
+export function decodeTextFileBytes(bytes: ArrayBuffer): string {
+  try {
+    return new TextDecoder("utf-8", { fatal: true }).decode(bytes);
+  } catch {
+    return new TextDecoder("gb18030").decode(bytes);
+  }
+}
+
+/** 读取用户选择的文本文件（`<input type="file">` 的 File → 文本；编码先试 UTF-8 再回落 GB18030） */
 export function readTextFile(file: File): Promise<string> {
-  return file.text();
+  return file.arrayBuffer().then(decodeTextFileBytes);
 }

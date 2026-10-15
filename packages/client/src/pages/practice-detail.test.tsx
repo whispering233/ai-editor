@@ -1,26 +1,35 @@
-// 练习页三段（`PracticeSampleSections`）SSR 走查（卡 10）：仓内无 jsdom/@testing-library（既有纪律：不引新依赖），
-// 用 `react-dom/server` 直渲染纯展示层。契约依据 = `docs/ui/DESIGN.md` §文风练习区「练习页」
-// （范文只读 / 我的稿间接引用 `--writing-*` 且不引 `--paper-bg` / 点评卡渲染）
-// + §Layout「中栏页头结构」；`docs/api/120-api-practice.md`（样本详情与卡体形状）。
+// 练习页（`PracticeSampleSections` / `PracticeHeader`）SSR 走查（卡 10；页头口径 = 卡 4 改版）：
+// 仓内无 jsdom/@testing-library（既有纪律：不引新依赖），用 `react-dom/server` 直渲染纯展示层。
+// 契约依据 = `docs/ui/DESIGN.md` §作家文风练习区「练习详情」（页头 title = 片段说明空则作品名 +
+// `truncateTitle`、description = 作品名 + 作家名；范文只读 / 我的稿间接引用 `--writing-*` 且不引
+// `--paper-bg` / 点评卡渲染）+ §Layout「中栏页头结构」；`docs/api/120-api-practice.md`（样本详情与卡体形状）。
 //
-// 覆盖（对应卡 10 硬完成判据）：
-// - 判据 1：三段纵向在渲染（范文 / 我的稿 / 点评卡）+ 范文只读（唯一 `textarea` 是我的稿）
-// - 判据 2：页内「保存」按钮在位、保存态与失败重试可见（真实点击与 Ctrl+S 注册栈走组件/store 测试 + 浏览器核对）
-// - 判据 5：点评卡渲染 `dimensions` 的内层 snake_case 字段（`sample_trait` / `draft_trait` /
-//   `sample_quotes` / `draft_quotes`），引用以 `「」` 列出、**不做**原文高亮；无卡 / `{}` → 一行空态
-// - 判据 6：我的稿的字体 / 字号 / 行高来自 `--writing-*`（按非默认档断言：20px / 1.8），
-//   **不出现 `--paper-bg`**（纸张档非默认也不给）
+// 覆盖：
+// - 页头：片段说明非空 → 用它（去首尾空白）；留空 → 回作品名；未知 workId → 「其他」；description = 作品名 + 作家名
+// - 三段纵向在渲染（范文 / 我的稿 / 点评卡）+ 范文只读（唯一 `textarea` 是我的稿）
+// - 我的稿的字体 / 字号 / 行高来自 `--writing-*`（按非默认档断言），**不出现 `--paper-bg`**
+// - 点评卡渲染内层 snake_case 字段；引用以 `「」` 列出、**不做**原文高亮；无卡 / `{}` → 一行空态
 // 点评触发与 saving 态由容器（真实请求）承担 ⇒ 这里只断言按下前的可点性（`disabled` 三态）。
 import type { ReactElement } from "react";
 import { renderToString } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import {
+  AUTHOR_CATALOG,
   MAX_PRACTICE_DRAFT_CHARS,
+  PRACTICE_OTHER_WORK_LABEL,
   type PracticeFeedbackCard,
   type PracticeSampleDetail,
 } from "@whispering233/ai-editor-shared";
-import PracticeDetail, { PracticeLoadFailure, PracticeSampleMissing, PracticeSampleSections } from "./PracticeDetail";
+import PracticeDetail, {
+  PracticeHeader,
+  PracticeLoadFailure,
+  PracticeSampleMissing,
+  PracticeSampleSections,
+} from "./PracticeDetail";
 import { DEFAULT_WRITING_PREFS, type WritingPrefs } from "../hooks/use-writing-prefs";
+
+const JIANGNAN = AUTHOR_CATALOG.jiangnan;
+const WORK = JIANGNAN.works[0];
 
 /** SSR 在相邻文本节点之间插 `<!-- -->`（数字与「 字」是两段）——断言前归一掉 */
 function renderHtml(node: ReactElement): string {
@@ -29,11 +38,8 @@ function renderHtml(node: ReactElement): string {
 
 const DETAIL: PracticeSampleDetail = {
   id: "ps-1",
-  targetId: "pt-1",
-  targetName: "汪曾祺的克制冷叙述",
-  observation: "多用短句、少形容词",
-  sourceKind: "paste",
-  sourceLabel: "汪曾祺《受戒》节选",
+  workId: WORK.id,
+  excerptLabel: "开头一段",
   text: "明海出家已经四年了。",
   draft: "他进城已经四年了。",
   feedback: null,
@@ -81,8 +87,47 @@ function buttonHtml(html: string, label: string): string {
   return html.slice(html.lastIndexOf("<button", index), html.indexOf("</button>", index));
 }
 
+describe("页头（片段说明 → 标题；作品名 + 作家名 → 说明行）", () => {
+  it("片段说明非空 → 标题 = 片段说明（去首尾空白）+ `truncateTitle`", () => {
+    const html = renderHtml(
+      <PracticeHeader detail={{ ...DETAIL, excerptLabel: "  结尾一段  " }} author={JIANGNAN} />,
+    );
+    expect(html).toContain("结尾一段");
+    expect(html).not.toContain("结尾一段  "); // 尾随空白不落到标题
+    expect(html).toContain("truncate");
+  });
+
+  it("片段说明留空 → 标题回作品名（不再有旧「文风目标 / 我的观察」行）", () => {
+    const html = renderHtml(
+      <PracticeHeader detail={{ ...DETAIL, excerptLabel: "   " }} author={JIANGNAN} />,
+    );
+    expect(html).toContain(WORK.name);
+    expect(html).not.toContain("文风目标");
+    expect(html).not.toContain("我的观察");
+  });
+
+  it("说明行 = 作品名 + 作家名（作品名兜底走 shared「其他」文案）", () => {
+    const html = renderHtml(
+      <PracticeHeader detail={{ ...DETAIL, workId: "gone" }} author={JIANGNAN} />,
+    );
+    expect(html).toContain(`${PRACTICE_OTHER_WORK_LABEL} · ${JIANGNAN.name}`);
+  });
+
+  it("作家未解析（配置未到 / 非预置）→ 说明行只画作品名，不出现空分隔符", () => {
+    const html = renderHtml(<PracticeHeader detail={DETAIL} author={null} />);
+    expect(html).toContain(PRACTICE_OTHER_WORK_LABEL);
+    expect(html).not.toContain(" · ");
+  });
+
+  it("详情未到（首帧）→ 只挂「练习」标题，说明行不渲染", () => {
+    const html = renderHtml(<PracticeHeader detail={null} author={JIANGNAN} />);
+    expect(html).toContain("练习");
+    expect(html).not.toContain(JIANGNAN.name);
+  });
+});
+
 describe("练习页三段（范文 → 我的稿 → 点评卡）", () => {
-  it("三段纵向都在（判据 1）：范文 / 我的稿 / 点评卡三张卡依次出现", () => {
+  it("三段纵向都在：范文 / 我的稿 / 点评卡三张卡依次出现", () => {
     const html = render();
     for (const title of ["范文", "我的稿", "点评卡"]) {
       expect(html, title).toContain(title);
@@ -109,7 +154,7 @@ describe("练习页三段（范文 → 我的稿 → 点评卡）", () => {
     expect(html).toContain(`最多 ${MAX_PRACTICE_DRAFT_CHARS} 字`);
   });
 
-  it("我的稿的字体 / 字号 / 行高来自 `--writing-*`（判据 6）：按非默认偏好断言，且不引 `--paper-bg`", () => {
+  it("我的稿的字体 / 字号 / 行高来自 `--writing-*`：按非默认偏好断言，且不引 `--paper-bg`", () => {
     const html = render();
     // 容器给变量（值来自偏好档位表，不是页面写死的字号）
     expect(html).toContain("--writing-font-size:20px");
@@ -151,7 +196,7 @@ describe("点评卡渲染", () => {
     advice: "把长句拆开",
   };
 
-  it("无卡 → 一行空态「还没点评」（判据 5）", () => {
+  it("无卡 → 一行空态「还没点评」", () => {
     const html = render();
     expect(html).toContain("还没点评");
   });
@@ -161,7 +206,7 @@ describe("点评卡渲染", () => {
     expect(html).toContain("还没点评");
   });
 
-  it("满卡：summary（caption）+ 维度名 + 四行标签（判据 5）", () => {
+  it("满卡：summary（caption）+ 维度名 + 四行标签", () => {
     const html = render({
       detail: {
         ...DETAIL,

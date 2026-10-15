@@ -1,21 +1,24 @@
-// 文风仿写练习的领域口径（卡 9 / 卡 10）——**样本状态徽标三态 + 点评卡可渲染视图 + 点评帧刷新判定
-// + 稿件保存动作的唯一派生入口**。
+// 文风仿写练习的领域口径（卡 9 / 卡 10 / 卡 4 改版）——**列表按作品分组 + 作品名兜底 + 样本状态徽标三态
+// + 点评卡可渲染视图 + 点评帧刷新判定 + 稿件保存动作的唯一派生入口**。
 //
-// 契约：`docs/api/120-api-practice.md`「GET /practice/targets/:id/samples」的样本列表项字段
-// （`hasDraft` / `hasFeedback`，列表不回正文与卡体）、「GET /practice/samples/:id」的点评卡形状
-// （内层恒 snake_case、读取侧只防「非对象」）、「PUT /practice/samples/:id」（唯一的用户写稿入口）、
-// `docs/ui/DESIGN.md` §文风练习区（样本行 `type-badge` 文案 =「未写稿」/「待点评」/「已点评」；点评卡渲染）、
-// `docs/design/60-practice.md` §4（卡内层字段）/ §5（点评触发 = 一条真实的用户消息）。
+// 契约：`docs/api/120-api-practice.md`「GET /practice/samples」的样本列表项字段
+// （`workId` / `excerptLabel` / `hasDraft` / `hasFeedback`，列表不回正文与卡体）、
+// 「GET /practice/samples/:id」的点评卡形状（内层恒 snake_case、读取侧只防「非对象」）、
+// 「PUT /practice/samples/:id」（唯一的用户写稿入口）、
+// `docs/ui/DESIGN.md` §作家文风练习区（列表分组顺序 / 样本行 `type-badge` 文案 =「未写稿」/「待点评」/「已点评」；
+// 点评卡渲染）、`docs/design/60-practice.md` §3（作品清单封闭 + 「其他」兜底）。
 //
 // 优先级（先判卡再加稿）：有点评卡必然有稿（点评由 AI 读稿产出，见 `60-practice.md` §2），
 // 故 `hasFeedback` 优先不会掩盖稿件状态；页面/组件不得各写一份 `hasFeedback ? … : hasDraft ? …`
 // （同一形状三次复发是仓库登记过的类别——值改了、别的副本没改）。
 
 import {
+  PRACTICE_OTHER_WORK_LABEL,
   TOOL_DETAILS_TO_CLIENT,
+  type AuthorEntry,
   type PracticeFeedbackCard,
   type PracticeSampleDetail,
-  type PracticeSampleItem,
+  type PracticeSampleSummary,
 } from "@whispering233/ai-editor-shared";
 import { ApiError, CLIENT_NETWORK_ERROR, updatePracticeSampleDraft } from "./api";
 
@@ -27,22 +30,60 @@ export type PracticeSampleStatus = "未写稿" | "待点评" | "已点评";
  * 入参只需两个布尔位（列表项与详情页都能给出），不绑死整个响应对象。
  */
 export function practiceSampleStatus(
-  sample: Pick<PracticeSampleItem, "hasDraft" | "hasFeedback">,
+  sample: Pick<PracticeSampleSummary, "hasDraft" | "hasFeedback">,
 ): PracticeSampleStatus {
   if (sample.hasFeedback) return "已点评";
   if (sample.hasDraft) return "待点评";
   return "未写稿";
 }
 
+// ============ 作品（列表分组与详情页头的显示名） ============
+
 /**
- * 目标「我的观察」的可展示文本：`null` / 空串 / 纯空白 → `null`（调用点据此**不渲染该行**）。
- * REST schema 只把空串归一成 `null`（`docs/api/120-api-practice.md` 的 PUT 语义），
- * 纯空白仍会落库 ⇒ 展示侧的取舍收在这里，页面不重复判断。
+ * 作品显示名：预置作品清单内的作品名；`null`（其他）/ 未知 id（预置被移除）/ 作家未解析 → 「其他」。
+ * 兜底文案的唯一定义 = shared `PRACTICE_OTHER_WORK_LABEL`（列表组标题、新建弹窗下拉、详情页头三处取它）。
  */
-export function practiceObservationText(observation: string | null): string | null {
-  if (observation === null) return null;
-  const trimmed = observation.trim();
-  return trimmed === "" ? null : trimmed;
+export function practiceWorkLabel(author: AuthorEntry | null, workId: string | null): string {
+  if (workId === null || author === null) return PRACTICE_OTHER_WORK_LABEL;
+  return author.works.find((work) => work.id === workId)?.name ?? PRACTICE_OTHER_WORK_LABEL;
+}
+
+/** 一个作品分组（`workId === null` = 末尾的「其他」组） */
+export interface PracticeSampleGroup {
+  workId: string | null;
+  name: string;
+  samples: PracticeSampleSummary[];
+}
+
+/**
+ * 样本列表 → 按作品分组（列表页的**唯一**分组入口）：顺序 = 预置作品清单顺序 + 末尾「其他」组；
+ * 无样本的组不出现在结果里；组内按 `updatedAt` 倒序（显式排一次——分组后不能再依赖
+ * 「服务端整体已倒序」这个前提）。未知 `workId` 与 `null` 同归「其他」（`60-practice.md` §3）。
+ */
+export function practiceSampleGroups(
+  author: AuthorEntry | null,
+  samples: PracticeSampleSummary[],
+): PracticeSampleGroup[] {
+  const groups: PracticeSampleGroup[] = (author?.works ?? []).map((work) => ({
+    workId: work.id,
+    name: work.name,
+    samples: [],
+  }));
+  const other: PracticeSampleGroup = {
+    workId: null,
+    name: PRACTICE_OTHER_WORK_LABEL,
+    samples: [],
+  };
+  for (const sample of samples) {
+    const group = groups.find((candidate) => candidate.workId === sample.workId) ?? other;
+    group.samples.push(sample);
+  }
+  return [...groups, other]
+    .filter((group) => group.samples.length > 0)
+    .map((group) => ({
+      ...group,
+      samples: [...group.samples].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)),
+    }));
 }
 
 // ============ 点评卡（卡 10） ============
@@ -111,6 +152,7 @@ export function practiceFeedbackView(
   feedback: PracticeFeedbackCard | null,
 ): PracticeFeedbackView | null {
   if (feedback === null || typeof feedback !== "object" || Array.isArray(feedback)) return null;
+  // SAFETY: 上面的非 null 对象判定后，卡体是「合法 JSON 对象但形状未知」（写入侧校验、读取侧透传）
   const record = feedback as unknown as Record<string, unknown>;
   const rawDimensions = Array.isArray(record.dimensions) ? record.dimensions : [];
   const dimensions = rawDimensions

@@ -1,25 +1,32 @@
-// 练习页（`#/practice/:sampleId`，卡 10）：范文（只读）→ 我的稿（可编辑）→ 点评卡。
+// 练习页（`#/practice/:sampleId`，卡 10；卡 4 改版页头，卡 5 复用卡面组件）：
+// 范文（只读）→ 我的稿（可编辑）→ 点评卡。
 //
 // 契约：
-// - 视觉 / 几何 = `docs/ui/DESIGN.md` §文风练习区「练习页」+ §Layout「中栏页头结构」（页头常驻模板）：
+// - 视觉 / 几何 = `docs/ui/DESIGN.md` §作家文风练习区「练习详情」+ §Layout「中栏页头结构」（页头常驻模板）：
+//   页头 title = 片段说明（空则回作品名，`truncateTitle`）+ description = 作品名 + 作家名；
 //   三段纵向；我的稿 = 纯文本 `TextArea`（**不引块编辑器**），字体 / 字号 / 行高**间接引用 `--writing-*`**
 //   （与写作面同源，**不引 `--paper-bg`**——练习稿不着纸）
 // - 数据 = `docs/api/120-api-practice.md`：`GET /practice/samples/:id`（**唯一**返回范文全文与卡体的读端点）
 //   + `PUT /practice/samples/:id`（全系统唯一的用户写稿入口）。`feedback` **原样透传**（读取侧只防「非对象」）
 //   ⇒ **禁止对响应 schema 调 `.parse()`**；可渲染视图由 `lib/practice.ts` 的 `practiceFeedbackView` 收窄
+// - 作品名 / 作家名来自 shared 常量（`resolveAuthor` + `practiceWorkLabel`——服务端不复制作品名）
 // - 保存 = 页内「保存」按钮 + 全站 `Ctrl/Cmd+S`（既有注册栈 `useSaveShortcut`；键位常量单一来源 =
 //   `lib/save-shortcut.ts`）；动作本体 = `lib/practice.savePracticeDraft`（页面把它的布尔**原样返回**：
 //   `false` = 失败，各页自己 catch ⇒ promise 恒 resolve，只有这个信号能阻断存档）
 // - 点评 = `POST /chat` + `context.practice_sample_id`（发一条**普通用户消息**，留痕在会话历史、
 //   不引入隐藏语义）；卡体即时刷新来自 `tool_execution_end` 的 `details` 帧（聊天 store 的
 //   `lastToolDetails`）= **刷新信号**，卡体仍从 `GET /practice/samples/:id` 读（帧里只有写库结果）
-// - 文案口径（`60-practice.md`）：用户侧只用「范文 / 我的稿 / 点评 / 我的观察」
+// - 文案口径（`60-practice.md`）：用户侧只用「范文 / 我的稿 / 点评 / 作品」
 //
 // 分层：`PracticeSampleSections` / `FeedbackCardView` / 两个整页态 = 纯展示（无 effect、无请求，
 // 导出供 SSR 走查——仓内无 jsdom，组件测试用 `react-dom/server`）；默认导出 = 容器（取数 + 保存 + 触发点评）。
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import type { PracticeFeedbackCard, PracticeSampleDetail } from "@whispering233/ai-editor-shared";
-import { MAX_PRACTICE_DRAFT_CHARS } from "@whispering233/ai-editor-shared";
+import type {
+  AuthorEntry,
+  PracticeFeedbackCard,
+  PracticeSampleDetail,
+} from "@whispering233/ai-editor-shared";
+import { MAX_PRACTICE_DRAFT_CHARS, resolveAuthor } from "@whispering233/ai-editor-shared";
 import { Button, Input, Skeleton, Typography } from "antd";
 import { ApiError, getPracticeSample } from "../lib/api";
 import {
@@ -27,7 +34,7 @@ import {
   canRequestPracticeReview,
   practiceFeedbackSignalSampleId,
   practiceFeedbackView,
-  practiceObservationText,
+  practiceWorkLabel,
   savePracticeDraft,
   shouldRefreshPracticeCard,
   type PracticeFeedbackDimension,
@@ -42,6 +49,7 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { navigate } from "../hooks/use-route";
 import { useWritingPrefs, toWritingTypeCssVars, type WritingPrefs } from "../hooks/use-writing-prefs";
 import { useChatStore } from "../stores/chat";
+import { useProjectStore } from "../stores/project";
 import { useUiStore } from "../stores/ui";
 
 /** 我的稿的书写面行数下限（内容更多时自动长高；纯布局常量，无第二处引用） */
@@ -254,11 +262,41 @@ export function PracticeLoadFailure({ message, onRetry }: { message: string; onR
   );
 }
 
+export interface PracticeHeaderProps {
+  /** 样本详情（`null` = 未加载：页头只挂「练习」标题） */
+  detail: PracticeSampleDetail | null;
+  /** 当前工作区的预置作家（`null` = 未解析：说明行只画作品名） */
+  author: AuthorEntry | null;
+}
+
+/** 练习页页头（纯展示，导出供 SSR 走查）：title = 片段说明（留空则回作品名，`truncateTitle`），
+ * description = 作品名 + 作家名——作品名兜底走 `lib/practice.practiceWorkLabel`（不手抄「其他」） */
+export function PracticeHeader({ detail, author }: PracticeHeaderProps) {
+  const workName = detail === null ? "" : practiceWorkLabel(author, detail.workId);
+  const excerptLabel = detail?.excerptLabel.trim() ?? "";
+  return (
+    <PageHeader
+      title={detail === null ? "练习" : excerptLabel === "" ? workName : excerptLabel}
+      truncateTitle
+      description={
+        detail !== null && (
+          <span className="text-xs text-muted-foreground">
+            {workName}
+            {author !== null && ` · ${author.name}`}
+          </span>
+        )
+      }
+    />
+  );
+}
+
 // ============ 容器 ============
 
 export default function PracticeDetail({ sampleId }: { sampleId: string }) {
   // 写作面偏好（全局一份，与章正文 / 参考资料正文共用同一 localStorage 键）
   const { prefs: writingPrefs } = useWritingPrefs();
+  // 预置作家（页头 description 的作家名；练习工作区必有值，缺失时只画作品名）
+  const author = resolveAuthor(useProjectStore((s) => s.config?.authorId ?? null));
   const showToast = useUiStore((s) => s.showToast);
   const sendMessage = useChatStore((s) => s.sendMessage);
   const requestFocusInput = useChatStore((s) => s.requestFocusInput);
@@ -377,25 +415,12 @@ export default function PracticeDetail({ sampleId }: { sampleId: string }) {
     return <PracticeLoadFailure message={loadError.message} onRetry={() => void loadDetail()} />;
   }
 
-  // 「我的观察」留空 = 不渲染该行（空值取舍单一定义 = lib/practice.ts）
-  const observation = detail === null ? null : practiceObservationText(detail.observation);
-
+  // 作品名（`null` / 未知 id → 「其他」）；片段说明留空时页头回落到作品名
   return (
     /* 页头常驻模板（DESIGN.md §Layout「中栏页头结构」）：section 恰好等于中栏滚动容器内容区 ⇒
        外壳不滚，滚动只发生在内层容器里（页头与三段标题留在视口）。 */
     <section className="flex h-full min-h-0 flex-col">
-      <PageHeader
-        title={detail === null ? "练习" : detail.sourceLabel}
-        truncateTitle
-        description={
-          detail !== null && (
-            <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
-              <span>文风目标：{detail.targetName}</span>
-              {observation !== null && <span>我的观察：{observation}</span>}
-            </div>
-          )
-        }
-      />
+      <PracticeHeader detail={detail} author={author} />
       <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">
         {detail === null ? (
           <Skeleton active title={false} paragraph={{ rows: 4 }} />
