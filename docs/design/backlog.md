@@ -445,6 +445,7 @@
 
 ## 作家文风练习（2026-10，改版后的升级路径）
 
+- **pi 升级到与 `pi-codemode ≥ 1.2` 同线的版本（去掉解析锁 pin）** — 现状：`pi-coding-agent@1.0.4` 与 `pi-codemode ≥ 1.2` 不兼容，靠 `server`/`agent` 的 `@earendil-works/pi-codemode: "1.0.4"` 精确依赖锁住（见 `build.md`「发布管道坑记录」）。触发条件：下次 pi 升级批次（升级 = 一个显式 commit 齐抬 `pi-ai`/`pi-coding-agent`（及其传递包）+ 全量测试 + 复查三处「与 pi 同构」断言）；升到同线后应**删掉这两个 pin**并重跑无锁安装冒烟（`pnpm pack:test` + `pnpm start:test`）。
 - **pi 其余传递依赖未写精确版本** — 现状：`pi-coding-agent@1.0.4` 对 `pi-agent-core` / `pi-tui` / `chord` 也声明 `^1.0.x`；`pi-codemode` 已在 2026-10 因上游移除导出而补上直接依赖锁（`agent/package.json`），其余四个仍靠锁文件 + 上游自律。触发条件：任一上游 1.x 再现破坏性变更（症状 = 无锁安装后 server 启动报模块导出错），或下一次 pi 升级批次；届时把它们一并写成直接依赖 + 精确版本（同样靠 `pnpm pack:test` + `pnpm start:test` 验收）。
 - **风格说明素材包的结构化统计（NLP 画像）**
   - 现状：素材包 = markdown 文本（`practice_style_packs` 单列 `content`）+ 预置常量；**统计信息不落库**（有意不预留空列）。
