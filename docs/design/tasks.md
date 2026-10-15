@@ -14,7 +14,7 @@
 
 **链内红窗（有意，已登记）**：这是同一功能的**模型重建**——旧常量、旧端点（`/practice/targets*`）与旧练习表被删，消费方在后续卡里跟上。**中间卡允许全仓 `pnpm typecheck` 变红**；每卡判据 = **本包 build + 本包测试 + 本卡改动范围**；全仓 `typecheck` / `lint` / `pnpm -r test` 由**卡 8 收口**。
 
-**卡序重切（2026-10，文件冲突驱动的调整）**：原 3–6 拆分会让多张卡同时写 `shared/types/api.ts`、`server/routes/practice.ts`、`client/lib/api.ts`（同一批文件），worktree 并行反而要人工解冲突 ⇒ 收成「一张端点卡 + 三张客户端卡」并改为顺序推进（**不并行 worktree**）。已完成并通过独立验证的卡：卡 1（`6955d833`）、卡 2（`387f72f5`，含偏离裁定：`012_practice.ts` 不再建旧索引，口径已落 `docs/db/schema.md`）、卡 3（`163095d2`，含裁定 A：chat 样本侧注入本卡改完；被删的 details 用例归卡 7 恢复）。
+**卡序重切（2026-10，文件冲突驱动的调整）**：原 3–6 拆分会让多张卡同时写 `shared/types/api.ts`、`server/routes/practice.ts`、`client/lib/api.ts`（同一批文件），worktree 并行反而要人工解冲突 ⇒ 收成「一张端点卡 + 三张客户端卡」并改为顺序推进（**不并行 worktree**）。已完成并通过独立验证的卡：卡 1（`6955d833`）、卡 2（`387f72f5`，含偏离裁定：`012_practice.ts` 不再建旧索引，口径已落 `docs/db/schema.md`）、卡 3（`163095d2`，含裁定 A：chat 样本侧注入本卡改完；被删的 details 用例归卡 7 恢复）、卡 4（`38d4654d`，P2 打磨归卡 8）。
 
 **每卡硬完成判据（缺一不可，汇报必附原始输出）**：
 1. `git log --oneline -1` 含**本卡的新 commit**（无 commit 不许报 PASS），`git status --porcelain` 干净；
@@ -22,22 +22,6 @@
 3. 汇报写明改动的文件清单 + 与卡内任一条不对应的实现说明（如有）。
 
 **环境备注（2026-10，影响 server 测试判据）**：端口 `3500` 被一个**外部先占进程**（`node packages/server/dist/index.js test-project`）占用 ⇒ `packages/server/src/index.test.ts` 的「端口策略」用例会 `EADDRINUSE` 超时。该用例与练习改版无关：server 判据 = **除该用例外全绿 + 附占用证据（进程 cmdline / 监听端口命令输出）**；若该进程已停，完整全绿。
-
----
-
-### 卡 4：客户端 A — 文风练习两页 + 新建样本弹窗 + 范文导入
-
-**改动范围**：`packages/client/src/pages/Practice.tsx`、`packages/client/src/pages/PracticeDetail.tsx`、`packages/client/src/components/practice/create-sample-dialog.tsx`（`create-target-dialog.tsx` 及其测试**删除**）、`packages/client/src/lib/practice.ts`、`packages/client/src/lib/document-io.ts`（`readTextFile` 编码回落）+ 各自测试。**不碰 `main.tsx` / `nav-items.tsx`（路由注册在卡 6）**。
-
-**实现**（契约 = `DESIGN.md`「文风练习列表 / 练习详情 / 新建样本弹窗」、`60-practice.md` §9）：
-1. 列表：按作品分组（预置作品清单顺序 + 末尾「其他」组，无样本的组不渲染，组内 `updatedAt` 倒序）；组内 `[+ 新建样本]` 预选该作品；页头右端 `[+ 新建样本]`（默认「其他」）；行 = 片段说明（空则留空）+ 状态徽标 + 相对时间；删「新建目标」与本页空态分支。
-2. 详情：页头 title = 片段说明（空则作品名，`truncateTitle`）+ description = 作品名 + 作家名（删「文风目标 / 我的观察」）；三段保持（范文只读 → 我的稿 + 保存 + `Ctrl/Cmd+S` → 点评卡 + 「让 AI 点评」）。
-3. 弹窗：关联作品 `select`（预置作品 + 「其他」，必选默认「其他」，`popupMatchSelectWidth={false}`）+ 片段说明 `input`（上限常量）+ 范文 `TextArea`（上限常量，`最多 N 字` 由常量插值）+ 「导入文本文件」（`.txt` / `.md`）。
-4. `readTextFile`：`new TextDecoder("utf-8", { fatal: true })` 抛错 → `new TextDecoder("gb18030")`；**超上限不静默截断**（框内可见错误 + 保留原输入）；文件名去扩展名预填「片段说明」。
-
-**验收命令**：`pnpm -r build` → `pnpm --filter @whispering233/ai-editor-client test`。
-
-**Commit**：`feat(practice): 文风练习两页改版与范文文件导入`
 
 ---
 
@@ -104,8 +88,14 @@
    - `packages/shared/src/types/api.test.ts`：`"d".repeat(20001)` 改为用 `MAX_PRACTICE_DRAFT_CHARS + 1`（数值单源）；该文件里「包含全部 10 个现行错误码」标题去掉数字（实际已 13 条）。
    - `packages/server/src/routes/practice.test.ts`：`expect([400,409]).not.toContain(res.status)`（新增的守卫用例）改为能拒 500 的断言（如 `expect(res.status).toBeLessThan(500)` 或按端点断言期望状态集）。
    - **空白文本口径**：`excerpt_label` / `brief` 入库前 `trim`（shared schema 加 `.trim()`；同时把 server 侧断言「`" 节选 "` 原样存」改为存 trim 后的值），避免纯空白片段说明 / 写作要求在注入里产生空内容行（`chat.ts` 的 `!== ""` 判据由此变实）；改完同步检查 `120-api-practice.md` 是否需补一句「两端点字段写入前 trim」。
-5. **浏览器像素走查委托 `ui-verifier`**（核验项：根首页练习分区预置卡与懒创建 / 左栏五项 / 风格说明渲染与编辑 / 文风练习分组列表与新建样本（含导入文件）/ 自由练习出题与点评 / 详情页排版）；发现问题回到对应卡修完再复验。
-6. 清空本批卡片；确认 `CHANGELOG.md` Unreleased 段与最终实现一致（含迁移 013 说明）。
+5. **打磨卡 4 oracle 的 P2（均为一行到数行的小修）**：
+   - `create-sample-dialog.tsx`：`excerptLabelError` 是**写不进去的死状态**（全文件只置 `null`）——要么删该 state 与分支，要么补一条真正可达的校验；
+   - `Practice.tsx`：组内「新建样本」要随 `author === null` 一起 `disabled`（与页头按钮同口径，否则作家未解析时组内按钮可点、创建被服务端 400 拒）；
+   - 导入成功路径**只在字段为空时**预填片段说明（不静默覆盖用户已输入的说明）；
+   - 列表重拉时**仅首帧**置 `null`（后续保留旧列表，避免提案确认后整页骨架闪）；
+   - 补一条 SSR 断言：默认「其他」真被 `Select` 选中 / 组内按钮把该组 `workId` 传入对话框（卡 4 oracle 的弱断言项）。
+6. **浏览器像素走查委托 `ui-verifier`**（核验项：根首页练习分区预置卡与懒创建 / 左栏五项 / 风格说明渲染与编辑 / 文风练习分组列表与新建样本（含导入文件）/ 自由练习出题与点评 / 详情页排版）；发现问题回到对应卡修完再复验。
+7. 清空本批卡片；确认 `CHANGELOG.md` Unreleased 段与最终实现一致（含迁移 013 说明）。
 
 **验收命令**：上列四条 + ui-verifier 报告（无未 proven 项）。
 
