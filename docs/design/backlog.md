@@ -471,6 +471,7 @@
 - **练习列表 `hasFeedback` 判定读整列 `feedback` 文本** — 现状：`listPracticeSamples` / `listPracticePieces` 为算 `hasFeedback` 把 `feedback` 整列拉进内存（与详情同一防御解析口径），当前单工作区数据量下无性能问题。触发条件：单工作区样本 / 自由练习量明显变大时；可换 SQL `json_valid()` + 长度判定，但需同步保留坏 JSON 不打挂列表的防御口径。（登记来源：卡 2 oracle 的 P2-1，report-only）
 - **练习响应 schema 在运行时无消费点** — 现状：`shared` 的练习响应 schema（列表 / 详情 / 素材包 / 写稿 / 删除）只作类型契约，服务端不 `.parse()`（路由层手工拼字段，靠 server 测试的键集断言兜住）；project 模块有「经 schema 自检后返回」的先例。触发条件：改动练习响应字段时希望多一层运行期自检（与 project 口径对齐）。
 - **根首页练习卡显示各作家样本数（需聚合端点）** — 现状：`GET /project/list` 不带样本数，「N 篇范文」只在**当前打开**的练习工作区卡上显示（多作家时其余卡只剩「最近更新 …」，有意降级，有单测钉住）。触发条件：预置作家多到需要横向对比进度时；最小修 = 新增一个只回「author_id → 样本数」的小聚合端点（或让 list 顺带回计数），客户端卡片直接展示。（登记来源：卡 6 oracle 的 P2-1）
+- **会话标题可能取到工具结果 JSON** — 现状：会话元 `name` 为空时，客户端 `sessionTitle` 回落 `lastMessage`，而服务端该值 = agent 包 `lastVisibleSessionText(...)`（从尾遍历可见消息、取最后一条非空文本）——**工具结果也算「有内容」** ⇒ 以工具调用收尾的轮次（练习点评 / 出题、小说侧提案类工具同样）会把工具 JSON 当会话标题显示（ui-verifier 像素走查实录：标题栏出现 `{"author_id":"jiangnan","author_name":"江南"…}`）。触发条件：清理/收敛会话标题口径时；最小修 = `lastVisibleSessionText` 跳过 `role === "tool"` 的消息（或回落到最后一条 user/assistant 文本）+ 一条单测。（登记来源：ui-verifier 走查 2026-10）
 - **预置素材的内容语言本地化**
   - 现状：预置作家介绍 / 作品介绍 / 风格说明与界面文案同为中文（`project.json` 的 `language` 不能切换它们）。
   - 触发条件：出现非中文用户需求（届时按语言分文件组织 `shared/authors/`，仍是加文件 + 清单一行）。
