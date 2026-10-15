@@ -47,13 +47,8 @@ import {
   practiceSampleCreateReqSchema,
   practiceSampleDetailResSchema,
   practiceSampleDraftPutReqSchema,
-  practiceTargetCreateReqSchema,
-  practiceTargetCreateResSchema,
-  practiceTargetDeleteResSchema,
-  practiceTargetUpdateReqSchema,
-  practiceTargetSchema,
 } from "./api.js";
-import { MAX_PRACTICE_SAMPLE_CHARS, MAX_PRACTICE_SOURCE_LABEL_CHARS, MAX_PRACTICE_TARGET_NAME_CHARS } from "../constants/practice.js";
+import { MAX_PRACTICE_SAMPLE_CHARS } from "../constants/practice.js";
 
 describe("ErrorCode 完整性", () => {
   it("包含全部 10 个现行错误码", () => {
@@ -67,7 +62,7 @@ describe("ErrorCode 完整性", () => {
       "OUTLINE_ANCESTOR_DELETED",
       "INVALID_PROJECT_PATH",
       "KIND_MISMATCH", // 工作区类型不匹配（400）：小说语义端点/字段被练习工作区（或反向）访问
-      "PRACTICE_NOT_FOUND", // 文风目标 / 练习样本不存在（404）
+      "PRACTICE_NOT_FOUND", // 练习样本 / 自由练习篇不存在（404）
       "PROPOSAL_STALE",
       "PROPOSAL_NOT_FOUND",
       "PROPOSAL_PROJECT_MISMATCH",
@@ -850,77 +845,35 @@ describe("settings/llm 端点 schema（pi provider 目录契约）", () => {
   });
 });
 
-describe("practice 端点 schema（docs/api/120-api-practice.md）", () => {
+describe("practice 端点 schema（docs/api/120-api-practice.md；旧 targets 模型已废）", () => {
   it("请求 schema 消费 shared 上限常量：恰好上限通过、超 1 字符拒绝（不复述数字）", () => {
-    const label = "d".repeat(MAX_PRACTICE_SOURCE_LABEL_CHARS);
-    expect(practiceSampleCreateReqSchema.safeParse({ source_label: label, text: "范文" }).success).toBe(true);
-    expect(practiceSampleCreateReqSchema.safeParse({ source_label: label + "d", text: "范文" }).success).toBe(false);
     const text = "d".repeat(MAX_PRACTICE_SAMPLE_CHARS);
-    expect(practiceSampleCreateReqSchema.safeParse({ source_label: "来源", text }).success).toBe(true);
-    expect(practiceSampleCreateReqSchema.safeParse({ source_label: "来源", text: text + "d" }).success).toBe(false);
-    // 目标名（上限是工具结果信封预算的一部分，见 tools `query/practice.ts` 头注释实测）
-    const name = "d".repeat(MAX_PRACTICE_TARGET_NAME_CHARS);
-    expect(practiceTargetCreateReqSchema.safeParse({ name }).success).toBe(true);
-    expect(practiceTargetCreateReqSchema.safeParse({ name: name + "d" }).success).toBe(false);
-    expect(practiceTargetUpdateReqSchema.safeParse({ name }).success).toBe(true);
-    expect(practiceTargetUpdateReqSchema.safeParse({ name: name + "d" }).success).toBe(false);
+    expect(practiceSampleCreateReqSchema.safeParse({ text }).success).toBe(true);
+    expect(practiceSampleCreateReqSchema.safeParse({ text: text + "d" }).success).toBe(false);
   });
 
   it('source_kind 收窄为 "paste"；请求字段名 snake_case（strict 拒绝 camelCase）', () => {
-    expect(
-      practiceSampleCreateReqSchema.safeParse({ source_kind: "paste", source_label: "来源", text: "范文" }).success,
-    ).toBe(true);
+    expect(practiceSampleCreateReqSchema.safeParse({ source_kind: "paste", text: "范文" }).success).toBe(true);
     // 省略 = "paste"（不传 source_kind 也合法）
-    expect(practiceSampleCreateReqSchema.safeParse({ source_label: "来源", text: "范文" }).success).toBe(true);
-    expect(
-      practiceSampleCreateReqSchema.safeParse({ source_kind: "file", source_label: "来源", text: "范文" }).success,
-    ).toBe(false);
-    expect(
-      practiceSampleCreateReqSchema.safeParse({ sourceKind: "paste", sourceLabel: "来源", text: "范文" }).success,
-    ).toBe(false);
+    expect(practiceSampleCreateReqSchema.safeParse({ text: "范文" }).success).toBe(true);
+    expect(practiceSampleCreateReqSchema.safeParse({ source_kind: "file", text: "范文" }).success).toBe(false);
+    expect(practiceSampleCreateReqSchema.safeParse({ sourceKind: "paste", text: "范文" }).success).toBe(false);
     expect(practiceSampleDraftPutReqSchema.safeParse({ draft: "" }).success).toBe(true); // 空串 = 清空稿件
     expect(practiceSampleDraftPutReqSchema.safeParse({ draft: "稿", extra: 1 }).success).toBe(false); // strict 单字段
   });
 
-  it("名称/文本类字段 trim 非空：纯空白 label 与 text 一律拒绝，带空白值落库前 trim", () => {
-    expect(practiceSampleCreateReqSchema.safeParse({ source_label: "   ", text: "范文" }).success).toBe(false);
-    expect(practiceSampleCreateReqSchema.safeParse({ source_label: "来源", text: "   " }).success).toBe(false);
-    expect(practiceSampleCreateReqSchema.safeParse({ source_label: "来源", text: "\n\t " }).success).toBe(false);
-    expect(
-      practiceSampleCreateReqSchema.parse({ source_label: "  《受戒》节选  ", text: "  明海出家已经四年了。  " }),
-    ).toEqual({ source_label: "《受戒》节选", text: "明海出家已经四年了。" });
-    expect(practiceTargetCreateReqSchema.parse({ name: "  汪曾祺  " }).name).toBe("汪曾祺"); // 同一口径，目标名
+  it("文本类字段 trim 非空：纯空白 text 一律拒绝，带空白值落库前 trim", () => {
+    expect(practiceSampleCreateReqSchema.safeParse({ text: "   " }).success).toBe(false);
+    expect(practiceSampleCreateReqSchema.safeParse({ text: "\n\t " }).success).toBe(false);
+    expect(practiceSampleCreateReqSchema.parse({ text: "  明海出家已经四年了。  " })).toEqual({
+      text: "明海出家已经四年了。",
+    });
   });
 
-  it("响应 schema 与文档字段形状一致（目标项含 sampleCount / 详情含 targetName+observation / 删除计数）", () => {
+  it("响应 schema 与文档字段形状一致（详情含范文全文 + 稿 + 卡体；卡内层 snake_case）", () => {
     const T = "2026-10-01T10:00:00Z";
-    const item = practiceTargetSchema.parse({
-      id: "pt-1",
-      name: "目标",
-      observation: null,
-      sampleCount: 2,
-      createdAt: T,
-      updatedAt: T,
-    });
-    expect(item.sampleCount).toBe(2);
-    // POST 响应与列表项**同形**：含 sampleCount（新建目标下恒为 0）
-    const created = practiceTargetCreateResSchema.parse({
-      id: "pt-1",
-      name: "目标",
-      observation: null,
-      sampleCount: 0,
-      createdAt: T,
-      updatedAt: T,
-    });
-    expect(created.sampleCount).toBe(0);
-    expect(Object.keys(created).sort()).toEqual(Object.keys(item).sort());
     const detail = practiceSampleDetailResSchema.parse({
       id: "ps-1",
-      targetId: "pt-1",
-      targetName: "目标",
-      observation: "短句、白描",
-      sourceKind: "paste",
-      sourceLabel: "《受戒》节选",
       text: "明海出家已经四年了。",
       draft: "",
       feedback: {
@@ -940,22 +893,6 @@ describe("practice 端点 schema（docs/api/120-api-practice.md）", () => {
       updatedAt: T,
     });
     expect(detail.feedback?.dimensions[0].sample_trait).toBe("短句"); // 卡内层 snake_case（嵌套透传）
-    expect(practiceTargetDeleteResSchema.parse({ deleted: true, deletedSamples: 3 })).toEqual({
-      deleted: true,
-      deletedSamples: 3,
-    });
-  });
-
-  it("目标名上限含端 = 常量，且按 trim 后的长度计（带空白的上限串仍通过）", () => {
-    const name = "d".repeat(MAX_PRACTICE_TARGET_NAME_CHARS);
-    expect(practiceTargetCreateReqSchema.parse({ name: `  ${name}  ` }).name).toBe(name);
-    expect(practiceTargetCreateReqSchema.safeParse({ name: `  ${name}d  ` }).success).toBe(false);
-  });
-
-  it("PUT /targets/:id 请求要求至少给一项（空对象拒绝；observation 空串 = 清空合法）", () => {
-    expect(practiceTargetUpdateReqSchema.safeParse({ name: "改名" }).success).toBe(true);
-    expect(practiceTargetUpdateReqSchema.safeParse({ observation: "" }).success).toBe(true);
-    expect(practiceTargetUpdateReqSchema.safeParse({}).success).toBe(false);
   });
 });
 

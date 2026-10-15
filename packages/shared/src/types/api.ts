@@ -14,10 +14,7 @@ import { BACKUP_FREQUENCIES } from "../constants/backup.js";
 import { WORKSPACE_KINDS } from "../constants/workspace.js";
 import {
   MAX_PRACTICE_DRAFT_CHARS,
-  MAX_PRACTICE_OBSERVATION_CHARS,
   MAX_PRACTICE_SAMPLE_CHARS,
-  MAX_PRACTICE_SOURCE_LABEL_CHARS,
-  MAX_PRACTICE_TARGET_NAME_CHARS,
 } from "../constants/practice.js";
 import type { ComputeStateResult, DeltaRecord, EntitySummary, ProjectAgents, ProjectConfig, RelationRecord } from "./index.js";
 import type { CloudBackupEntry, CloudImportBookResult, CloudRemoteBooksResult } from "./cloud.js";
@@ -52,7 +49,7 @@ export const ERROR_CODES = [
   "OUTLINE_ANCESTOR_DELETED", // 409 restore 时存在软删祖先
   "INVALID_PROJECT_PATH", // 400 create/open 路径校验失败
   "KIND_MISMATCH", // 400 工作区类型不匹配：小说语义端点/字段被练习工作区（或反向）访问；文案固定为「该端点仅适用于小说工作区」/「该端点仅适用于练习工作区」
-  "PRACTICE_NOT_FOUND", // 404 文风目标或练习样本不存在（详情/更新/删除/新建样本时目标不存在）
+  "PRACTICE_NOT_FOUND", // 404 练习样本 / 自由练习篇不存在
   "PROPOSAL_STALE", // 409 确认时引用快照不一致
   "PROPOSAL_NOT_FOUND", // 404 proposal_id 不存在
   "PROPOSAL_PROJECT_MISMATCH", // 409 提案所属项目 ≠ 当前项目
@@ -1161,6 +1158,8 @@ export type NamesResolveResult = z.infer<typeof namesResolveResSchema>;
 // 即点评卡内层恒 snake_case，见 `practiceFeedbackSchema`）；**长度上限一律取 shared 常量**
 // （constants/practice.ts，schema 里不复述数字）⇒ 超限 400 VALIDATION_ERROR；
 // 目标 / 样本不存在 → 404 PRACTICE_NOT_FOUND。点评链路（触发 / 落库 / 渲染）不在本模块。
+// **2026-10 改版进行中**：旧「文风目标」（`/practice/targets*`）模型已废（表随迁移删除），
+// 其 schema 已从本文件移除；样本 / 风格说明 / 自由练习的新契约由后续卡补齐。
 
 /** 范文来源种类：MVP 唯一值 `paste`（跨工作区快照导入为升级路径，见 backlog） */
 export const practiceSourceKindSchema = z.literal("paste");
@@ -1189,55 +1188,7 @@ export const practiceFeedbackSchema = z.object({
 });
 export type PracticeFeedbackCard = z.infer<typeof practiceFeedbackSchema>;
 
-/** 文风目标（`GET /practice/targets` 列表项 = `POST` / `PUT /practice/targets/:id` 响应：**四端点同形**，含样本数） */
-export const practiceTargetSchema = z.object({
-  id: z.string(),
-  name: z.string(),
-  observation: z.string().nullable(), // 用户自己观察到的文风特点（未写 = null）
-  sampleCount: z.number().int(), // 该目标下的样本数（练习数据物理删，无软删概念）
-  createdAt: z.string(), // ISO 8601
-  updatedAt: z.string(),
-});
-export type PracticeTargetItem = z.infer<typeof practiceTargetSchema>;
-
-// GET /api/v1/practice/targets（按 updatedAt 倒序，同值按 id 升序）
-export const practiceTargetsResSchema = z.object({ targets: z.array(practiceTargetSchema) });
-export type PracticeTargetsRes = z.infer<typeof practiceTargetsResSchema>;
-
-// POST /api/v1/practice/targets
-export const practiceTargetCreateReqSchema = z
-  .object({
-    name: z.string().trim().min(1).max(MAX_PRACTICE_TARGET_NAME_CHARS), // 必填，trim 非空 + 长度上限
-    observation: z.string().max(MAX_PRACTICE_OBSERVATION_CHARS).optional(),
-  })
-  .strict();
-
-// 响应与列表项**同形**（含 `sampleCount`——新建目标下恒为 0；两种形状对 UI 无差别，不必分流）
-export const practiceTargetCreateResSchema = practiceTargetSchema;
-export type PracticeTargetCreated = PracticeTargetItem;
-
-// PUT /api/v1/practice/targets/:id（部分更新：**至少给一项**；省略 = 不动，observation 空串 = 清空写 null）
-export const practiceTargetUpdateReqSchema = z
-  .object({
-    name: z.string().trim().min(1).max(MAX_PRACTICE_TARGET_NAME_CHARS).optional(),
-    observation: z.string().max(MAX_PRACTICE_OBSERVATION_CHARS).optional(),
-  })
-  .strict()
-  .refine((value) => value.name !== undefined || value.observation !== undefined, {
-    message: "至少提供 name 或 observation",
-    // 错误提示挂在可修复字段上（否则 fields 会是空串路径）
-    path: ["name"],
-  });
-export type PracticeTargetUpdateReq = z.infer<typeof practiceTargetUpdateReqSchema>;
-
-// DELETE /api/v1/practice/targets/:id（物理删 + 级联删该目标下全部样本）
-export const practiceTargetDeleteResSchema = z.object({
-  deleted: z.literal(true),
-  deletedSamples: z.number().int(),
-});
-export type PracticeTargetDeleted = z.infer<typeof practiceTargetDeleteResSchema>;
-
-/** 练习样本列表项（`GET /practice/targets/:id/samples`；**列表不回范文正文与稿件 / 卡体**） */
+/** 练习样本列表项（**列表不回范文正文与稿件 / 卡体**） */
 export const practiceSampleSummarySchema = z.object({
   id: z.string(),
   sourceKind: practiceSourceKindSchema,
@@ -1250,31 +1201,24 @@ export const practiceSampleSummarySchema = z.object({
 });
 export type PracticeSampleItem = z.infer<typeof practiceSampleSummarySchema>;
 
-// GET /api/v1/practice/targets/:id/samples（按 updatedAt 倒序，同值按 id 升序）
+// GET /api/v1/practice/samples（按 updatedAt 倒序，同值按 id 升序）
 export const practiceSamplesResSchema = z.object({ samples: z.array(practiceSampleSummarySchema) });
 export type PracticeSamplesRes = z.infer<typeof practiceSamplesResSchema>;
 
-// POST /api/v1/practice/targets/:id/samples（粘贴范文）
+// POST /api/v1/practice/samples（粘贴范文）
 export const practiceSampleCreateReqSchema = z
   .object({
     source_kind: practiceSourceKindSchema.optional(), // 省略 = "paste"
-    source_label: z.string().trim().min(1).max(MAX_PRACTICE_SOURCE_LABEL_CHARS), // 来源说明（trim 非空）
     text: z.string().trim().min(1).max(MAX_PRACTICE_SAMPLE_CHARS), // 范文快照（落库后不可变）
   })
   .strict();
 
 /**
  * 样本详情（`GET /practice/samples/:id`；**唯一返回范文全文与点评卡的读端点**）——
- * 也是 `POST /practice/targets/:id/samples` 的响应形状（新建时 draft = ""、feedback = null）。
- * `targetName` / `observation` 由路由层拼（db helper 返回存储形态，见 tasks 卡 5 承接事实②）。
+ * 也是新建样本的响应形状（新建时 draft = ""、feedback = null）。
  */
 export const practiceSampleDetailResSchema = z.object({
   id: z.string(),
-  targetId: z.string(),
-  targetName: z.string(), // 便于页面标题（少一次请求）
-  observation: z.string().nullable(), // 目标的用户观察（同屏展示）
-  sourceKind: practiceSourceKindSchema,
-  sourceLabel: z.string(),
   text: z.string(), // 范文快照全文
   draft: z.string(), // 用户仿写稿（未写 = ""）
   feedback: practiceFeedbackSchema.nullable(), // 未点评 = null（db 层只把「非对象」按 null，合法 JSON 对象一律透传）

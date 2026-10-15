@@ -25,11 +25,12 @@ import {
   MAX_BACKUP_NAME_LENGTH,
   MAX_BACKUPS_PER_PROJECT,
   MAX_FEEDBACK_DIMENSIONS,
+  MAX_PRACTICE_BRIEF_CHARS,
   MAX_PRACTICE_DRAFT_CHARS,
-  MAX_PRACTICE_OBSERVATION_CHARS,
+  MAX_PRACTICE_EXCERPT_LABEL_CHARS,
   MAX_PRACTICE_SAMPLE_CHARS,
-  MAX_PRACTICE_SOURCE_LABEL_CHARS,
-  MAX_PRACTICE_TARGET_NAME_CHARS,
+  MAX_PRACTICE_STYLE_PACK_CHARS,
+  MAX_PRACTICE_TOPIC_CHARS,
   OUTLINE_NODE_TYPE_LABELS,
   PAYOFF_TIMING,
   PORT_RANGES,
@@ -336,13 +337,14 @@ describe("工具 scope 与工作区映射（2026-10）", () => {
   });
 });
 
-describe("文风仿写练习上限常量（2026-10）", () => {
-  it("六个上限与 docs/db/schema.md / docs/api/120-api-practice.md 同值（唯一定义处）", () => {
-    expect(MAX_PRACTICE_TARGET_NAME_CHARS).toBe(100);
-    expect(MAX_PRACTICE_OBSERVATION_CHARS).toBe(500);
-    expect(MAX_PRACTICE_SOURCE_LABEL_CHARS).toBe(100);
-    expect(MAX_PRACTICE_SAMPLE_CHARS).toBe(20000);
+describe("文风练习上限常量（2026-10 改版）", () => {
+  it("上限值与 docs/db/schema.md / docs/api/120-api-practice.md 同值（唯一定义处）", () => {
+    expect(MAX_PRACTICE_EXCERPT_LABEL_CHARS).toBe(100);
+    expect(MAX_PRACTICE_SAMPLE_CHARS).toBe(100000);
     expect(MAX_PRACTICE_DRAFT_CHARS).toBe(20000);
+    expect(MAX_PRACTICE_TOPIC_CHARS).toBe(100);
+    expect(MAX_PRACTICE_BRIEF_CHARS).toBe(500);
+    expect(MAX_PRACTICE_STYLE_PACK_CHARS).toBe(100000);
     expect(MAX_FEEDBACK_DIMENSIONS).toBe(6);
   });
 });
