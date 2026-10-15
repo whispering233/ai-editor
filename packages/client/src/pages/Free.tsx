@@ -93,7 +93,7 @@ export function FreeList({ pieces }: FreeListProps) {
 // ============ 容器 ============
 
 export default function Free() {
-  /** 预置作家 id（练习工作区特有；缺失 / 未知 → 服务端按 400 拒，与仿写列表同一口径） */
+  /** 当前工作区的预置作家（`author_id` 缺失 / 未知 → null：选项与分组一律归「其他」；两处「新建样本」据此禁用） */
   const author = resolveAuthor(useProjectStore((s) => s.config?.authorId ?? null));
   const sendMessage = useChatStore((s) => s.sendMessage);
   const requestFocusInput = useChatStore((s) => s.requestFocusInput);

@@ -29,7 +29,6 @@ describe("createCustomTools", () => {
     const defs = listTools().filter((def) => def.scope === "novel" || def.scope === "common");
     const tools = createCustomTools({ toolContext: stubContext(), kind: "novel" });
     expect(tools.map((tool) => tool.name)).toEqual(defs.map((def) => def.name));
-    expect(tools).toHaveLength(37);
     for (const def of defs) {
       const tool = tools.find((candidate) => candidate.name === def.name);
       expect(tool?.description).toBe(def.description);
@@ -43,7 +42,6 @@ describe("createCustomTools", () => {
     expect(tools.map((tool) => tool.name)).toEqual(practiceScoped.map((def) => def.name));
     // 恰好四个只读 + 三个写 AI 产出（shared PRACTICE_TOOLS 是同一份清单；排序后逐名相等）
     expect(tools.map((tool) => tool.name)).toEqual([...PRACTICE_TOOLS].sort());
-    expect(tools).toHaveLength(7);
     expect(tools.some((tool) => tool.name.startsWith("propose_"))).toBe(false);
     expect(practiceScoped.every((def) => def.permission === "auto")).toBe(true); // 七个练习工具均为自动级（无提案工具）
     // 具体点名：小说侧最常见的两类工具在练习工具面**根本不存在**

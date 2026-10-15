@@ -84,8 +84,7 @@ describe("`PRACTICE_NOT_FOUND` → 整页 404 态（读失败与写失败两条�
 });
 
 describe("「让 AI 点评」的 canReview 接线（FreeDetail 容器 → 展示层）", () => {
-  it("可点性取共用谓词 `canRequestPracticeReview(detail, draft)`（不另写一份判定）", () => {
-    expect(freeDetail).toContain("canReview={canRequestPracticeReview(detail, draft)}");
+  it("可点性取共用谓词 `canRequestPracticeReview(detail, draft)`（不另写一份判定）", () => {    expect(freeDetail).toContain("canReview={canRequestPracticeReview(detail, draft)}");
     expect(freeDetail).toContain("canRequestPracticeReview");
   });
 
@@ -93,5 +92,19 @@ describe("「让 AI 点评」的 canReview 接线（FreeDetail 容器 → 展示
     expect(freeDetail).toContain("{ practice_free_piece_id: pieceId }");
     expect(freeDetail).toContain("onRequestReview={() => request(FREE_REVIEW_MESSAGE)}");
     expect(freeDetail).toContain("onRequestTopic={() => request(FREE_TOPIC_MESSAGE)}");
+  });
+});
+
+// 容器接线（无 jsdom 渲不出容器，故用源码级咬合：删掉接线即红）
+describe("自由练习详情容器的两条接线（帧刷新 / 保存阻断存档）", () => {
+  it("点评 / 出题帧刷新：本篇的新帧才重拉，且首帧守卫 ref 已同步当前序号", () => {
+    expect(freeDetail).toContain("useRef<number | null>(detailsSeq)");
+    expect(freeDetail).toContain("!shouldRefreshFreePiece({");
+    expect(freeDetail).toContain("void refreshPiece();");
+  });
+
+  it("保存失败必须把 `false` 原样传回快捷键（写成 `() => void saveDraft()` 会让存档不再被阻断）", () => {
+    expect(freeDetail).toMatch(/async function saveDraft\(\): Promise<boolean>/);
+    expect(freeDetail).toContain("useSaveShortcut(() => saveDraft(), detail !== null)");
   });
 });

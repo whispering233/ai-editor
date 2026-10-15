@@ -21,7 +21,6 @@ import type {
   EntitySummary,
   ErrorCode,
   OutlineTree,
-  PracticeDeleted,
   PracticeDraftPutRes,
   PracticePieceDetail,
   PracticePiecesRes,
@@ -38,6 +37,7 @@ import type {
   WorkspaceKind,
 } from "@whispering233/ai-editor-shared";
 import type { EntityType } from "@whispering233/ai-editor-shared";
+import type { FocusContext } from "./focus";
 
 const API_BASE = "/api/v1";
 
@@ -1172,22 +1172,14 @@ export function deleteChatSession(sessionId: string): Promise<DeleteChatSessionR
 /**
  * POST /api/v1/chat 请求体（snake_case；message 必填，session_id 不传则创建新会话）。
  * 注意：实际发送由 use-sse 的 fetchSSE 承担（chat store 内联调用 fetchSSE("/api/v1/chat", …)，
- * 返回 SSE 事件流，不走 apiFetch 的 JSON 包裹）——本文件只保留请求体（事实来源），
- * 不再提供发送函数；请求体已与 S7.6 实现对齐，以本为准
+ * 返回 SSE 事件流，不走 apiFetch 的 JSON 包裹）——本文件只保留请求体类型，不再提供发送函数。
+ * 形状与 shared `chatSendReqSchema`（服务端校验的事实来源）对齐；`context` 直接复用 `FocusContext`。
  */
 export interface SendChatMessageBody {
   message: string;
   session_id?: string;
- /** focus 上下文（跨页「问 AI」注入；仅 focus 小条存在时携带） */
-  context?: {
-    focus_entity_type?: string;
-    focus_entity_id?: string;
-    focus_node_id?: string;
-    /** 推演节点集合（大纲组页面）：只发布尔，服务端现读 `project.json` 展开 */
-    focus_deduction?: boolean;
-    /** 练习样本 id（练习页「让 AI 点评」的一次性上下文；服务端现读展开注入） */
-    practice_sample_id?: string;
-  };
+  /** 聚焦 / 练习上下文（跨页「问 AI」注入与练习点评 / 出题触发；形状见 lib/focus.ts） */
+  context?: FocusContext;
 }
 
 // ============ 提案确认/拒绝（S8.2；「提案确认」L848-888 + shared proposalConfirmResSchema/proposalRejectResSchema） ============
@@ -1370,14 +1362,6 @@ export function updatePracticeSampleDraft(id: string, draft: string): Promise<Pr
 }
 
 /**
- * DELETE /api/v1/practice/samples/:id —— 删除样本（**物理删**，练习数据无回收站）。
- * 失败：404 PRACTICE_NOT_FOUND（重复删除同样 404）、409 NO_PROJECT_OPEN、400 KIND_MISMATCH。
- */
-export function deletePracticeSample(id: string): Promise<PracticeDeleted> {
-  return apiFetch<PracticeDeleted>(`/practice/samples/${id}`, { method: "DELETE" });
-}
-
-/**
  * GET /api/v1/practice/style-pack —— 作家风格说明的**生效内容** = 用户覆盖 `??` 预置（恒非空）。
  * `customized` = 是否有用户覆盖；`updatedAt` = 覆盖的写入时刻（无覆盖 = null）。
  * 失败：409 NO_PROJECT_OPEN、400 KIND_MISMATCH、400 VALIDATION_ERROR（未关联预置作家）。
@@ -1444,12 +1428,4 @@ export function getPracticePiece(id: string): Promise<PracticePieceDetail> {
  */
 export function updatePracticePieceDraft(id: string, draft: string): Promise<PracticeDraftPutRes> {
   return apiFetch<PracticeDraftPutRes>(`/practice/free/${id}`, { method: "PUT", body: { draft } });
-}
-
-/**
- * DELETE /api/v1/practice/free/:id —— 删除自由练习篇（**物理删**；不满意的 AI 出题 = 删掉重建）。
- * 失败：404 PRACTICE_NOT_FOUND（重复删除同样 404）、409 NO_PROJECT_OPEN、400 KIND_MISMATCH。
- */
-export function deletePracticePiece(id: string): Promise<PracticeDeleted> {
-  return apiFetch<PracticeDeleted>(`/practice/free/${id}`, { method: "DELETE" });
 }

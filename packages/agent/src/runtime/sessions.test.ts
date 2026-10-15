@@ -72,7 +72,6 @@ describe("lastVisibleSessionText（末条可见文本，列表摘要 / 会话标
       entry("e3", toolResult(json)),
     ];
     expect(lastVisibleSessionText(entries)).toBe("请点评我的自由练习稿");
-    expect(lastVisibleSessionText(entries)).not.toContain("customized");
   });
 
   it("assistant 正文在工具调用之后落盘 → 取该正文（同一轮先工具后结论的形态）", () => {

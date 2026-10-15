@@ -9,7 +9,6 @@ import * as m from "./index";
 
 describe("@whispering233/ai-editor-tools 入口冒烟", () => {
   it("可正常导入：注册表/上下文/工具 API 导出，且查询/分析/伏笔/提案工具已注册", () => {
-    expect(m).toBeDefined();
  // registry API
     expect(typeof m.registerTool).toBe("function");
     expect(typeof m.registerTools).toBe("function");

@@ -31,11 +31,10 @@ describe("作家介绍卡片（介绍 markdown 只读）", () => {
     expect(html).toContain(AUTHOR.intro);
   });
 
-  it("不给编辑入口（只读素材：无 `textarea` / 无「编辑」「保存」）", () => {
+  it("不给编辑入口（只读素材：无 `textarea` / 无任何按钮）", () => {
     const html = renderHtml(<AuthorIntroBody author={AUTHOR} />);
     expect(html).not.toContain("<textarea");
-    expect(html).not.toContain("编辑");
-    expect(html).not.toContain("保存");
+    expect(html).not.toContain("<button");
   });
 
   it("作家未解析（存量工作区缺 author_id / 未知 id）→ 空态（不崩、不空白）", () => {

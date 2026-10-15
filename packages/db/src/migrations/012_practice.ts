@@ -3,9 +3,9 @@
 // 文风仿写练习是**独立工作区**（`kind = "practice"`），数据落在专属两表（语义与不变式见
 // docs/design/60-practice.md §3、docs/design/10-data-model.md §16）。
 //
-// 纯 DDL 迁移（无数据搬移）：v11 库补建两张新表（含 `idx_practice_samples_target` 索引），
-// 既有表与数据一概不动——旧项目没有练习行，**无需回填**。表结构与建库路径共用同一份声明
-// （tables.ts 的 CREATE_TABLES_SQL），本文件的 DDL 与之**逐字同形**。
+// 纯 DDL 迁移（无数据搬移）：v11 库补建两张新表，既有表与数据一概不动——旧项目没有练习行，
+// **无需回填**。本文件的 DDL 与**当时的**建库声明（`tables.ts` 的 `CREATE_TABLES_SQL`）逐字同形；
+// 两张旧表（`practice_targets` / 旧形状 `practice_samples`）已随 013 整表拆除，当前形状见 013。
 //
 // 幂等：CREATE TABLE IF NOT EXISTS——手工回退版本号后重跑（异常重试路径）不报错；
 // 正常路径由 user_version 门控（版本已到 12 不再执行）。事务由 runMigrations 保证
@@ -23,8 +23,8 @@ import type { Migration } from "./index.js";
 const PRACTICE_TABLES_DDL = `
 CREATE TABLE IF NOT EXISTS practice_targets (
   id          TEXT PRIMARY KEY,   -- 'pt-*'
-  name        TEXT NOT NULL,      -- 文风目标名（上限 = 常量 MAX_PRACTICE_TARGET_NAME_CHARS）
-  observation TEXT,               -- 用户自己观察到的文风特点（可选；上限 = 常量 MAX_PRACTICE_OBSERVATION_CHARS）
+  name        TEXT NOT NULL,      -- 文风目标名（上限 = 当时的常量 MAX_PRACTICE_TARGET_NAME_CHARS，已随旧模型删除）
+  observation TEXT,               -- 用户自己观察到的文风特点（可选；上限 = 当时的常量 MAX_PRACTICE_OBSERVATION_CHARS，已删除）
   created_at  TEXT NOT NULL,      -- ISO 8601，应用层写入
   updated_at  TEXT NOT NULL
 );

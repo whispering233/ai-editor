@@ -64,7 +64,7 @@
 | `message_update` | `{ assistantMessageEvent: {...} }` | assistant 流式增量：`text_delta` / `thinking_delta` / `toolcall_delta` 等（**已剥离 `partial` 全文对象**；`toolcall_*` 附带 `id` / `toolName` 便于前端提前渲染）。`thinking_end` 的 `content` 降为 `THINKING_PREVIEW_MAX_CHARS` 字预览并附 `contentLength`（全文走按需端点，客户端已从 `thinking_delta` 拿到增量） |
 | `tool_execution_start` | `{ toolCallId, toolName, args }` | 工具开始执行 |
 | `tool_execution_update` | `{ toolCallId, toolName, partialResult }` | 工具流式进度（可选） |
-| `tool_execution_end` | `{ toolCallId, toolName, result: { content, details? }, isError }` | 工具结束；**AUTO 工具的 `details` 不下发**（与 `content` 重复且可能极大）；**PROPOSAL 工具的 `details` 携带提案载荷**（见 §提案确认）；**例外：练习点评工具（`submit_style_feedback`）的 `details` 随帧下发**（写库结果，前端据此即时刷新点评卡——清单唯一出处 = shared `TOOL_DETAILS_TO_CLIENT`，不是「全放行」） |
+| `tool_execution_end` | `{ toolCallId, toolName, result: { content, details? }, isError }` | 工具结束；**AUTO 工具的 `details` 不下发**（与 `content` 重复且可能极大）；**PROPOSAL 工具的 `details` 携带提案载荷**（见 §提案确认）；**例外：练习提交工具（两类点评 + 出题）的 `details` 随帧下发**（写库结果，前端据此即时刷新点评卡 / 题目——清单唯一出处 = shared `TOOL_DETAILS_TO_CLIENT`，不是「全放行」） |
 | `turn_end` | `{ toolResults: [...], contextUsage?: { percent, tokens, contextWindow }, usage? }` | 轮次结束（= 一次模型请求 + 其工具执行全部完成）；`contextUsage` 供占用段、`usage` 供状态栏账目（见 §会话用量字段 + `../design/20-context.md` §2） |
 | `compaction_start` / `compaction_end` | `{ reason }` / `{ reason, result?, aborted, willRetry, errorMessage? }` | 上下文自动压缩状态（可展示提示） |
 | `auto_retry_start` / `auto_retry_end` | `{ attempt, maxAttempts, delayMs, errorMessage }` / `{ success, attempt, finalError? }` | 自动重试状态（可展示提示） |
@@ -103,7 +103,7 @@
 
 - 所有 `partial` 字段剥离（含完整消息大对象），只转发增量与元数据——否则单帧可达数百 KB。
 - 不转发事件表之外的内部状态事件：`entry_appended` / `queue_update` / `session_info_changed` / `thinking_level_changed` / `agent_settled` / `summarization_retry_*` / `bash_execution_update`（UI 无消费方）。
-- AUTO 工具的 `result.details` 不下发（内容与 `content` 重复、可能达数百 KB）；仅 PROPOSAL 工具的 `details`（提案载荷）与 shared `TOOL_DETAILS_TO_CLIENT` 列出的工具（练习点评工具：写库结果，前端据此即时刷新卡片）随帧下发——其它 AUTO 工具仍不下发，**不得放宽成「全放行」**。
+- AUTO 工具的 `result.details` 不下发（内容与 `content` 重复、可能达数百 KB）；仅 PROPOSAL 工具的 `details`（提案载荷）与 shared `TOOL_DETAILS_TO_CLIENT` 列出的工具（练习提交工具 = 两类点评 + 出题；写库结果，前端据此即时刷新卡片 / 题目）随帧下发——其它 AUTO 工具仍不下发，**不得放宽成「全放行」**。
 
 **客户端解析约束**：本端点返回 POST + SSE，浏览器原生 `EventSource` 只支持 GET，客户端必须用 `fetch` + `ReadableStream` 自写 SSE 解析（client），并处理：跨 chunk 的 `data:` 行拼接、注释行（`:` 开头）跳过、多行 data 合并。
 

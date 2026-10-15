@@ -13,7 +13,6 @@ import type {
 
 describe("@whispering233/ai-editor-shared 入口冒烟", () => {
   it("可正常导入且导出包名常量", () => {
-    expect(m).toBeDefined();
     expect(m.SHARED_PKG_NAME).toBe("@whispering233/ai-editor-shared");
   });
 
@@ -26,7 +25,7 @@ describe("@whispering233/ai-editor-shared 入口冒烟", () => {
   });
 
   it("运行时常量与纯函数仍从根导出", () => {
-    expect(m.ENTITY_TYPES).toBeDefined();
+    expect(m.ENTITY_TYPES).toContain("character");
     expect(m.truncate).toBeTypeOf("function");
     expect(m.generateId).toBeTypeOf("function");
   });

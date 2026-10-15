@@ -141,7 +141,7 @@ describe("加载中 / 加载失败 / 作家未解析", () => {
     const html = render({ author: null, pack: null });
     expect(html).toContain(AUTHOR_MISSING_HINT);
     expect(html).not.toContain("导入 .md");
-    expect(html).not.toContain("编辑");
+    expect(html).not.toContain("<button");
   });
 });
 

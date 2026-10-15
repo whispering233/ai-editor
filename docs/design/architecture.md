@@ -34,7 +34,7 @@
 | 对话循环 / 工具派发 / 取消 / steering | `pi-agent-core` Agent（`AgentSession` 包装） | `AgentSession.prompt()` + 事件订阅 |
 | 重试 / 上下文压缩 | pi auto-retry + auto-compaction | 参数走 pi settings，不在本仓 |
 | 系统提示词 / AGENTS.md 注入 | pi resource loader | 内核提示词 + `agentsFilesOverride`（只读项目根 AGENTS.md，见 `20-context.md`） |
-| 领域工具（实体/关系/大纲/伏笔/提案） | 本仓 `tools` 包（TypeBox `AgentTool`） | 装配进 AgentSession |
+| 领域工具（实体/关系/大纲/伏笔/提案；练习工作区为 7 件练习工具） | 本仓 `tools` 包（TypeBox `AgentTool` + `scope` 按 kind 过滤） | 装配进 AgentSession（清单见 `../api/tool-calling.md`） |
 
 **显式不启用**：pi 的编码工具（read/bash/edit/write/…）、扩展加载（`noExtensions`）、技能与提示词模板（`noSkills`/`noPromptTemplates`）、项目信任门、TUI 交互模式。理由：本项目是创作顾问，不是编码 agent；项目目录内的可执行扩展是安全面而非能力面。
 

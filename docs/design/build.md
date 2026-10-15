@@ -24,6 +24,7 @@ pnpm dev            # pnpm -r --parallel run dev
 - 质量门：`pnpm typecheck` / `pnpm lint`（ESLint 9 flat config + typescript-eslint）/ `pnpm test`（vitest；单包 `pnpm --filter <包> test`）。
 - ⚠ **跨包测试的 dist 陷阱（2026-09 实测踩坑）**：`server` 测试经 `@whispering233/ai-editor-tools` 的 **dist** 消费、`tools` 经 `db` 的 dist 消费——改了上游包的 `src` 而不重建，下游套件会**对着旧实现给出假绿灯**（曾导致一张卡的「锚点仅章」守卫在 tools 测试里绿、server 里实际 2 条 fixture 已废却未暴露）。**约定**：凡改动 shared/db/tools 的 `src`，跑下游测试前先 `pnpm --filter @whispering233/ai-editor-db build && pnpm --filter @whispering233/ai-editor-tools build`（或直接用 `pnpm test:packed` 级别的全量重建）。
 - 日常联调用仓库内 `test-project/`（运行时数据不入库）。
+- ⚠ **测试套件的环境前提（端口占用）**：`packages/server/src/index.test.ts` 的「端口策略」用例要自己占 `PORT_RANGES.web.base`（3500）。若该端口被一个**外部先占进程**（如手动起的 `node packages/server/dist/index.js test-project`）占用，该用例会 `EADDRINUSE` 超时——**与业务无关**。判据 = 除该例全绿 + 附占用证据（`ss -ltnp | grep 3500` 与 `ps -o pid,args -p <pid>`）；进程停了则完整全绿。
 
 **桌面版开发**（一体形态：主进程内 in-process 起 server，**无 HMR**）：
 

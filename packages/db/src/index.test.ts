@@ -4,7 +4,6 @@ import * as m from "./index.js";
 
 describe("@whispering233/ai-editor-db 入口冒烟", () => {
   it("导出 schema 与 connection 的真实 API", () => {
-    expect(m).toBeDefined();
  // connection.ts
     expect(typeof m.openDatabase).toBe("function");
     expect(typeof m.closeDatabase).toBe("function");

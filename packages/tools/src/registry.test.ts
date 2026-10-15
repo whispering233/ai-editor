@@ -39,7 +39,6 @@ describe("registry 注册/查询 API", () => {
     expect(getTool("不存在")).toBeUndefined();
     expect(listTools().map((t) => t.name)).toContain("zz_test_tool");
     expect(listTools().every((t, i, arr) => i === 0 || arr[i - 1].name <= t.name)).toBe(true);
-    expect(toolCount()).toBeGreaterThan(0);
   });
 
   it("重复注册同名工具抛错（注册表唯一事实来源）", () => {

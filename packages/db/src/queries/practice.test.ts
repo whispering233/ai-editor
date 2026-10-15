@@ -342,7 +342,7 @@ describe("自由练习（practice_free_pieces）", () => {
     expect(getPracticePiece(db, piece.id)!.feedback).toEqual({ dimensions: [{ name: "旧卡" }] });
     expect(getPracticePiece(db, piece.id)!.updated_at).toBe(written!.updatedAt);
 
-    // brief 省略 = 保持原值（部分更新口径，同 updatePracticeTarget）
+    // brief 省略 = 保持原值（部分更新口径：省略字段不改）
     updatePracticePieceTopic(db, piece.id, { topic: "换个题" });
     expect(readPieceVerbatim(piece.id)).toEqual({
       topic: "换个题",

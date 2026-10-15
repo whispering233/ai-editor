@@ -43,8 +43,7 @@ describe("作品卡列表（每部作品一张卡）", () => {
   it("无编辑入口、无「新建作品」（作品清单是封闭集合）", () => {
     const html = renderHtml(<WorksBody author={AUTHOR} />);
     expect(html).not.toContain("<textarea");
-    expect(html).not.toContain("新建作品");
-    expect(html).not.toContain("编辑");
+    expect(html).not.toContain("<button");
   });
 
   it("作家未解析（存量工作区缺 author_id / 未知 id）→ 空态", () => {

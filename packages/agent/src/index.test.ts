@@ -4,7 +4,6 @@ import * as m from "./index";
 
 describe("@whispering233/ai-editor-agent 入口冒烟", () => {
   it("可正常导入且能解析 workspace 依赖 @whispering233/ai-editor-tools", () => {
-    expect(m).toBeDefined();
     expect(m.AGENT_PKG_NAME).toBe("@whispering233/ai-editor-agent");
     expect(m.TOOLS_DEP).toBe("@whispering233/ai-editor-tools");
   });

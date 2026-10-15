@@ -48,7 +48,7 @@ import { initCloudState } from "./cloud/state.js";
 import { cloudRoutes } from "./routes/cloud.js";
 import { namesRoutes } from "./routes/names.js"; // 批量名称解析（工具调用人类可读化）
 import { proposalRoutes } from "./routes/proposal.js";
-import { practiceRoutes } from "./routes/practice.js"; // 文风仿写练习（卡 5）
+import { practiceRoutes } from "./routes/practice.js"; // 作家文风练习（卡 5）
 import { trashRoutes } from "./routes/trash.js";
 import { relationRoutes } from "./routes/relation.js";
 import { logSoftDeleteReconcile, reconcileSoftDelete } from "./consistency.js";
@@ -271,7 +271,7 @@ export async function startServer(projectRoot: string, options: StartServerOptio
   app.use("/api/v1/proposal/*", requireKind("novel"));
   app.route("/api/v1/proposal", proposalRoutes);
 
- // 练习路由（卡 5）：文风目标 / 练习样本（练习工作区专属）——反向守卫**先于本组 app.route 注册**
+ // 练习路由（卡 5）：范文样本 / 风格说明素材包 / 自由练习（练习工作区专属）——反向守卫**先于本组 app.route 注册**
   app.use("/api/v1/practice/*", requireKind("practice"));
   app.route("/api/v1/practice", practiceRoutes);
 

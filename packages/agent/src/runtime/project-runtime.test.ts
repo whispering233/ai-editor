@@ -335,7 +335,6 @@ describe("练习工作区装配", () => {
       const activeNames = runtime.session.getActiveToolNames();
       // 恰好四个只读 + 三个写 AI 产出（shared PRACTICE_TOOLS = 同一份清单）
       expect([...activeNames].sort()).toEqual([...PRACTICE_TOOLS].sort());
-      expect(activeNames).toHaveLength(PRACTICE_TOOLS.length);
       expect(activeNames.some((name) => name.startsWith("propose_"))).toBe(false);
       // 点名否定：小说侧最常见的读写工具在练习工具面根本不存在
       expect(activeNames).not.toContain("get_outline");

@@ -59,12 +59,6 @@ describe("自由练习列表页容器（#/free）", () => {
     const html = renderHtml(<Free />);
     expect(html).not.toContain("还没有练习篇");
   });
-
-  it("用户侧文案口径：不出现接口侧词（`topic_source` / `topicSource`）", () => {
-    const html = renderHtml(<Free />);
-    expect(html).not.toContain("topic_source");
-    expect(html).not.toContain("topicSource");
-  });
 });
 
 describe("列表主体（加载 / 空态 / 平铺行）", () => {
@@ -106,6 +100,9 @@ describe("题目行（data-row：题目 + 四态徽标 + 相对时间）", () =>
     expect(html).toContain("truncate");
     expect(html).toContain("border-type-badge-border"); // type-badge 形态（TypeChip）
     expect(html).toContain("5 分钟前");
+    // 用户侧文案口径：行里不得泄出接口侧字段名（此处才真能渲染出行）
+    expect(html).not.toContain("topic_source");
+    expect(html).not.toContain("topicSource");
   });
 
   it("空题 → 「（待出题）」灰字、不给 tooltip；时间与徽标照常在位", () => {

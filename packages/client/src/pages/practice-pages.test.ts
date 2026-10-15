@@ -9,6 +9,7 @@ import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
 const styleNotes = readFileSync(new URL("./StyleNotes.tsx", import.meta.url), "utf8");
+const practiceDetail = readFileSync(new URL("./PracticeDetail.tsx", import.meta.url), "utf8");
 const createSampleDialog = readFileSync(
   new URL("../components/practice/create-sample-dialog.tsx", import.meta.url),
   "utf8",
@@ -61,5 +62,25 @@ describe("新建样本弹窗的导入预填（#/practice）", () => {
     expect(createSampleDialog).toContain(
       'setExcerptLabel((current) => (current === "" ? plan.excerptLabel : current))',
     );
+  });
+
+  it("导入走既有文本读取（UTF-8 → GB18030 回落），不自建 FileReader / file.text()", () => {
+    expect(createSampleDialog).toContain("await readTextFile(file)");
+    expect(createSampleDialog).not.toContain("FileReader");
+    expect(createSampleDialog).not.toContain("file.text()");
+  });
+});
+
+// 容器接线（无 jsdom 渲不出容器，故用源码级咬合：删掉接线即红）
+describe("练习详情容器的两条接线（帧刷新 / 保存阻断存档）", () => {
+  it("点评卡刷新：本样本的新帧才重拉，且首帧守卫 ref 已同步当前序号", () => {
+    expect(practiceDetail).toContain("useRef<number | null>(detailsSeq)");
+    expect(practiceDetail).toContain("!shouldRefreshPracticeCard({");
+    expect(practiceDetail).toContain("void refreshCard();");
+  });
+
+  it("保存失败必须把 `false` 原样传回快捷键（写成 `() => void saveDraft()` 会让存档不再被阻断）", () => {
+    expect(practiceDetail).toMatch(/async function saveDraft\(\): Promise<boolean>/);
+    expect(practiceDetail).toContain("useSaveShortcut(() => saveDraft(), detail !== null)");
   });
 });

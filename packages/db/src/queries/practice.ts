@@ -347,7 +347,7 @@ export function updatePracticePieceDraft(db: Db, id: string, draft: string): { u
 /**
  * 写入题目与写作要求（`submit_practice_topic` 工具的唯一落库入口）——**只写 `topic` / `brief`**，
  * 推进 `updated_at`；用户稿 `draft` 与 `feedback` 一概不动。
- * `brief` 省略 = 不改（工具 schema 里 brief 可选；同 updatePracticeTarget 的部分更新口径）。
+ * `brief` 省略 = 不改（工具 schema 里 brief 可选；部分更新口径：省略的字段保持原值）。
  * 「题目非空 → 抛错拒写」的守卫在工具层（写入侧），本层只落库。
  * @returns `{ updatedAt }`（版本戳）；篇不存在返回 null
  */

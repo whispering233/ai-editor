@@ -8,13 +8,10 @@
 
 ---
 
-## 作家文风练习改版（2026-10）— 本批已完成
-
-卡 1–8 全部完成并通过独立验证，逐卡事实见根 `CHANGELOG.md` 的 `[Unreleased]` 段；本批无在途卡片。
-
-**环境备注（影响 server 测试判据）**：端口 `3500` 若被外部先占进程（`node packages/server/dist/index.js test-project`）占用，`packages/server/src/index.test.ts` 的「端口策略」用例会 `EADDRINUSE`——该用例与业务无关：判据 = **除该例全绿 + 附占用证据（进程 cmdline / 监听端口输出）**；进程已停则完整全绿。
+## 当前无进行中任务卡
 
 ---
 
 - **派工与验收命令、发布链路**：见根 `AGENTS.md`「协作流程」与 `build.md`「正式发布链路」——不在此重抄。
 - **需要真 HTTP 上游的卡**：本地 WebDAV 服务（`rclone serve webdav <dir>: --addr 127.0.0.1:8080` 或 `wsgidav`）或自带最小假 DAV；单测一律 mock `fetch`，集成验证才起真服务。**凭据不进任何自动化脚本、不入库**。
+- **测试环境前提**（端口占用会打挂一条环境性用例）：见 `build.md`「本地开发」最后一条。

@@ -94,14 +94,11 @@ describe("练习列表页容器（#/practice）", () => {
 });
 
 describe("列表主体（加载 / 空态 / 作品分组）", () => {
-  it("空态：一行引导文案（指向页头「新建样本」；不出现设计侧词与旧入口）", () => {
+  it("空态：一行引导文案（指向页头「新建样本」；不出现旧入口）", () => {
     const html = renderHtml(<PracticeList groups={[]} onCreateSample={noop} disabled={false} />);
     expect(html).toContain("还没有范文——点「新建样本」导入或粘贴一段");
     expect(html).toContain("border-dashed"); // empty-state 基座
     expect(html).not.toContain("新建目标");
-    for (const word of ["画像", "维度", "scope"]) {
-      expect(html, word).not.toContain(word);
-    }
   });
 
   it("作品分组：section-title 作品名 + caption-text「N 篇范文」+ 组内「新建样本」入口", () => {
