@@ -14,7 +14,7 @@
 
 **链内红窗（有意，已登记）**：这是同一功能的**模型重建**——旧常量、旧端点（`/practice/targets*`）与旧练习表被删，消费方在后续卡里跟上。**中间卡允许全仓 `pnpm typecheck` 变红**；每卡判据 = **本包 build + 本包测试 + 本卡改动范围**；全仓 `typecheck` / `lint` / `pnpm -r test` 由**卡 8 收口**。
 
-**卡序重切（2026-10，文件冲突驱动的调整）**：原 3–6 拆分会让多张卡同时写 `shared/types/api.ts`、`server/routes/practice.ts`、`client/lib/api.ts`（同一批文件），worktree 并行反而要人工解冲突 ⇒ 收成「一张端点卡 + 三张客户端卡」并改为顺序推进（**不并行 worktree**）。已完成并通过独立验证的卡：卡 1（`6955d833`）、卡 2（`387f72f5`，含偏离裁定：`012_practice.ts` 不再建旧索引，口径已落 `docs/db/schema.md`）、卡 3（`163095d2`，含裁定 A：chat 样本侧注入本卡改完；被删的 details 用例归卡 7 恢复）、卡 4（`38d4654d`，P2 打磨归卡 8）。
+**卡序重切（2026-10，文件冲突驱动的调整）**：原 3–6 拆分会让多张卡同时写 `shared/types/api.ts`、`server/routes/practice.ts`、`client/lib/api.ts`（同一批文件），worktree 并行反而要人工解冲突 ⇒ 收成「一张端点卡 + 三张客户端卡」并改为顺序推进（**不并行 worktree**）。已完成并通过独立验证的卡：卡 1（`6955d833`）、卡 2（`387f72f5`，含偏离裁定：`012_practice.ts` 不再建旧索引，口径已落 `docs/db/schema.md`）、卡 3（`163095d2`，含裁定 A：chat 样本侧注入本卡改完；被删的 details 用例归卡 7 恢复）、卡 4（`38d4654d`，P2 打磨归卡 8）、卡 5（`738cf28b` + 修复 `09d5a895`：oracle 判 FAIL 的「可点评判定重复实现」已单源化，复核接受；P2 归卡 8）。
 
 **每卡硬完成判据（缺一不可，汇报必附原始输出）**：
 1. `git log --oneline -1` 含**本卡的新 commit**（无 commit 不许报 PASS），`git status --porcelain` 干净；
@@ -22,21 +22,6 @@
 3. 汇报写明改动的文件清单 + 与卡内任一条不对应的实现说明（如有）。
 
 **环境备注（2026-10，影响 server 测试判据）**：端口 `3500` 被一个**外部先占进程**（`node packages/server/dist/index.js test-project`）占用 ⇒ `packages/server/src/index.test.ts` 的「端口策略」用例会 `EADDRINUSE` 超时。该用例与练习改版无关：server 判据 = **除该用例外全绿 + 附占用证据（进程 cmdline / 监听端口命令输出）**；若该进程已停，完整全绿。
-
----
-
-### 卡 5：客户端 B — 自由练习两页 + 让 AI 出题
-
-**改动范围**：`packages/client/src/pages/Free.tsx`（新建）、`packages/client/src/pages/FreeDetail.tsx`（新建）、`packages/client/src/components/practice/create-piece-dialog.tsx`（新建）、`packages/client/src/lib/free-practice.ts`（新建）+ 各自测试；**`packages/client/src/pages/PracticeDetail.tsx` 仅一处加法**（给导出的 `FeedbackCardView` 加可选 props `traitLabel?: string`，缺省「范文特征」——自由练习要显示「风格特征」，见 `DESIGN.md`；**该文件其它内容一律不动**）；**`packages/client/src/lib/focus.ts` 仅一处加法**（`FocusContext` 加 `practice_free_piece_id?: string`——`sendMessage` 的 context 类型即它，缺则无法编译；服务端侧归卡 7）。**不碰 `main.tsx`（路由注册在卡 6）**；**不改** `lib/practice.ts`（判定与保存动作从它导入）。
-
-**实现**（契约 = `DESIGN.md`「自由练习列表 / 详情 / 新建题目弹窗」、`60-practice.md` §4）：
-1. 列表：平铺 `data-row`（题目 / 「（待出题）」+ 四态徽标 + 相对时间）；页头右端 `[+ 新建题目]` + `[让 AI 出题]`。
-2. 详情：三段 = 题目卡（题目 + 写作要求；空题态 `[让 AI 出题]` + 一行引导）→ 我的稿（`--writing-*`、保存、`Ctrl/Cmd+S`、字数）→ 点评卡（**复用卡 4 导出的卡面组件**，行标签「风格特征 / 你的写法」）。
-3. 「让 AI 出题」：建空题行 → 发普通用户消息 + 聚焦聊天；`tool_execution_end` 的 details 帧刷新（出题与点评共用同款守卫）。
-
-**验收命令**：`pnpm -r build` → `pnpm --filter @whispering233/ai-editor-client test`。
-
-**Commit**：`feat(practice): 自由练习两页（自拟题 / AI 出题 / 按风格说明点评）`
 
 ---
 
@@ -94,8 +79,9 @@
    - 导入成功路径**只在字段为空时**预填片段说明（不静默覆盖用户已输入的说明）；
    - 列表重拉时**仅首帧**置 `null`（后续保留旧列表，避免提案确认后整页骨架闪）；
    - 补一条 SSR 断言：默认「其他」真被 `Select` 选中 / 组内按钮把该组 `workId` 传入对话框（卡 4 oracle 的弱断言项）。
-6. **浏览器像素走查委托 `ui-verifier`**（核验项：根首页练习分区预置卡与懒创建 / 左栏五项 / 风格说明渲染与编辑 / 文风练习分组列表与新建样本（含导入文件）/ 自由练习出题与点评 / 详情页排版）；发现问题回到对应卡修完再复验。
-7. 清空本批卡片；确认 `CHANGELOG.md` Unreleased 段与最终实现一致（含迁移 013 说明）。
+6. **打磨卡 5 oracle 的 P2**：`lib/free-practice.ts` 的 `topic` 非字符串时抛 `TypeError`（服务端 shape 漂移才可达）——加 `typeof` 守卫；`pages/free-detail.test.tsx` 的用例名「输入框有未保存改动」与断言不符（实际只传 `canReview:false`）——改名或补真实场景；**补缺口**：容器路径（「让 AI 出题」链路 / 新建题目提交 / `PRACTICE_NOT_FOUND` → 404 态）与 `FreeDetail.tsx` 的 `canReview` 接线各最少一条测试。
+7. **浏览器像素走查委托 `ui-verifier`**（核验项：根首页练习分区预置卡与懒创建 / 左栏五项 / 风格说明渲染与编辑 / 文风练习分组列表与新建样本（含导入文件）/ 自由练习出题与点评 / 详情页排版）；发现问题回到对应卡修完再复验。
+8. 清空本批卡片；确认 `CHANGELOG.md` Unreleased 段与最终实现一致（含迁移 013 说明）。
 
 **验收命令**：上列四条 + ui-verifier 报告（无未 proven 项）。
 
