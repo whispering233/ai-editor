@@ -21,6 +21,8 @@
 2. 本卡「验收命令」全绿（命令与输出摘要一并附上）；
 3. 汇报写明改动的文件清单 + 与卡内任一条不对应的实现说明（如有）。
 
+**环境备注（2026-10，影响 server 测试判据）**：端口 `3500` 被一个**外部先占进程**（`node packages/server/dist/index.js test-project`）占用 ⇒ `packages/server/src/index.test.ts` 的「端口策略」用例会 `EADDRINUSE` 超时。该用例与练习改版无关：server 判据 = **除该用例外全绿 + 附占用证据（进程 cmdline / 监听端口命令输出）**；若该进程已停，完整全绿。
+
 ---
 
 ### 卡 3：全部端点 + shared 契约（服务端 + 契约层）
@@ -98,6 +100,7 @@
 5. chat 注入：`practice_free_piece_id` 分支（篇 id + 作家名 + 题目 + 写作要求；不存在 → 静默省略；**样本侧注入已在卡 3 改完，本卡不动**）。
 6. `PRACTICE_KERNEL_PROMPT` 重写（仿写点评者 + 自由练习点评者 + 出题者；保留不代写 / 引用须逐字 / 先读后评 / 维度自定 / 长度截断须知；新增「出题要给可执行的写作要求」；仿写以范文为主、可按需读风格说明）。
 7. **硬判据（oracle 独立核）**：小说版 `KERNEL_PROMPT` **零 diff**；小说工具 schema/description 与小说注入分支无改动。
+8. **恢复被删的用例（卡 3 交出）**：`packages/server/src/routes/chat.test.ts` 里原「点评一轮：提交工具 details 随帧下发 + 落库」用例在卡 3 被删并留注释指向本卡——**本卡必须恢复它**（适配新工具名：`submit_style_feedback` / `submit_free_feedback` / `submit_practice_topic`，以及 `TOOL_DETAILS_TO_CLIENT` 白名单），否则该注释即悬空引用。
 
 **验收命令**：`pnpm -r build` → `pnpm --filter @whispering233/ai-editor-tools test` → `pnpm --filter @whispering233/ai-editor-agent test` → `pnpm --filter @whispering233/ai-editor-server test`。
 
