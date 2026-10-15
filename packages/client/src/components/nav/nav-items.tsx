@@ -7,7 +7,9 @@
 import type { ReactNode } from "react";
 import {
   ApartmentOutlined,
+  BulbOutlined,
   DeleteOutlined,
+  EditOutlined,
   EnvironmentOutlined,
   FieldTimeOutlined,
   FormOutlined,
@@ -16,6 +18,7 @@ import {
   ShareAltOutlined,
   TagsOutlined,
   TeamOutlined,
+  UserOutlined,
 } from "@ant-design/icons";
 import type { WorkspaceKind } from "@whispering233/ai-editor-shared";
 
@@ -60,8 +63,15 @@ export const NAV_RAIL_BY_KIND: Record<WorkspaceKind, NavRailSpec> = {
   },
   practice: {
     brandLabel: "文风练习",
-    // 练习工作区的一级导航只有它自己（顶部标识回根首页 `#/`，底部四入口保持不变）
-    items: [{ key: "/practice", icon: <FormOutlined />, label: "文风练习" }],
+    // 练习工作区五项（顺序 = 素材 → 两种练习页面，见 DESIGN.md §导航与外壳「左栏按工作区类型渲染」）；
+    // 顶部标识回根首页 `#/`，工具区与书名按钮不渲染，底部四入口保持不变
+    items: [
+      { key: "/author", icon: <UserOutlined />, label: "作家介绍" },
+      { key: "/works", icon: <ReadOutlined />, label: "作品介绍" },
+      { key: "/style", icon: <BulbOutlined />, label: "作家风格说明" },
+      { key: "/practice", icon: <FormOutlined />, label: "文风练习" },
+      { key: "/free", icon: <EditOutlined />, label: "自由练习" },
+    ],
     trash: false,
     projectOverview: false,
   },

@@ -1,7 +1,7 @@
 // 根首页（工作区聚合）+ 项目概览两形态（拆分；mode prop 路由分发，main.tsx：`#/` → home、`#/overview` → overview）
 // - home（根首页 `#/`）：**按 kind 分区**——小说（书籍列表：行点击打开/当前工作区高亮按项目 id；
-//   当前工作区「继续创作」按 kind 落点）+ 文风练习（工作区卡列表；空分区给一行引导文案）；
-//   每分区各带一个新建入口（同一份表单实现，kind 决定目录与是否自动打开）+
+//   当前工作区「继续创作」按 kind 落点）+ 文风练习（**预置作家卡**：全部预置作家 ∪ 已有练习工作区，
+//   未开始的也能点 = 懒创建；无「新建练习区」入口）+ 小说分区内的新建入口 +
 //   打开其他路径（折叠，小说卡内）+ 错误/加载/空态四态；打开落点 = lib/workspace 的 WORKSPACE_ENTRY_PATH
 // - overview（`#/overview`，仅小说工作区）：项目概览四区块——项目信息（config）/ 创作要素（×4 并行 total）/
 //   大纲概览（递归统计卷章场 + 最近更新）/ 最近会话（chat store 前 5 条）；无项目 → 回书架引导卡
@@ -11,13 +11,17 @@
 import { useEffect, useRef, useState } from "react";
 import type { ChangeEvent, FormEvent } from "react";
 import { formatRelativeTime } from "@whispering233/ai-editor-shared";
-import type { EntityType, OutlineNode, WorkspaceKind } from "@whispering233/ai-editor-shared";
+import type {
+  AuthorEntry,
+  EntityType,
+  OutlineNode,
+  WorkspaceKind,
+} from "@whispering233/ai-editor-shared";
 import {
   BookOutlined,
   DeleteOutlined,
   DownloadOutlined,
   EditOutlined,
-  FormOutlined,
   UploadOutlined,
 } from "@ant-design/icons";
 import { Button, Input, Typography } from "antd";
@@ -44,6 +48,7 @@ import {
   CLIENT_NETWORK_ERROR,
   exportNovelZip,
   exportProjectZip,
+  getPracticeSamples,
   importProjectZip,
   listEntities,
   renameProject,
@@ -52,8 +57,9 @@ import { describeExportError, describeImportError } from "../lib/error-messages"
 import { validateBookName } from "../lib/book-name";
 import { isCurrentBook } from "../lib/shelf";
 import {
-  PRACTICE_EMPTY_HINT,
   partitionWorkspaces,
+  practiceAuthorCards,
+  practiceCardStatus,
   WORKSPACE_ENTRY_PATH,
   WORKSPACE_SECTION_TITLE,
 } from "../lib/workspace";
@@ -148,8 +154,11 @@ export default function Dashboard({ mode }: { mode: DashboardMode }) {
   const [bookError, setBookError] = useState<string | null>(null);
   /** 有书形态下书籍点击打开失败的行内错误（S13.4；describeOpenError 映射，同 pathError 模式） */
   const [bookOpenError, setBookOpenError] = useState<string | null>(null);
-  /** 当前展开的新建表单属于哪个分区（null = 都收起；名称/错误/提交态由页面持有，两分区共用一份） */
-  const [createKind, setCreateKind] = useState<WorkspaceKind | null>(null);
+  /** 小说分区的新建表单是否展开（练习分区没有新建入口——作家是产品预置的） */
+  const [createOpen, setCreateOpen] = useState(false);
+  /** 当前打开的那个练习工作区的范文篇数（`null` = 未打开练习工作区 / 还没拿到）——
+   * 只有它拿得到：样本列表端点读的是**当前工作区**，`GET /project/list` 不带样本数 */
+  const [practiceSampleCount, setPracticeSampleCount] = useState<number | null>(null);
   const [showPathForm, setShowPathForm] = useState(false);
   const [path, setPath] = useState("");
   // 桌面版能力桥（浏览器形态为 null → 「浏览…」按钮不渲染；每次渲染取值，桥是无状态对象）
@@ -205,6 +214,27 @@ export default function Dashboard({ mode }: { mode: DashboardMode }) {
       void loadBookshelf();
     }
   }, [mode, bookshelfLoading, bookshelf, bookshelfError, loadBookshelf]);
+
+  // 当前打开的练习工作区的范文篇数（根首页作家卡状态行用）：样本列表端点读的是**当前工作区**
+  // ⇒ 拿不到就省略状态行里那一段（`GET /project/list` 不带样本数）；失败静默（状态行只是观测层）
+  useEffect(() => {
+    if (mode !== "home" || config?.kind !== "practice") {
+      setPracticeSampleCount(null);
+      return;
+    }
+    let cancelled = false;
+    getPracticeSamples()
+      .then((res) => {
+        if (!cancelled) setPracticeSampleCount(res.samples.length);
+      })
+      .catch(() => {
+        if (!cancelled) setPracticeSampleCount(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+    // 依赖按 [mode, config?.id, config?.kind] 记（本仓库未启用 exhaustive-deps 规则）
+  }, [mode, config?.id, config?.kind]);
 
   // 项目切换（同页不卸载场景：Sidebar 开新项目）时重置大纲加载标记，使新项目树重新拉取（overview 专属）
   useEffect(() => {
@@ -274,10 +304,10 @@ export default function Dashboard({ mode }: { mode: DashboardMode }) {
     }
   }, [mode, config, sessions, sessionsLoading, sessionsError, loadSessions]);
 
-  /** 新建工作区（小说分区「新建一本…」与练习分区「新建练习区」共用）：
+  /** 新建小说工作区（根首页小说分区两处入口共用）：
    * 目录 = 创作根/<kind 目录>/<名字>（目录映射单源 = shared `WORKSPACE_DIRS`，经 buildWorkspacePath 拼）；
-   * 小说 = 创建后直接进入（原书架行为不变），练习 = 只创建 + 刷新列表（不切当前工作区） */
-  async function handleCreateWorkspace(e: FormEvent, kind: WorkspaceKind) {
+   * 创建后直接进入（原书架行为不变） */
+  async function handleCreateWorkspace(e: FormEvent) {
     e.preventDefault();
     const name = bookName.trim();
     // 书名校验复用 lib/book-name（与导入同款规则——L3 防路径逃逸，错误文案直接用于内联提示）
@@ -293,22 +323,17 @@ export default function Dashboard({ mode }: { mode: DashboardMode }) {
     setSubmitting(true);
     setBookError(null);
     try {
-      const openAfterCreate = kind === "novel";
-      await createProjectAt(
-        buildWorkspacePath(bookshelf.rootPath, kind, name),
-        { name, language: "zh", kind },
-        { open: openAfterCreate },
-      );
-      // 成功后刷新列表（新工作区出现在对应分区）；config 已由 openProjectAt 刷新 → 小说侧切概览形态
+      await createProjectAt(buildWorkspacePath(bookshelf.rootPath, "novel", name), {
+        name,
+        language: "zh",
+        kind: "novel",
+      });
+      // 成功后刷新列表（新书出现在小说分区）；config 已由 openProjectAt 刷新 → 切概览形态
       await loadBookshelf();
       setBookName("");
-      setCreateKind(null);
-      if (openAfterCreate) {
-        useUiStore.getState().showToast(`已创建并打开《${name}》`);
-        navigate(WORKSPACE_ENTRY_PATH[kind]);
-      } else {
-        useUiStore.getState().showToast(`已创建练习区「${name}」`);
-      }
+      setCreateOpen(false);
+      useUiStore.getState().showToast(`已创建并打开《${name}》`);
+      navigate(WORKSPACE_ENTRY_PATH.novel);
     } catch (err) {
       setBookError(describeOpenError(openErrorCode(err)));
     } finally {
@@ -316,9 +341,33 @@ export default function Dashboard({ mode }: { mode: DashboardMode }) {
     }
   }
 
-  /** 切换某分区的新建表单展开态（同时只开一个；切换即清空上次的名称与错误） */
-  function toggleCreateForm(kind: WorkspaceKind) {
-    setCreateKind((current) => (current === kind ? null : kind));
+  /** 点未开始的作家卡 = **懒创建**练习工作区（`60-practice.md` §2）：
+   * 名字 = 作家名（不可改，改名会与预置清单脱钩）、`author_id` = 预置作家 id，建档即打开 + 落 `#/practice`；
+   * 已存在（同名目录）时服务端 409，行内报错引导用户点已有的那张卡 */
+  async function handleStartPractice(author: AuthorEntry) {
+    if (bookshelf === null || submitting) return;
+    setSubmitting(true);
+    setBookOpenError(null);
+    try {
+      await createProjectAt(buildWorkspacePath(bookshelf.rootPath, "practice", author.name), {
+        name: author.name,
+        language: "zh",
+        kind: "practice",
+        author_id: author.id,
+      });
+      await loadBookshelf();
+      useUiStore.getState().showToast(`已开始《${author.name}》文风练习`);
+      navigate(WORKSPACE_ENTRY_PATH.practice);
+    } catch (err) {
+      setBookOpenError(describeOpenError(openErrorCode(err)));
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  /** 切换小说分区的新建表单展开态（收起即清空上次的名称与错误） */
+  function toggleCreateForm() {
+    setCreateOpen((current) => !current);
     setBookName("");
     setBookError(null);
   }
@@ -585,21 +634,23 @@ export default function Dashboard({ mode }: { mode: DashboardMode }) {
     const shelfError = bookshelfError !== null;
     // 分区（只分组、不重排：服务端已按 updatedAt 倒序跨目录统一排序）
     const partitions = partitionWorkspaces(bookshelf?.books ?? null);
+    // 练习分区的卡片 = 全部预置作家 ∪ 已有练习工作区（未识别 authorId 的存量工作区不列出）
+    const practiceCards = practiceAuthorCards(bookshelf?.books ?? null);
     // 当前工作区在列表里的那一条（删除入口需要目录绝对路径，走 isCurrentBook 同一判据）：
     // 用「打开其他路径」打开的项目不在任何工作区目录下，而删除只支持对应目录的直接子目录 → 这类项目不给
     // 删除入口（不给必然会 400 的死路按钮）；列表未加载时也拿不到路径（加载完即出现）
     const currentShelfBook = bookshelf?.books.find((b) => isCurrentBook(b, config)) ?? null;
 
-    /** 新建工作区表单（小说 / 练习两分区**共用同一实现**，不新造第二套；kind 决定目录与创建后的落点）。
-     *  名称/错误/提交态由页面持有 ⇒ 同一时刻只有展开的那个分区渲染它 */
-    function renderCreateWorkspaceForm(kind: WorkspaceKind, className: string) {
+    /** 新建小说工作区表单（根首页小说分区两处入口共用同一实现：一份定义 + 两处调用；
+     *  名称/错误/提交态由页面持有）。练习工作区没有新建入口——作家是产品预置的 */
+    function renderCreateBookForm(className: string) {
       return (
-        <form onSubmit={(e) => void handleCreateWorkspace(e, kind)} className={className}>
+        <form onSubmit={(e) => void handleCreateWorkspace(e)} className={className}>
           <div className="flex gap-2">
             <Input
               value={bookName}
               onChange={(e) => setBookName(e.target.value)}
-              placeholder={kind === "novel" ? "书名" : "练习区名字"}
+              placeholder="书名"
               maxLength={60}
               disabled={submitting}
             />
@@ -804,13 +855,12 @@ export default function Dashboard({ mode }: { mode: DashboardMode }) {
                     <button
                       type="button"
                       className="rounded-md border border-border px-2.5 py-1 text-sm text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-                      onClick={() => toggleCreateForm("novel")}
+                      onClick={() => toggleCreateForm()}
                     >
-                      {createKind === "novel" ? "收起" : "新建一本…"}
+                      {createOpen ? "收起" : "新建一本…"}
                     </button>
                   </div>
-                  {createKind === "novel" &&
-                    renderCreateWorkspaceForm("novel", "mt-2 flex flex-col gap-2 text-left")}
+                  {createOpen && renderCreateBookForm("mt-2 flex flex-col gap-2 text-left")}
                 </div>
               </>
             ) : shelfError ? (
@@ -825,7 +875,7 @@ export default function Dashboard({ mode }: { mode: DashboardMode }) {
                 <p className="mt-1 text-xs text-muted-foreground">
                   每本书一个独立目录（books/书名/），写作数据互不干扰
                 </p>
-                {renderCreateWorkspaceForm("novel", "mx-auto mt-5 flex max-w-xs flex-col gap-2")}
+                {renderCreateBookForm("mx-auto mt-5 flex max-w-xs flex-col gap-2")}
                 <p className="mt-2 text-center text-xs text-muted-foreground">
                   创建于 创作根/books/书名/ 目录
                 </p>
@@ -871,66 +921,68 @@ export default function Dashboard({ mode }: { mode: DashboardMode }) {
           </div>
         </section>
 
-        {/* 分区 2：文风练习（工作区卡列表 = 名字 + 最近更新 + 「已打开」徽标；样本数待卡 9 加列表接口） */}
+        {/* 分区 2：文风练习 = **预置作家卡**（全部预置作家 ∪ 已有练习工作区）：作家名 + 一行介绍摘录
+            + 状态行；点未开始卡 = 懒创建（名字 = 作家名 + author_id），点已有卡 = 打开。
+            **无「新建练习区」入口**（作家为产品预置，不可新建 / 不可重命名） */}
         <section className="mt-6">
-          <div className="flex items-center justify-between gap-2">
-            <Typography.Title level={5}>{WORKSPACE_SECTION_TITLE.practice}</Typography.Title>
-            <Button size="small" className="shrink-0" onClick={() => toggleCreateForm("practice")}>
-              {createKind === "practice" ? "收起" : "新建练习区"}
-            </Button>
-          </div>
-          {createKind === "practice" &&
-            renderCreateWorkspaceForm("practice", "mt-3 flex flex-col gap-2 text-left")}
+          <Typography.Title level={5}>{WORKSPACE_SECTION_TITLE.practice}</Typography.Title>
           {shelfLoading ? (
-            <div className="mt-3">
-              <div className={cn(skeletonClass, "h-10 rounded-lg")} />
+            <div className="mt-3 space-y-2">
+              <div className={cn(skeletonClass, "h-16 rounded-lg")} />
+              <div className={cn(skeletonClass, "h-16 rounded-lg")} />
             </div>
-          ) : partitions.practice.length > 0 ? (
+          ) : shelfError ? (
+            /* 加载失败：与小说分区同一错误块提供重试，这里只说「重试后可看到什么」 */
+            <p className="mt-3 text-sm text-muted-foreground">加载失败，重试后可查看练习区</p>
+          ) : (
             <ul className="mt-3 divide-y divide-border overflow-hidden rounded-lg border border-border">
-              {partitions.practice.map((workspace) => {
-                // 当前工作区同样只按**项目 id** 判定（与小说分区同一判据、同一淡染面）
-                const isCurrent = isCurrentBook(workspace, config);
+              {practiceCards.map((card) => {
+                // 当前工作区同样只按**项目 id** 判定（与小说分区同一判据、同一淡染面）；
+                // 范文篇数只对当前打开的那个练习工作区有意义（见 practiceCardStatus）
+                const isCurrent =
+                  card.workspace !== null && isCurrentBook(card.workspace, config);
                 return (
-                  <li key={workspace.path}>
+                  <li key={card.author.id}>
                     <button
                       type="button"
+                      disabled={submitting}
                       title={
-                        isCurrent
-                          ? `继续练习「${workspace.name}」`
-                          : `打开「${workspace.name}」`
+                        card.workspace === null
+                          ? `开始《${card.author.name}》文风练习`
+                          : `打开《${card.author.name}》文风练习`
                       }
                       onClick={() => {
-                        if (isCurrent) navigate(WORKSPACE_ENTRY_PATH[workspace.kind]);
-                        else void handleOpenBook(workspace.path, workspace.kind);
+                        if (card.workspace === null) void handleStartPractice(card.author);
+                        else if (isCurrent) navigate(WORKSPACE_ENTRY_PATH.practice);
+                        else void handleOpenBook(card.workspace.path, card.workspace.kind);
                       }}
                       className={cn(
-                        "flex w-full items-center gap-3 px-3 py-2.5 text-left transition-colors hover:bg-muted",
+                        "flex w-full flex-col gap-1 px-3 py-2.5 text-left transition-colors hover:bg-muted",
                         isCurrent && "bg-primary/10 ring-1 ring-primary/30 ring-inset",
                       )}
                     >
-                      <FormOutlined className="shrink-0 text-base text-muted-foreground/60" />
-                      <span className="min-w-0 flex-1 truncate text-sm text-foreground">
-                        {workspace.name}
-                      </span>
-                      {isCurrent && (
-                        <span className="shrink-0 rounded border border-border px-1.5 py-0.5 text-xs text-muted-foreground">
-                          已打开
+                      <span className="flex items-center gap-3">
+                        <span className="min-w-0 flex-1 truncate text-base font-semibold text-foreground">
+                          {card.author.name}
                         </span>
-                      )}
-                      <span className="shrink-0 text-xs text-muted-foreground">
-                        {formatRelativeTime(workspace.updatedAt)}
+                        {isCurrent && (
+                          <span className="shrink-0 rounded border border-border px-1.5 py-0.5 text-xs text-muted-foreground">
+                            已打开
+                          </span>
+                        )}
+                      </span>
+                      {/* 一行介绍摘录（截断，不换行） */}
+                      <span className="w-full truncate text-xs text-muted-foreground">
+                        {card.author.intro}
+                      </span>
+                      <span className="text-xs text-muted-foreground">
+                        {practiceCardStatus(card, isCurrent ? practiceSampleCount : null)}
                       </span>
                     </button>
                   </li>
                 );
               })}
             </ul>
-          ) : shelfError ? (
-            /* 加载失败：与小说分区同一错误块提供重试，这里只说「重试后可看到什么」 */
-            <p className="mt-3 text-sm text-muted-foreground">加载失败，重试后可查看练习区</p>
-          ) : (
-            /* 空分区：一行引导文案（不渲染空卡片） */
-            <p className="mt-3 text-xs text-muted-foreground">{PRACTICE_EMPTY_HINT}</p>
           )}
         </section>
 

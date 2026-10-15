@@ -57,6 +57,12 @@ describe("parseHashRoute", () => {
     ["#/settings", ["settings"]],
     ["#/practice", ["practice"]],
     ["#/practice/sample-1", ["practice", "sample-1"]],
+    // 练习工作区其余四页（卡 6）：三张素材页 + 自由练习（含子路径）
+    ["#/author", ["author"]],
+    ["#/works", ["works"]],
+    ["#/style", ["style"]],
+    ["#/free", ["free"]],
+    ["#/free/piece-1", ["free", "piece-1"]],
   ])("一级化新段解析 %s", (hash, segments) => {
     expect(parseHashRoute(hash)).toEqual({
       path: `/${(segments as string[]).join("/")}`,

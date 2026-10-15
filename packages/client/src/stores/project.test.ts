@@ -249,22 +249,45 @@ describe("createProjectAt / closeProject", () => {
     expect(useProjectStore.getState().config).toEqual(sampleConfig);
   });
 
-  it("options.open = false：只创建不打开（练习区新建不切当前工作区）", async () => {
-    mocked.createProject.mockResolvedValue({ id: "proj-p", path: "/root/practice/仿写", created: true });
-    await useProjectStore
-      .getState()
-      .createProjectAt(
-        "/root/practice/仿写",
-        { name: "仿写", language: "zh", kind: "practice" },
-        { open: false },
-      );
-    expect(mocked.createProject).toHaveBeenCalledWith("/root/practice/仿写", {
-      name: "仿写",
+  it("练习工作区懒创建：config 原样带 kind + author_id，create 后紧接 open（落点由调用方按 kind 定）", async () => {
+    const practiceConfig = {
+      ...sampleConfig,
+      id: "proj-p",
+      name: "江南",
+      kind: "practice" as const,
+      authorId: "jiangnan",
+    };
+    mocked.createProject.mockResolvedValue({
+      id: "proj-p",
+      path: "/root/practice/江南",
+      created: true,
+    });
+    mocked.openProject.mockResolvedValue({
+      id: "proj-p",
+      name: "江南",
+      language: "zh",
+      config: practiceConfig,
+    });
+    mocked.getOutline.mockResolvedValue({
+      id: "root",
+      type: "root",
+      schemaVersion: 1,
+      children: [],
+    });
+    await useProjectStore.getState().createProjectAt("/root/practice/江南", {
+      name: "江南",
       language: "zh",
       kind: "practice",
+      author_id: "jiangnan",
     });
-    expect(mocked.openProject).not.toHaveBeenCalled();
-    expect(useProjectStore.getState().config).toBeNull();
+    expect(mocked.createProject).toHaveBeenCalledWith("/root/practice/江南", {
+      name: "江南",
+      language: "zh",
+      kind: "practice",
+      author_id: "jiangnan",
+    });
+    expect(mocked.openProject).toHaveBeenCalledWith("/root/practice/江南");
+    expect(useProjectStore.getState().config).toEqual(practiceConfig);
   });
 
   it("close → 清空 config/outline", async () => {

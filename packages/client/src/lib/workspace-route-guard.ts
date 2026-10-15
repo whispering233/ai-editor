@@ -6,9 +6,12 @@
 //
 // 两侧口径（都 fail-closed，**不要改成「枚举小说语义路由」的写法**——那条清单会把将来新增的小说路由漏掉）：
 //   - 练习工作区（`kind = "practice"`）= **允许清单**：`#/`（根首页 = 工作区聚合入口，两种 kind 都可达）
-//     / `#/practice` 及其子路径 / `#/preferences`（设置）；其余一律重定向 `#/practice`。
-//   - 小说工作区（`kind = "novel"`）= **默认放行小说路由，只挡练习专属段**：首段是 `practice` → 重定向 `#/`
-//     （它没有小说语义的页面，留着就是死页）。
+//     / 练习专属段（`PRACTICE_SEGMENTS`）及其子路径 / `#/preferences`（设置）；其余一律重定向 `#/practice`。
+//   - 小说工作区（`kind = "novel"`）= **默认放行小说路由，只挡练习专属段**：首段落在 `PRACTICE_SEGMENTS`
+//     → 重定向 `#/`（练习页面没有小说语义，留着就是死页）。
+//
+// **练习专属首段清单只有一个常量**（`PRACTICE_SEGMENTS`）：练习侧按它放行、小说侧按它来挡——两侧取
+// 同一份清单，新增练习页只改常量一处，不会出现「新增的练习页在小说工作区漏挡」。
 //
 // **判定发生在「选择渲染哪个页面之前」**——这正是本模块没有 hook 的原因：`main.tsx` 拿本函数的返回值
 // 直接决定渲染目标页面还是渲染 `RedirectTo`，被挡下的 hash **不挂载目标页面**。旧写法（挂在外壳的
@@ -19,11 +22,23 @@
 import type { WorkspaceKind } from "@whispering233/ai-editor-shared";
 import type { Route } from "../hooks/use-route";
 
-/** 练习工作区的 hash 首段（小说侧守卫只挡这一段） */
-const PRACTICE_SEGMENT = "practice";
+/**
+ * 练习专属 hash 首段（**单一定义**，顺序 = 左栏五项顺序）：练习工作区按它放行，
+ * 小说工作区按下表逐段挡（`60-practice.md` §9：新增练习页要连这里一起改，不能只加页面）。
+ */
+export const PRACTICE_SEGMENTS: readonly string[] = [
+  "author",
+  "works",
+  "style",
+  "practice",
+  "free",
+];
 
 /** 练习工作区允许的 hash 首段（根路由 `#/` 由空 segments 表达，单独允许） */
-export const PRACTICE_ALLOWED_SEGMENTS: readonly string[] = [PRACTICE_SEGMENT, "preferences"];
+export const PRACTICE_ALLOWED_SEGMENTS: readonly string[] = [
+  ...PRACTICE_SEGMENTS,
+  "preferences",
+];
 
 /** 练习工作区的落点（被挡下的 hash 一律去这里——它唯一的页面） */
 export const PRACTICE_REDIRECT_PATH = "/practice";
@@ -44,5 +59,5 @@ export function workspaceRedirectPath(kind: WorkspaceKind | null, route: Route):
     if (first === undefined || PRACTICE_ALLOWED_SEGMENTS.includes(first)) return null;
     return PRACTICE_REDIRECT_PATH;
   }
-  return first === PRACTICE_SEGMENT ? NOVEL_REDIRECT_PATH : null;
+  return first !== undefined && PRACTICE_SEGMENTS.includes(first) ? NOVEL_REDIRECT_PATH : null;
 }

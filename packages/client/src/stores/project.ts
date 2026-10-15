@@ -59,13 +59,9 @@ interface ProjectState {
   loadBookshelf: () => Promise<void>;
  /** 打开项目（POST /project/open）：成功刷新 config/outline；rebuilt 时 toast 提示 */
   openProjectAt: (path: string) => Promise<void>;
- /** 创建项目（POST /project/create）后打开；`config.kind` 落工作区类型
-  *（缺省 novel），`options.open === false` 只创建不打开（练习区新建不切当前工作区） */
-  createProjectAt: (
-    path: string,
-    config?: CreateProjectBody["config"],
-    options?: { open?: boolean },
-  ) => Promise<void>;
+  /** 创建项目（POST /project/create）后**接着打开**（create 本身不打开项目，见 S1.2）；
+   * `config.kind` 落工作区类型（缺省 novel）、`config.author_id` 落练习工作区关联的预置作家 */
+  createProjectAt: (path: string, config?: CreateProjectBody["config"]) => Promise<void>;
  /** 关闭当前项目（POST /project/close）：清空本地 config/outline */
   closeProject: () => Promise<void>;
  /** 加载项目规则文件 （GET /project/agents）；含外部修改检测（mtime 比对） */
@@ -180,10 +176,9 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
     await get().loadOutline();
   },
 
-  createProjectAt: async (path, config, options) => {
- // create 不打开项目（S1.2：open 才打开）；创建成功 → open 进入项目（除非显式要求只创建）
+  createProjectAt: async (path, config) => {
+ // create 不打开项目（S1.2：open 才打开）；创建成功 → open 进入项目
     await apiCreateProject(path, config);
-    if (options?.open === false) return;
     await get().openProjectAt(path);
   },
 

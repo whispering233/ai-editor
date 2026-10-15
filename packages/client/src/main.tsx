@@ -22,8 +22,13 @@ import TimelineDetail from "./pages/TimelineDetail";
 import ReferenceList from "./pages/ReferenceList";
 import ReferenceDetail from "./pages/ReferenceDetail";
 import Manuscript from "./pages/Manuscript";
+import AuthorIntro from "./pages/AuthorIntro";
+import Works from "./pages/Works";
+import StyleNotes from "./pages/StyleNotes";
 import Practice from "./pages/Practice";
 import PracticeDetail from "./pages/PracticeDetail";
+import Free from "./pages/Free";
+import FreeDetail from "./pages/FreeDetail";
 import Trash from "./pages/Trash";
 import Settings from "./pages/Settings";
 import "./index.css";
@@ -138,14 +143,30 @@ function renderPage(route: Route): ReactNode {
       );
     case "trash":
       return <Trash />;
+    case "author":
+      // 练习工作区：三张素材页中的作家介绍（只读；数据 = shared 常量，无端点）
+      return <AuthorIntro />;
+    case "works":
+      return <Works />;
+    case "style":
+      return <StyleNotes />;
     case "practice":
-      // 文风练习工作区段，按段数分流：1 段 = 列表页（卡 9）；2 段 = 练习页（卡 10，
+      // 文风练习工作区段，按段数分流：1 段 = 列表页（卡 4）；2 段 = 练习页（卡 10，
       // key = sampleId 变化强制卸载重挂：稿件 / 保存态 / 点评帧消费序号按样本重置）；更深段归回列表
       if (second === undefined) return <Practice />;
       return third === undefined ? (
         <PracticeDetail key={second} sampleId={second} />
       ) : (
         <RedirectTo to="/practice" />
+      );
+    case "free":
+      // 自由练习段，按段数分流：1 段 = 题目列表（卡 5）；2 段 = 该篇详情（key = pieceId 变化强制
+      // 卸载重挂：稿件 / 保存态 / 出题与点评帧消费序号按篇重置）；更深段归回列表
+      if (second === undefined) return <Free />;
+      return third === undefined ? (
+        <FreeDetail key={second} pieceId={second} />
+      ) : (
+        <RedirectTo to="/free" />
       );
     case "preferences":
       return <Settings />;
