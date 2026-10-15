@@ -2,7 +2,7 @@
   "name": "ai-editor-desktop",
   "productName": "AI Editor",
   "desktopName": "com.whispering233.ai-editor",
-  "version": "0.0.57",
+  "version": "0.0.58",
   "license": "MIT",
   "description": "AI Editor 桌面版（Electron 外壳）",
   "private": true,
