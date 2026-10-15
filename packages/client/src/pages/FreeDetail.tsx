@@ -196,7 +196,7 @@ export function FreePieceSections({
           </Button>
         }
       >
-        <FeedbackCardView feedback={detail.feedback} traitLabel="风格特征" />
+        <FeedbackCardView feedback={detail.feedback} traitLabel="风格特征" basisLabel="风格说明" />
       </SectionCard>
     </div>
   );

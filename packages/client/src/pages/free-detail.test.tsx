@@ -241,13 +241,13 @@ describe("点评卡渲染（复用仿写页卡面，仅依据侧标签变「风�
     expect(html).toContain("把长句拆开");
   });
 
-  it("引用以 `「」` 列出：稿件侧引用带「我的稿」来源词，依据侧引用同行走同一份卡面（不做原文高亮）", () => {
+  it("引用以 `「」` 列出：依据侧引用带「风格说明」来源词、稿件侧带「我的稿」（不做原文高亮）", () => {
     const html = render({
       detail: { ...DETAIL, feedback: { dimensions: [DIMENSION] } as PracticeFeedbackCard },
     });
     expect(html).toContain("我的稿「雨下了一夜，我们没有说再见。」");
-    expect(html).toContain("「少用修饰」");
-    expect(html).toContain("我的稿「");
+    expect(html).toContain("风格说明「少用修饰」");
+    expect(html).not.toContain("范文「"); // 自由练习的依据是风格说明，不得回落成仿写侧来源词
     expect(html).not.toContain("<mark");
   });
 });

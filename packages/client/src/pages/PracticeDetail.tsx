@@ -84,13 +84,14 @@ function orDash(text: string): ReactNode {
 }
 
 /**
- * 引用行：范文引用在前、我的稿引用在后，每句用 `「」` 包起（全站引用用户文本的同一写法）。
- * 每组带来源词——两侧引用混在一行里，用户要能看出哪句出自范文、哪句出自自己的稿。
+ * 引用行：依据侧引用在前、我的稿引用在后，每句用 `「」` 包起（全站引用用户文本的同一写法）。
+ * 每组带来源词——两侧引用混在一行里，用户要能看出哪句出自依据（仿写 = 范文、自由练习 = 风格说明）、
+ * 哪句出自自己的稿。
  * **不做原文高亮定位**（DESIGN.md §文风练习区「不做」项）；无引用 → `null`（调用方画 `—`）。
  */
-function quotesNode(dimension: PracticeFeedbackDimension): ReactNode {
+function quotesNode(dimension: PracticeFeedbackDimension, basisLabel: string): ReactNode {
   const groups = [
-    { label: "范文", quotes: dimension.sample_quotes },
+    { label: basisLabel, quotes: dimension.sample_quotes },
     { label: "我的稿", quotes: dimension.draft_quotes },
   ].filter((group) => group.quotes.length > 0);
   if (groups.length === 0) return null;
@@ -110,13 +111,19 @@ export interface FeedbackCardViewProps {
   /** 卡体（`GET` 响应的 `feedback`；未点评 = `null`）。**原样传入**，本层不做 schema 校验 */
   feedback: PracticeFeedbackCard | null;
   /** 依据侧特征那一行的标签：仿写 = 「范文特征」（`docs/ui/DESIGN.md` §作家文风练习区「点评卡」）、
-   * 自由练习 = 「风格特征」——两形态卡体同形，差别只在**引用校验源**（仿写 = 范文、自由练习 = 风格说明，
-   * 见 `docs/design/60-practice.md` §6）⇒ 只有这一行随调用方变 */
+   * 自由练习 = 「风格特征」 */
   traitLabel?: string;
+  /** **引用行**里依据侧引用的来源词：仿写 = 「范文」、自由练习 = 「风格说明」（两组引用混在一行，
+   * 用户要能看出哪句出自依据、哪句出自自己的稿） */
+  basisLabel?: string;
 }
 
 /** 点评卡卡面：`summary`（caption）+ 每维度一组（维度名 + 四行）；无卡 / 无可展示内容 → 一行空态 */
-export function FeedbackCardView({ feedback, traitLabel = "范文特征" }: FeedbackCardViewProps) {
+export function FeedbackCardView({
+  feedback,
+  traitLabel = "范文特征",
+  basisLabel = "范文",
+}: FeedbackCardViewProps) {
   const card = practiceFeedbackView(feedback);
   if (card === null) {
     return <Typography.Text type="secondary">还没点评</Typography.Text>;
@@ -132,7 +139,7 @@ export function FeedbackCardView({ feedback, traitLabel = "范文特征" }: Feed
           </Typography.Title>
           <FeedbackRow label={traitLabel}>{orDash(dimension.sample_trait)}</FeedbackRow>
           <FeedbackRow label="你的写法">{orDash(dimension.draft_trait)}</FeedbackRow>
-          <FeedbackRow label="引用">{quotesNode(dimension) ?? orDash("")}</FeedbackRow>
+          <FeedbackRow label="引用">{quotesNode(dimension, basisLabel) ?? orDash("")}</FeedbackRow>
           <FeedbackRow label="建议">{orDash(dimension.advice)}</FeedbackRow>
         </div>
       ))}
