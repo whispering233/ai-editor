@@ -17,7 +17,6 @@ import {
   TOOL_DETAILS_TO_CLIENT,
   type AuthorEntry,
   type PracticeFeedbackCard,
-  type PracticeSampleDetail,
   type PracticeSampleSummary,
 } from "@whispering233/ai-editor-shared";
 import { ApiError, CLIENT_NETWORK_ERROR, updatePracticeSampleDraft } from "./api";
@@ -215,9 +214,12 @@ export const PRACTICE_REVIEW_MESSAGE = "请点评我的仿写稿";
  * 能否点「让 AI 点评」（**纯判定**）：有**已保存**的稿件，且输入框里的内容与服务端一致。
  * 为什么要求一致：AI 读的是库里的 `draft`（工具面只有只读工具）——输入框里有未保存的改动时，
  * 点评的对象是旧稿，与用户眼前看到的不是同一份。
+ *
+ * **两种练习共用一个谓词**（入参只需 `{ draft }`）：仿写稿与自由练习稿的可点性口径逐字相同，
+ * 各留一份副本就是「同一形状两次复发」的漂移风险（本仓登记过的缺陷类别）。
  */
 export function canRequestPracticeReview(
-  detail: Pick<PracticeSampleDetail, "draft">,
+  detail: { draft: string },
   draft: string,
 ): boolean {
   return detail.draft.trim() !== "" && draft === detail.draft;

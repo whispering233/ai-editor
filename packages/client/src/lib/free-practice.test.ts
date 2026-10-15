@@ -17,7 +17,6 @@ vi.mock("./api", async (importOriginal) => {
 import { updatePracticePieceDraft } from "./api";
 import {
   FREE_TOPIC_TEXT,
-  canRequestFreeReview,
   freePracticeSignalPieceId,
   freePracticeStatus,
   freePracticeTopicLabel,
@@ -68,20 +67,8 @@ describe("题目文案（空题的唯一字面量来源）", () => {
   });
 });
 
-describe("canRequestFreeReview（「让 AI 点评」可点性）", () => {
-  it("库里无稿 / 稿纯空白 → 不可点", () => {
-    expect(canRequestFreeReview({ draft: "" }, "")).toBe(false);
-    expect(canRequestFreeReview({ draft: "   " }, "   ")).toBe(false);
-  });
-
-  it("库里与输入框一致（已保存）→ 可点", () => {
-    expect(canRequestFreeReview({ draft: "雨下了一夜。" }, "雨下了一夜。")).toBe(true);
-  });
-
-  it("输入框有未保存改动 → 不可点（AI 读的是库里的稿，不能评旧稿）", () => {
-    expect(canRequestFreeReview({ draft: "旧稿" }, "新稿")).toBe(false);
-  });
-});
+// 「让 AI 点评」可点性 = `lib/practice.ts` 的 `canRequestPracticeReview`（两形态共用同一谓词）；
+// 自由练习侧只在页面接线（`free-detail.test.tsx` 的 canReview 三态）断言它生效。
 
 describe("saveFreeDraft（稿件保存动作）", () => {
   it("成功：`updatedAt` 交给 onSaved 并返回 true（快捷键据此继续存档）", async () => {

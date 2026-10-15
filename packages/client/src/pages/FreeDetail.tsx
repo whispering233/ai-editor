@@ -33,13 +33,13 @@ import { ApiError, getPracticePiece } from "../lib/api";
 import {
   FREE_REVIEW_MESSAGE,
   FREE_TOPIC_MESSAGE,
-  canRequestFreeReview,
   freePracticeSignalPieceId,
   freePracticeTopicTitle,
   saveFreeDraft,
   shouldRefreshFreePiece,
 } from "../lib/free-practice";
 import { formatSavedAt, formatTextLength } from "../lib/manuscript";
+import { canRequestPracticeReview } from "../lib/practice";
 import { useSaveShortcut } from "../lib/save-shortcut";
 import { errorBannerClass } from "../lib/styles";
 import { cn } from "../lib/utils";
@@ -384,7 +384,7 @@ export default function FreeDetail({ pieceId }: { pieceId: string }) {
             savedAt={savedAt}
             saveError={saveError}
             onSave={() => void saveDraft()}
-            canReview={canRequestFreeReview(detail, draft)}
+            canReview={canRequestPracticeReview(detail, draft)}
             streaming={streaming}
             onRequestReview={() => request(FREE_REVIEW_MESSAGE)}
             onRequestTopic={() => request(FREE_TOPIC_MESSAGE)}

@@ -8,12 +8,11 @@
 // 与 §6（卡体两形态同形，差别只在引用校验源与页面标签）。
 //
 // 与仿写（`lib/practice.ts`）的关系：口径同形、**各自一份实现**（两页的状态集合不同——自由练习多
-// 「待出题」一态、少作品分组），故不合并成一个多态入口；「让 AI 点评」可点性两条同款判定也各留一份，
-// 因为入参类型与错误文案的落点不同。
+// 「待出题」一态、少作品分组），故不合并成一个多态入口；但「让 AI 点评」可点性**共用**
+// `lib/practice.ts` 的 `canRequestPracticeReview`（逐字相同的谓词不敷两份）。
 
 import {
   TOOL_DETAILS_TO_CLIENT,
-  type PracticePieceDetail,
   type PracticePieceSummary,
 } from "@whispering233/ai-editor-shared";
 import { ApiError, CLIENT_NETWORK_ERROR, updatePracticePieceDraft } from "./api";
@@ -62,17 +61,7 @@ export const FREE_TOPIC_MESSAGE = "请出一道练习题目";
 /** 触发**点评**的用户可见消息文案（`120-api-practice.md`「自由练习点评触发」） */
 export const FREE_REVIEW_MESSAGE = "请点评我的自由练习稿";
 
-/**
- * 能否点「让 AI 点评」（纯判定）：有**已保存且非空**的稿件，且输入框内容与服务端一致。
- * 为什么要求一致：AI 读的是库里的 `draft`（工具面无写稿工具）——输入框里有未保存的改动时，
- * 点评的对象是旧稿，与用户眼前看到的不是同一份。
- */
-export function canRequestFreeReview(
-  detail: Pick<PracticePieceDetail, "draft">,
-  draft: string,
-): boolean {
-  return detail.draft.trim() !== "" && draft === detail.draft;
-}
+// 「让 AI 点评」可点性 = `lib/practice.ts` 的 `canRequestPracticeReview`（两形态共用同一谓词）
 
 // ============ 稿件保存 ============
 
