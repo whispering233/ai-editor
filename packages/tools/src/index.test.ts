@@ -1,10 +1,10 @@
 // 冒烟测试：验证 @whispering233/ai-editor-tools 入口可正常导入（T0.3 语义）
 // 冒烟断言为新入口形态：注册表 API + 工具副作用注册（查询 11 + 分析 5 +
 // S6.5 伏笔 5 + S6.6 提案 16 + S6.7 卡 12.9（get_chapter_text）1 + D4（get_deduction_marks）1
-// + 练习 3（两读一提交，scope = practice）= 40 个；执行 13 个不暴露）；
+// + 练习 7（四读三写，scope = practice）= 44 个；执行 13 个不暴露）；
 // workspace 依赖 @whispering233/ai-editor-db / @whispering233/ai-editor-shared 解析由 import 在编译/运行期验证
 import { describe, expect, it } from "vitest";
-import { AUTO_TOOLS, CHARACTER_PRIORITIES, CHARACTER_PRIORITY_LABELS, DEFAULT_HALF_LIFE, MAX_FEEDBACK_DIMENSIONS, PRACTICE_TOOLS, PROPOSAL_TOOLS, TOOL_SCOPES } from "@whispering233/ai-editor-shared";
+import { AUTO_TOOLS, CHARACTER_PRIORITIES, CHARACTER_PRIORITY_LABELS, DEFAULT_HALF_LIFE, MAX_FEEDBACK_DIMENSIONS, MAX_PRACTICE_BRIEF_CHARS, MAX_PRACTICE_TOPIC_CHARS, PRACTICE_TOOLS, PROPOSAL_TOOLS, TOOL_SCOPES } from "@whispering233/ai-editor-shared";
 import * as m from "./index";
 
 describe("@whispering233/ai-editor-tools 入口冒烟", () => {
@@ -28,8 +28,8 @@ describe("@whispering233/ai-editor-tools 入口冒烟", () => {
     expect(typeof m.runProposeCreateEntity).toBe("function");
     expect(typeof m.runProposeAddDelta).toBe("function");
     expect(typeof m.runProposeAdvanceHook).toBe("function");
- // 入口副作用注册：查询 11 + 分析 5 + 伏笔 5 + 提案 16 + 练习 3 = 40 个（含 get_chapter_text 正文只读 + get_deduction_marks 推演标记）
-    expect(m.toolCount()).toBe(40);
+ // 入口副作用注册：查询 11 + 分析 5 + 伏笔 5 + 提案 16 + 练习 7 = 44 个（含 get_chapter_text 正文只读 + get_deduction_marks 推演标记）
+    expect(m.toolCount()).toBe(44);
     expect(m.getTool("get_entity")).toBeDefined();
     expect(m.getTool("get_chapter_text")!.permission).toBe("auto"); // 正文只读：自动权限
  // 分页数值防漂移：description 由 query/manuscript.ts 的常量插值生成
@@ -41,16 +41,20 @@ describe("@whispering233/ai-editor-tools 入口冒烟", () => {
       new Set([String(m.DEFAULT_TEXT_PAGE_CHARS), String(m.MAX_TEXT_PAGE_CHARS)]),
     );
  // 练习工具分页描述同源：同两个常量（文本分页预算单源），同样挡住手写数字与值改了没同步
-    for (const name of ["get_practice_sample", "get_practice_draft"]) {
+    for (const name of ["get_practice_sample", "get_practice_draft", "get_free_draft", "get_style_notes"]) {
       const practiceDescription = m.getTool(name)!.description;
       expect(new Set(practiceDescription.match(/\d{4,}/g) ?? [])).toEqual(
         new Set([String(m.DEFAULT_TEXT_PAGE_CHARS), String(m.MAX_TEXT_PAGE_CHARS)]),
       );
     }
- // 维度上限防漂移：submit_style_feedback 的 description 由 shared MAX_FEEDBACK_DIMENSIONS 插值生成
-    expect(m.getTool("submit_style_feedback")!.description).toContain(
-      `dimensions 最多 ${MAX_FEEDBACK_DIMENSIONS} 个维度`,
-    );
+ // 维度上限防漂移：两个提交点评卡的 description 由 shared MAX_FEEDBACK_DIMENSIONS 插值生成
+    for (const name of ["submit_style_feedback", "submit_free_feedback"]) {
+      expect(m.getTool(name)!.description).toContain(`dimensions 最多 ${MAX_FEEDBACK_DIMENSIONS} 个维度`);
+    }
+ // 题目 / 写作要求上限防漂移：submit_practice_topic 的 description 由 shared 常量插值生成
+    const topicDescription = m.getTool("submit_practice_topic")!.description;
+    expect(topicDescription).toContain(`不超过 ${MAX_PRACTICE_TOPIC_CHARS} 字`);
+    expect(topicDescription).toContain(`不超过 ${MAX_PRACTICE_BRIEF_CHARS} 字`);
  // 半衰期缺省映射防漂移：description 由 shared DEFAULT_HALF_LIFE 插值生成——
  // 改成手写数字 / 值改了没同步，逐项比对即报红
     const hookHealthDescription = m.getTool("analyze_hook_health")!.description;
@@ -90,8 +94,8 @@ describe("@whispering233/ai-editor-tools 入口冒烟", () => {
   });
 
  // 工具 scope（工作区作用域，2026-10）：既有 37 个工具全为 novel（逐名对账，不用「长度相等」代替）
- // + 练习三个为 practice（**误标 common ⇒ 小说侧变 40；误标 novel ⇒ 小说集合逐名相等报红**）。
-  it("scope 无遗漏：每个已注册工具的 scope 合法，novel 集合 = 既有 37 个、practice 集合 = 练习三个（逐名相等）", () => {
+ // + 练习七个为 practice（**误标 common ⇒ 小说侧变 44；误标 novel ⇒ 小说集合逐名相等报红**）。
+  it("scope 无遗漏：每个已注册工具的 scope 合法，novel 集合 = 既有 37 个、practice 集合 = 练习七个（逐名相等）", () => {
     const legacyToolNames = [
       "analyze_consistency",
       "analyze_hook_health",

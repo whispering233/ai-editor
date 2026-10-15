@@ -45,6 +45,7 @@ import {
   getDocument,
   getDocumentTextLengths,
   getEntity,
+  getPracticePiece,
   getPracticeSample,
   readOutlineFile,
 } from "@whispering233/ai-editor-db";
@@ -111,7 +112,7 @@ export const FOCUS_CHAPTER_EXCERPT_CHARS = 2000;
 
 /**
  * 聚焦上下文文本：focus_entity_id → 实体、focus_node_id → 大纲节点、focus_deduction → 推演节点集合，
- * practice_sample_id → 练习样本，拼成结构化文本。
+ * practice_sample_id → 练习样本、practice_free_piece_id → 自由练习篇，拼成结构化文本。
  * 查询不到（已软删/不存在/跨项目/样本已删）→ 跳过该项（不报错）：客户端可能携带过期 focus。
  * 各项皆无（或均无效）→ undefined（不注入，消息原文保持干净）。
  * 聚焦**章**：另注入正文前 `FOCUS_CHAPTER_EXCERPT_CHARS` 字符节选（带「节选」标注）——
@@ -126,6 +127,7 @@ export function buildFocusText(
         focus_node_id?: string;
         focus_deduction?: boolean;
         practice_sample_id?: string;
+        practice_free_piece_id?: string;
       }
     | undefined,
 ): string | undefined {
@@ -153,6 +155,10 @@ export function buildFocusText(
     const practice = practiceSampleFocusText(project, context.practice_sample_id);
     if (practice !== undefined) parts.push(practice); // 样本不存在 / 工作区未关联作家 → 不注入该段（不影响其余项）
   }
+  if (context?.practice_free_piece_id !== undefined) {
+    const free = freePracticeFocusText(project, context.practice_free_piece_id);
+    if (free !== undefined) parts.push(free); // 篇不存在 / 工作区未关联作家 → 不注入该段（不影响其余项）
+  }
   return parts.length > 0 ? parts.join("\n\n") : undefined;
 }
 
@@ -178,6 +184,30 @@ function practiceSampleFocusText(project: ProjectContext, sampleId: string): str
     `作品：${work?.name ?? PRACTICE_OTHER_WORK_LABEL}`,
   ];
   if (sample.excerpt_label !== "") lines.push(`片段说明：${sample.excerpt_label}`);
+  return lines.join("\n");
+}
+
+/**
+ * 自由练习段（`context.practice_free_piece_id`，见 `docs/design/60-practice.md` §8）——
+ * 点评与出题共用同一条触发口径（携带空题篇 = 出题，否则 = 点评）：**只给事实**——
+ * 篇 id、作家名、题目（空题行说明这是待出题的新篇）、写作要求（`brief` 空则不注入该行）。
+ * 用户稿 `draft` 与点评卡**绝不注入**（稿件走 get_free_draft 分页拉取）；
+ * 「出题要提交题目与可执行的写作要求」这类**指令语义只活在练习内核提示词常量**
+ * （agent 包 `PRACTICE_KERNEL_PROMPT`）——注入段再写一份 = 第二事实源。
+ * 篇不存在 / 工作区未关联预置作家（`author_id` 缺失或未知）→ undefined（静默省略，不报错，
+ * **不编造空作家名**；与篇端点的 400 守卫不同：注入是可选项，不能打挂本轮对话）。
+ */
+function freePracticeFocusText(project: ProjectContext, pieceId: string): string | undefined {
+  const piece = getPracticePiece(project.db, pieceId);
+  if (piece === null) return undefined;
+  const author = resolveAuthor(project.config.author_id);
+  if (author === null) return undefined;
+  const lines = [
+    `自由练习：id=${piece.id}`,
+    `作家：${author.name}`,
+    piece.topic === "" ? "题目：未出题（本篇等待你出题）" : `题目：${piece.topic}`,
+  ];
+  if (piece.brief !== "") lines.push(`写作要求：${piece.brief}`);
   return lines.join("\n");
 }
 

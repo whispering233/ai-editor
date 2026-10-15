@@ -130,18 +130,22 @@ export const EXECUTOR_TOOLS = [
 export const AUTO_TOOLS = [...QUERY_TOOLS, ...ANALYSIS_TOOLS, ...HOOK_ANALYSIS_TOOLS] as const;
 
 /**
- * 练习工具（自动级，「文风仿写练习」，共 3 个）——**仅 `kind = "practice"` 工作区注册**
- * （`scope = "practice"`，见 docs/api/tool-calling.md「按工作区类型收窄」）：两个只读
- * （范文 / 用户稿分页拉取）与一个提交（点评卡写 `feedback`）。
+ * 练习工具（自动级，「作家文风练习」，共 7 个 = 四只读 + 三写 AI 自己的产出）——
+ * **仅 `kind = "practice"` 工作区注册**（`scope = "practice"`，见 docs/api/tool-calling.md「按工作区类型收窄」）：
+ * 四个只读分页工具（范文 / 仿写稿 / 自由稿 / 风格说明）与三个提交工具（仿写点评卡 / 自由练习点评卡 / 出题）。
  * 工具面**不存在任何写用户稿的工具**——用户的稿只有用户能写（结构性边界）。
  */
 export const PRACTICE_TOOLS = [
   "get_practice_sample", // 范文快照只读（分页）
   "get_practice_draft", // 用户仿写稿只读（分页）
-  "submit_style_feedback", // 提交点评卡（唯一能写练习数据的工具，只写 feedback）
+  "get_free_draft", // 用户自由练习稿只读（分页）
+  "get_style_notes", // 作家风格说明只读（分页；自由练习点评的唯一依据）
+  "submit_style_feedback", // 提交仿写点评卡（只写 practice_samples.feedback）
+  "submit_free_feedback", // 提交自由练习点评卡（只写 practice_free_pieces.feedback）
+  "submit_practice_topic", // AI 出题（只写 practice_free_pieces.topic / brief）
 ] as const;
 
-/** 全部工具名（自动 21 + 练习 3 + 提案 16 + 执行 13 = 53 个） */
+/** 全部工具名（自动 21 + 练习 7 + 提案 16 + 执行 13 = 57 个） */
 export const TOOL_NAMES = [...AUTO_TOOLS, ...PRACTICE_TOOLS, ...PROPOSAL_TOOLS, ...EXECUTOR_TOOLS] as const;
 
 /** 工具名（从 TOOL_NAMES 派生） */
@@ -156,4 +160,7 @@ export type ToolName = (typeof TOOL_NAMES)[number];
 export const TOOL_DETAILS_TO_CLIENT = [
   // 点评卡：写库结果随帧下发，前端据此即时刷新卡片（卡片正体从 GET /practice/samples/:id 读）
   "submit_style_feedback",
+  // 自由练习点评 / 出题：同上（写库结果随帧下发；前端据 `tool_execution_start` 的入参 piece_id 认领）
+  "submit_free_feedback",
+  "submit_practice_topic",
 ] as const satisfies readonly ToolName[];

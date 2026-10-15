@@ -324,7 +324,7 @@ describe("领域工具装配", () => {
 // 提示词同层按 kind 分叉（两份内核常量）。
 
 describe("练习工作区装配", () => {
-  it("工具集 = 恰好三个练习工具（无小说工具、无 propose_*），且内核提示词为练习版", async () => {
+  it("工具集 = 恰好七个练习工具（无小说工具、无 propose_*），且内核提示词为练习版", async () => {
     const env = await createFauxEnv();
     const projectRoot = mkTempDir("ai-editor-k4-practice-");
     const agentDir = mkTempDir("ai-editor-k4-agentdir-");
@@ -333,7 +333,7 @@ describe("练习工作区装配", () => {
     const runtime = await setupRuntime({ projectRoot, env, agentDir, kind: "practice" });
     try {
       const activeNames = runtime.session.getActiveToolNames();
-      // 恰好两个只读 + 一个提交（shared PRACTICE_TOOLS = 同一份清单）
+      // 恰好四个只读 + 三个写 AI 产出（shared PRACTICE_TOOLS = 同一份清单）
       expect([...activeNames].sort()).toEqual([...PRACTICE_TOOLS].sort());
       expect(activeNames).toHaveLength(PRACTICE_TOOLS.length);
       expect(activeNames.some((name) => name.startsWith("propose_"))).toBe(false);

@@ -11,8 +11,10 @@
 // - POST /chat：开流前校验（400/404/409/LLM_API_KEY_MISSING）、首帧 session、事件集与
 //   `partial` 剥离、AUTO 工具 details 不下发、提案 details 下发、AGENTS.md 与聚焦注入、
 //   续聊历史喂回、单项目单流 409 CHAT_BUSY、断开取消（provider signal aborted + 提案作废）
-// - 练习点评链路：`context.practice_sample_id` 注入只给事实（样本 id + 作家名 + 作品名 + 片段说明；
-//   范文/稿件零命中、空片段说明不给该行）、样本不存在 / 工作区未关联作家 → 静默省略、帧集零新增
+// - 练习点评链路：`context.practice_sample_id` / `context.practice_free_piece_id` 注入只给事实
+//   （仿写 = 样本 id + 作家名 + 作品名 + 片段说明；自由 = 篇 id + 作家名 + 题目 + 写作要求；
+//   正文 / 稿件零命中、空片段说明与空写作要求不给该行、待出题新篇给待出题说明）、
+//   样本 / 篇不存在或工作区未关联作家 → 静默省略、提交工具（三个）的 details 随帧下发 + 落库一致、帧集零新增
 // - 会话用量：turn_end / agent_end 的 usage、assistant message_end 的 speed、历史响应 usage 同源同值
 import { mkdirSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -41,12 +43,15 @@ import {
 } from "@whispering233/ai-editor-agent";
 import {
   createEntity,
+  createPracticePiece,
   createPracticeSample,
   findOutlineNode,
+  getPracticePiece,
   getPracticeSample,
   readOutlineFile,
   readProjectFile,
   SCHEMA_VERSION,
+  updatePracticePieceDraft,
   updatePracticeSampleDraft,
   upsertDocument,
   writeOutlineFile,
@@ -1140,6 +1145,18 @@ function requestText(request: TranscriptContext): string {
   return JSON.stringify(request.messages);
 }
 
+/**
+ * 本轮**用户消息**里的全部文本：注入段（`## 当前聚焦`）就在用户消息里，
+ * 而 system 消息除内核提示词外还带工具 schema（工具描述里的字段名会污染标签类断言）⇒
+ * 「注入段不给某行」这类断言必须收在用户消息上。
+ */
+function userMessageText(request: TranscriptContext): string {
+  return request.messages
+    .filter((m) => m.role === "user")
+    .map((m) => JSON.stringify(m.content))
+    .join("\n");
+}
+
 describe("练习点评链路：注入与卡片下发", () => {
   /** 范文 / 稿件里的独特长标记（断言「正文一字不进 prompt」用） */
   const SAMPLE_TEXT_MARK = "范文独有标记9c1f";
@@ -1272,14 +1289,254 @@ describe("练习点评链路：注入与卡片下发", () => {
         postChat({ message: "请点评我的仿写稿", context: { practice_sample_id: sampleId } }),
       ),
     );
-    const injected = requestText(env.requests[0]!);
+    const injected = userMessageText(env.requests[0]!);
     expect(injected).toContain(`练习样本：id=${sampleId}`);
     expect(injected).toContain(`作品：${PRACTICE_OTHER_WORK_LABEL}`);
-    expect(injected).not.toContain("片段说明");
+    expect(injected).not.toContain("片段说明"); // 链接断言：注入段里没有「片段说明」行（system 的工具描述不计）
   });
 
-  // **工具面轮次（点评卡 details 随帧下发 + 落库）不在本卡**：练习工具正在重建（卡 7），旧工具实现
-  // 依赖已删的 targets 模型 ⇒ 该用例随工具面一起在卡 7 恢复（见 docs/design/tasks.md 卡 7）。
+  // ============ 自由练习（点评与出题共用 `practice_free_piece_id` 触发） ============
+
+  /** 自由练习稿里的独特长标记（断言「稿件一字不进 prompt」用） */
+  const FREE_DRAFT_MARK = "自由稿独有标记3a5d";
+  const FREE_DRAFT_QUOTE = "我的自由练习句。";
+
+  /** 建一篇自由练习（含稿件），返回篇 id */
+  function seedPiece(project: ProjectContext, options: { topic?: string; brief?: string } = {}): string {
+    const piece = createPracticePiece(project.db, {
+      topicSource: options.topic === undefined ? "ai" : "user",
+      topic: options.topic,
+      brief: options.brief,
+    });
+    updatePracticePieceDraft(project.db, piece.id, `${FREE_DRAFT_QUOTE}${FREE_DRAFT_MARK}${FREE_DRAFT_MARK.repeat(40)}`);
+    return piece.id;
+  }
+
+  it("注入：待出题新篇 → 篇 id + 作家名 + 待出题说明进本轮消息；稿件零命中；指令语义不复述", async () => {
+    const project = openPracticeProject();
+    const pieceId = seedPiece(project);
+    const author = resolveAuthor(project.config.author_id)!;
+    const env = await createFauxEnv();
+    scripted(env, [() => fauxAssistantMessage("收到")]);
+    const app = buildApp(createChatRoutes({ runtimeFactory: env.factory }));
+
+    await readSseFrames(
+      await app.request(
+        "/api/v1/chat",
+        postChat({ message: "请出一道练习题目", context: { practice_free_piece_id: pieceId } }),
+      ),
+    );
+
+    const request = env.requests[0]!;
+    const userTexts = userMessageText(request);
+    expect(userTexts).toContain(`自由练习：id=${pieceId}`);
+    expect(userTexts).toContain(`作家：${author.name}`);
+    expect(userTexts).toContain("题目：未出题");
+    expect(userTexts).not.toContain("写作要求："); // brief 空 = 不注入该行
+    expect(userTexts).not.toContain(FREE_DRAFT_MARK); // 用户稿不进 prompt（走 get_free_draft 分页拉取）
+    expect(userTexts).toContain("请出一道练习题目");
+    expect(userTexts).toContain("当前聚焦");
+    // 指令语义只活在练习内核提示词（system）里，注入段不复述
+    expect(getCurrentSystemPrompt(request.messages)).toContain("submit_practice_topic");
+    expect(userTexts).not.toContain("submit_practice_topic");
+  });
+
+  it("注入：已出题的篇 → 题目 + 写作要求都进本轮消息（两行事实）", async () => {
+    const project = openPracticeProject();
+    const pieceId = seedPiece(project, { topic: "写一段雨夜独行", brief: "第一人称，400 字" });
+    const env = await createFauxEnv();
+    scripted(env, [() => fauxAssistantMessage("收到")]);
+    const app = buildApp(createChatRoutes({ runtimeFactory: env.factory }));
+
+    await readSseFrames(
+      await app.request(
+        "/api/v1/chat",
+        postChat({ message: "请点评我的自由练习稿", context: { practice_free_piece_id: pieceId } }),
+      ),
+    );
+    const injected = userMessageText(env.requests[0]!);
+    expect(injected).toContain(`自由练习：id=${pieceId}`);
+    expect(injected).toContain("题目：写一段雨夜独行");
+    expect(injected).toContain("写作要求：第一人称，400 字");
+    expect(injected).not.toContain(FREE_DRAFT_MARK);
+  });
+
+  it("注入：篇不存在 / 工作区未关联预置作家 → 同样静默省略（无空段标题残留），本轮照常完成", async () => {
+    const project = openPracticeProject();
+    const pieceId = seedPiece(project);
+    const env = await createFauxEnv();
+    scripted(env, [() => fauxAssistantMessage("收到")]);
+    const app = buildApp(createChatRoutes({ runtimeFactory: env.factory }));
+
+    await readSseFrames(
+      await app.request(
+        "/api/v1/chat",
+        postChat({ message: "本轮问题", context: { practice_free_piece_id: "pf-missing" } }),
+      ),
+    );
+    project.config = { ...project.config, author_id: undefined }; // 存量 / 坏值练习工作区
+    scripted(env, [() => fauxAssistantMessage("收到")]);
+    await readSseFrames(
+      await app.request(
+        "/api/v1/chat",
+        postChat({ message: "本轮问题", context: { practice_free_piece_id: pieceId } }),
+      ),
+    );
+
+    for (const request of env.requests) {
+      const userTexts = userMessageText(request);
+      expect(userTexts).toContain("本轮问题");
+      expect(userTexts).not.toContain("当前聚焦"); // 唯一注入项被跳过 → 段标题不残留
+      expect(userTexts).not.toContain("自由练习：");
+      expect(userTexts).not.toContain("作家：");
+    }
+  });
+
+  it("点评一轮：提交工具 details 随帧下发 + 落库一致；只读工具 details 仍不下发；帧集零新增", async () => {
+    const project = openPracticeProject();
+    const { sampleId } = seedPractice(project);
+    const env = await createFauxEnv();
+    scripted(env, [
+      // 第一轮：先读范文与稿件（AUTO 只读工具，details 不下发）
+      () =>
+        fauxAssistantMessage([
+          fauxToolCall("get_practice_sample", { sample_id: sampleId }),
+          fauxToolCall("get_practice_draft", { sample_id: sampleId }),
+        ]),
+      // 第二轮：提交点评卡（AUTO 提交工具，details 随帧下发）
+      () =>
+        fauxAssistantMessage([
+          fauxToolCall("submit_style_feedback", {
+            sample_id: sampleId,
+            dimensions: [
+              {
+                name: "句长节奏",
+                sample_trait: "以短句推进",
+                draft_trait: "长句偏多",
+                sample_quotes: [SAMPLE_QUOTE],
+                draft_quotes: [DRAFT_QUOTE],
+                advice: "把超过三行的句子拆开",
+              },
+            ],
+            summary: "语感已接近，节奏还需收紧",
+          }),
+        ]),
+      () => fauxAssistantMessage("点评卡已提交。"),
+    ]);
+    const app = buildApp(createChatRoutes({ runtimeFactory: env.factory }));
+
+    const frames = await readSseFrames(
+      await app.request(
+        "/api/v1/chat",
+        postChat({ message: "请点评我的仿写稿", context: { practice_sample_id: sampleId } }),
+      ),
+    );
+
+    // 帧集零新增：全部帧名都在 docs/api/80-api-chat.md 的事件表里
+    expect(frames.filter((f) => !DOCUMENTED_SSE_EVENTS.has(f.event))).toEqual([]);
+
+    const ends = frames.filter((f) => f.event === "tool_execution_end");
+    const sampleEnd = ends.find((f) => (f.data as { toolName: string }).toolName === "get_practice_sample")!;
+    const submitEnd = ends.find((f) => (f.data as { toolName: string }).toolName === "submit_style_feedback")!;
+
+    // 负控制：同类只读 AUTO 工具的 details 仍不下发（门控没收宽成「全放行」）
+    const sampleResult = (sampleEnd.data as { result: Record<string, unknown> }).result;
+    expect(Object.keys(sampleResult)).toEqual(["content"]);
+
+    // 提交工具的 details 随帧下发（前端即时数据面）
+    const submitResult = (submitEnd.data as { result: { details?: { saved: boolean; dimension_count: number; dropped_quotes: number } } })
+      .result;
+    expect(submitResult.details).toEqual({ saved: true, dimension_count: 1, dropped_quotes: 0 });
+
+    // 落库（经提交工具写 feedback）+ 帧里 details 与库内容一致；范文与稿件一字未动
+    const stored = getPracticeSample(project.db, sampleId)!;
+    const card = stored.feedback as {
+      dimensions: { name: string; sample_quotes: string[]; draft_quotes: string[] }[];
+      summary?: string;
+    };
+    expect(card.dimensions.map((d) => d.name)).toEqual(["句长节奏"]);
+    expect(card.dimensions[0]!.sample_quotes).toEqual([SAMPLE_QUOTE]); // 引用逐字命中，未被丢弃
+    expect(card.dimensions[0]!.draft_quotes).toEqual([DRAFT_QUOTE]);
+    expect(card.summary).toBe("语感已接近，节奏还需收紧");
+    expect(submitResult.details!.dimension_count).toBe(card.dimensions.length);
+    expect(submitResult.details!.dropped_quotes).toBe(0);
+    expect(stored.text).toContain(SAMPLE_TEXT_MARK);
+    expect(stored.draft).toContain(DRAFT_TEXT_MARK);
+  });
+
+  it("自由练习一轮：出题与点评的 details 随帧下发 + 落库一致（只读工具仍不下发）", async () => {
+    const project = openPracticeProject();
+    const pieceId = seedPiece(project);
+    const env = await createFauxEnv();
+    scripted(env, [
+      // 第一轮：读风格说明与自由稿（AUTO 只读工具，details 不下发）
+      () =>
+        fauxAssistantMessage([
+          fauxToolCall("get_style_notes", {}),
+          fauxToolCall("get_free_draft", { piece_id: pieceId }),
+        ]),
+      // 第二轮：出题（写题目与写作要求，details 随帧下发）
+      () =>
+        fauxAssistantMessage([
+          fauxToolCall("submit_practice_topic", {
+            piece_id: pieceId,
+            topic: "写一段雨夜独行",
+            brief: "第一人称，400 字",
+          }),
+        ]),
+      // 第三轮：自由练习点评（引用对风格说明与自由稿）
+      () =>
+        fauxAssistantMessage([
+          fauxToolCall("submit_free_feedback", {
+            piece_id: pieceId,
+            dimensions: [
+              {
+                name: "句长节奏",
+                sample_trait: "以短句推进",
+                draft_trait: "长句偏多",
+                sample_quotes: [resolveAuthor(project.config.author_id)!.styleNotes.slice(0, 8)],
+                draft_quotes: [FREE_DRAFT_QUOTE],
+                advice: "把超过三行的句子拆开",
+              },
+            ],
+          }),
+        ]),
+      () => fauxAssistantMessage("已出题并点评。"),
+    ]);
+    const app = buildApp(createChatRoutes({ runtimeFactory: env.factory }));
+
+    const frames = await readSseFrames(
+      await app.request(
+        "/api/v1/chat",
+        postChat({ message: "请点评我的自由练习稿", context: { practice_free_piece_id: pieceId } }),
+      ),
+    );
+    expect(frames.filter((f) => !DOCUMENTED_SSE_EVENTS.has(f.event))).toEqual([]);
+
+    const ends = frames.filter((f) => f.event === "tool_execution_end");
+    const detailsOf = (toolName: string): unknown =>
+      ends.find((f) => (f.data as { toolName: string }).toolName === toolName)!.data as {
+        result: { details?: unknown };
+      };
+
+    // 负控制：只读工具的 details 仍不下发
+    expect(Object.keys(detailsOf("get_style_notes").result)).toEqual(["content"]);
+    // 出题 / 点评的 details 随帧下发（前端据此重拉该篇详情）
+    expect(detailsOf("submit_practice_topic").result.details).toEqual({ saved: true, piece_id: pieceId });
+    expect(detailsOf("submit_free_feedback").result.details).toEqual({
+      saved: true,
+      dimension_count: 1,
+      dropped_quotes: 0,
+    });
+
+    // 落库与帧一致：题目 / 写作要求 / 卡都写了；用户稿一字未动
+    const stored = getPracticePiece(project.db, pieceId)!;
+    expect(stored.topic).toBe("写一段雨夜独行");
+    expect(stored.brief).toBe("第一人称，400 字");
+    const card = stored.feedback as { dimensions: { draft_quotes: string[] }[] };
+    expect(card.dimensions[0]!.draft_quotes).toEqual([FREE_DRAFT_QUOTE]);
+    expect(stored.draft).toContain(FREE_DRAFT_MARK);
+  });
 });
 
 // ============ 会话用量下发（usage / speed；口径见 docs/design/20-context.md §2.1） ============

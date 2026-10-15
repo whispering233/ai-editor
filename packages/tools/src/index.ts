@@ -9,8 +9,8 @@
 // 参数 TypeBox schema 统一从 ./schemas 出口取（见 docs/api/tool-calling.md）。
 //
 // scope（工作区作用域，2026-10）：本入口的 37 个小说语义工具（实体/大纲/伏笔/Delta/参考资料）
-// 一律 `scope: "novel"`——练习工作区不注册它们（含全部 propose_*）；三个练习工具
-// （两个只读 + 一个提交）标 `scope: "practice"`（装配过滤见 agent `createCustomTools`）。
+// 一律 `scope: "novel"`——练习工作区不注册它们（含全部 propose_*）；七个练习工具
+// （四个只读 + 三个写 AI 产出）标 `scope: "practice"`（装配过滤见 agent `createCustomTools`）。
 
 // 包标识常量（与 shared 包风格一致：SHARED_PKG_NAME；agent 冒烟依赖）
 export const TOOLS_PKG_NAME = "@whispering233/ai-editor-tools";
@@ -617,26 +617,37 @@ const proposalToolDefs: ToolDefinition[] = [
 
 registerTools(proposalToolDefs);
 
-import { MAX_FEEDBACK_DIMENSIONS } from "@whispering233/ai-editor-shared";
-import { practiceTextPageArgsSchema, submitStyleFeedbackArgsSchema } from "./schemas/index.js";
+import { MAX_FEEDBACK_DIMENSIONS, MAX_PRACTICE_BRIEF_CHARS, MAX_PRACTICE_TOPIC_CHARS } from "@whispering233/ai-editor-shared";
 import {
+  freeDraftPageArgsSchema,
+  practiceTextPageArgsSchema,
+  styleNotesPageArgsSchema,
+  submitFreeFeedbackArgsSchema,
+  submitPracticeTopicArgsSchema,
+  submitStyleFeedbackArgsSchema,
+} from "./schemas/index.js";
+import {
+  runGetFreeDraft,
   runGetPracticeDraft,
   runGetPracticeSample,
+  runGetStyleNotes,
+  runSubmitFreeFeedback,
+  runSubmitPracticeTopic,
   runSubmitStyleFeedback,
 } from "./query/practice.js";
 
 /**
- * 练习工具定义（文风仿写练习（2026-10）；**仅 `kind = "practice"` 工作区注册**——`scope: "practice"`，
- * 两个只读 + 一个提交，权限全为 AUTO）。语义：AI 能读范文与用户稿、能写自己的点评产出，
- * **不能写用户的稿**（工具面根本没有写稿工具，结构性边界见 docs/design/60-practice.md §5）。
+ * 练习工具定义（作家文风练习（2026-10）；**仅 `kind = "practice"` 工作区注册**——`scope: "practice"`，
+ * 四个只读 + 三个写 AI 产出，权限全为 AUTO）。语义：AI 能读范文、用户稿与风格说明，能写自己的产出
+ * （点评卡 / 题目），**不能写用户的稿**（工具面根本没有写稿工具，结构性边界见 docs/design/60-practice.md §7）。
  * 分页数值插值自 `query/manuscript.ts` 的常量（与 get_chapter_text 同一对，模型可见上限的单源）；
- * 维度上限插值自 shared `MAX_FEEDBACK_DIMENSIONS`（禁止复述数字）——回归断言见 index.test.ts。
+ * 维度 / 题目 / 写作要求的上限插值自 shared 常量（禁止复述数字）——回归断言见 index.test.ts。
  */
 const practiceToolDefs: ToolDefinition[] = [
   {
     name: "get_practice_sample",
     description:
-      "范文只读查询（文风练习）：按 sample_id 分页读取练习样本的范文快照——点评前用它逐字核对原文" +
+      "范文只读查询（文风练习）：按 sample_id 分页读取练习样本的范文快照——仿写点评前用它逐字核对原文" +
       "（范文不进本轮上下文，必须自己拉取）。" +
       "offset 为起始字符下标（缺省 0），max_chars 为本次最多返回字符数（缺省 " +
       DEFAULT_TEXT_PAGE_CHARS +
@@ -644,7 +655,8 @@ const practiceToolDefs: ToolDefinition[] = [
       MAX_TEXT_PAGE_CHARS +
       "）；" +
       "text 末尾出现「已截断」提示时，用其中给出的 offset 继续读取（长范文分段读完）。" +
-      "返回 sample_id / target_name / observation / source_label / char_count / offset / returned_chars / text / truncated。" +
+      "返回 sample_id / work_name（关联作品名，「其他」= 未关联作品）/ excerpt_label（片段说明）" +
+      " / char_count / offset / returned_chars / text / truncated。" +
       "**只读**：工具面不存在任何写工具——范文快照落库后不可变。",
     parameters: practiceTextPageArgsSchema,
     permission: TOOL_PERMISSION.AUTO,
@@ -655,7 +667,7 @@ const practiceToolDefs: ToolDefinition[] = [
     name: "get_practice_draft",
     description:
       "用户仿写稿只读查询（文风练习）：按 sample_id 分页读取用户自己的仿写稿（未写稿返回 char_count=0、text=\"\"）——" +
-      "点评必须基于稿件原文，不要凭目标名或观察文本下结论。" +
+      "点评必须基于稿件原文，不要凭作品名或片段说明下结论。" +
       "offset 为起始字符下标（缺省 0），max_chars 为本次最多返回字符数（缺省 " +
       DEFAULT_TEXT_PAGE_CHARS +
       "、上限 " +
@@ -670,22 +682,90 @@ const practiceToolDefs: ToolDefinition[] = [
     run: runGetPracticeDraft,
   },
   {
+    name: "get_free_draft",
+    description:
+      "自由练习稿只读查询（文风练习）：按 piece_id 分页读取用户自己的自由练习稿" +
+      "（未写稿返回 char_count=0、text=\"\"）——点评必须基于稿件原文。" +
+      "offset 为起始字符下标（缺省 0），max_chars 为本次最多返回字符数（缺省 " +
+      DEFAULT_TEXT_PAGE_CHARS +
+      "、上限 " +
+      MAX_TEXT_PAGE_CHARS +
+      "）；" +
+      "text 末尾出现「已截断」提示时，用其中给出的 offset 继续读取。" +
+      "返回 piece_id / char_count / offset / returned_chars / text / truncated。" +
+      "**只读**：工具面不存在写稿工具。",
+    parameters: freeDraftPageArgsSchema,
+    permission: TOOL_PERMISSION.AUTO,
+    scope: "practice",
+    run: runGetFreeDraft,
+  },
+  {
+    name: "get_style_notes",
+    description:
+      "作家风格说明只读查询（文风练习）：按 offset / max_chars 分页读取当前工作区作家的风格说明——" +
+      "自由练习的点评依据就是它（仿写点评可按需参考，不强制引用），点评前先读它。" +
+      "offset 为起始字符下标（缺省 0），max_chars 为本次最多返回字符数（缺省 " +
+      DEFAULT_TEXT_PAGE_CHARS +
+      "、上限 " +
+      MAX_TEXT_PAGE_CHARS +
+      "）；" +
+      "text 末尾出现「已截断」提示时，用其中给出的 offset 继续读取。" +
+      "返回 author_id / author_name / customized（是否用户自定义版本）/ char_count / offset / returned_chars / text / truncated。" +
+      "**只读**：本工具只能读，无任何修改风格说明的能力。",
+    parameters: styleNotesPageArgsSchema,
+    permission: TOOL_PERMISSION.AUTO,
+    scope: "practice",
+    run: runGetStyleNotes,
+  },
+  {
     name: "submit_style_feedback",
     description:
-      "提交点评卡（文风练习，写 practice_samples.feedback）：这是本次点评的**正式产出**（不要只用聊天文字给结论）。" +
+      "提交仿写点评卡（文风练习，写 practice_samples.feedback）：这是本次点评的**正式产出**（不要只用聊天文字给结论）。" +
       "dimensions 最多 " +
       MAX_FEEDBACK_DIMENSIONS +
       " 个维度（超出即失败）；每项 = name 维度名 / sample_trait 范文特征 / draft_trait 你的写法 / " +
       "sample_quotes 范文原句数组 / draft_quotes 稿件原句数组 / advice 可执行建议（引用数组可省 = 无证据）。" +
-      "每条引用必须能在范文或稿件里**逐字找到**（子串）：请照抄原文，不要改写、拼接或凭印象复述——" +
-      "找不到的引用会被服务端丢弃并计入返回的 dropped_quotes（不阻断提交）；" +
-      "所以提交前先用两个只读工具读到原文，引用以读到的文本为准。" +
+      "每条引用必须能在**范文或仿写稿**里逐字找到（子串）：请照抄原文，不要改写、拼接或凭印象复述——" +
+      "找不到的引用（含空串与纯空白）会被服务端丢弃并计入返回的 dropped_quotes（不阻断提交）；" +
+      "所以提交前先用只读工具读到原文，引用以读到的文本为准。" +
       "summary 为可选一句话总评。卡片**没有「示范」字段**：只做诊断与建议，不代笔。" +
       "返回 { saved, dimension_count, dropped_quotes }；本工具**只写你自己的点评产出**，不改动用户稿。",
     parameters: submitStyleFeedbackArgsSchema,
     permission: TOOL_PERMISSION.AUTO,
     scope: "practice",
     run: runSubmitStyleFeedback,
+  },
+  {
+    name: "submit_free_feedback",
+    description:
+      "提交自由练习点评卡（文风练习，写 practice_free_pieces.feedback）：这是本次点评的**正式产出**（不要只用聊天文字给结论）。" +
+      "卡形与仿写点评卡同形（dimensions 最多 " +
+      MAX_FEEDBACK_DIMENSIONS +
+      " 个维度，超出即失败）；" +
+      "差别在**引用校验源**：sample_quotes 必须能在**作家风格说明**里逐字找到、draft_quotes 必须能在**自由练习稿**里逐字找到" +
+      "（先调 get_style_notes / get_free_draft 读原文，引用以读到的文本为准）。" +
+      "找不到的引用（含空串与纯空白）会被服务端丢弃并计入返回的 dropped_quotes（不阻断提交）。" +
+      "返回 { saved, dimension_count, dropped_quotes }；本工具**只写你自己的点评产出**，不改动用户稿与题目。",
+    parameters: submitFreeFeedbackArgsSchema,
+    permission: TOOL_PERMISSION.AUTO,
+    scope: "practice",
+    run: runSubmitFreeFeedback,
+  },
+  {
+    name: "submit_practice_topic",
+    description:
+      "提交自由练习题目（文风练习，写 practice_free_pieces.topic / brief）：为待出题的新篇出一道练习题目。" +
+      "topic 为题目（不超过 " +
+      MAX_PRACTICE_TOPIC_CHARS +
+      " 字），brief 为写作要求（不超过 " +
+      MAX_PRACTICE_BRIEF_CHARS +
+      " 字，可省）；写作要求要**可执行**（篇幅 / 人称 / 场景约束 / 要练的具体技法），不要写空话。" +
+      "**该篇题目已存在时本工具会失败**（不覆盖已出的题 / 用户已开始的练习）——这时请直接点评或告知用户另建一篇。" +
+      "返回 { saved, piece_id }；本工具**只写题目与写作要求**，不改动用户稿与点评卡。",
+    parameters: submitPracticeTopicArgsSchema,
+    permission: TOOL_PERMISSION.AUTO,
+    scope: "practice",
+    run: runSubmitPracticeTopic,
   },
 ];
 

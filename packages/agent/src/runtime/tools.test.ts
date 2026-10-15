@@ -1,6 +1,6 @@
 // K2 工具适配层测试：领域工具 → pi 工具定义（TypeBox 直通 + 提案载荷走 details）
 //
-// 用 registry 的真实工具（小说 37 + 练习 3 = 40 个）验证适配面，不 mock 工具实现：
+// 用 registry 的真实工具（小说 37 + 练习 7 = 44 个）验证适配面，不 mock 工具实现：
 // - get_outline：AUTO 工具，content = 结果文本化，details = 原始结果
 // - propose_create_entity：PROPOSAL 工具，接 sink 时 content 只给「提案已发出」，details = 载荷
 // - compute_state：stub db 下必然抛错 → execute 必须 reject（抛错即失败，不编码进 content）
@@ -25,7 +25,7 @@ function findTool(name: string) {
 }
 
 describe("createCustomTools", () => {
-  it("只装配属于该工作区的工具（novel + common；注册表 40 个中 37 个是 novel，3 个是 practice）", () => {
+  it("只装配属于该工作区的工具（novel + common；注册表 44 个中 37 个是 novel，7 个是 practice）", () => {
     const defs = listTools().filter((def) => def.scope === "novel" || def.scope === "common");
     const tools = createCustomTools({ toolContext: stubContext(), kind: "novel" });
     expect(tools.map((tool) => tool.name)).toEqual(defs.map((def) => def.name));
@@ -37,15 +37,15 @@ describe("createCustomTools", () => {
     }
   });
 
-  it("练习工作区：只装配三个练习工具（小说工具与提案工具一律不装配）", () => {
+  it("练习工作区：只装配七个练习工具（小说工具与提案工具一律不装配）", () => {
     const tools = createCustomTools({ toolContext: stubContext(), kind: "practice" });
     const practiceScoped = listTools().filter((def) => def.scope === "practice" || def.scope === "common");
     expect(tools.map((tool) => tool.name)).toEqual(practiceScoped.map((def) => def.name));
-    // 恰好两个只读 + 一个提交（shared PRACTICE_TOOLS 是同一份清单；排序后逐名相等）
+    // 恰好四个只读 + 三个写 AI 产出（shared PRACTICE_TOOLS 是同一份清单；排序后逐名相等）
     expect(tools.map((tool) => tool.name)).toEqual([...PRACTICE_TOOLS].sort());
-    expect(tools).toHaveLength(3);
+    expect(tools).toHaveLength(7);
     expect(tools.some((tool) => tool.name.startsWith("propose_"))).toBe(false);
-    expect(practiceScoped.every((def) => def.permission === "auto")).toBe(true); // 三个练习工具均为自动级（无提案工具）
+    expect(practiceScoped.every((def) => def.permission === "auto")).toBe(true); // 七个练习工具均为自动级（无提案工具）
     // 具体点名：小说侧最常见的两类工具在练习工具面**根本不存在**
     expect(tools.find((tool) => tool.name === "get_outline")).toBeUndefined();
     expect(tools.find((tool) => tool.name === "propose_create_entity")).toBeUndefined();
