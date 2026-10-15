@@ -9,8 +9,8 @@
 // - 三个写工具只写 **AI 自己的产出**（`feedback` / `topic` / `brief`）：工具面**没有任何写稿入口**
 //   （用户稿只有用户能写——结构性边界，不是提示词约束）；提交前逐条校验引用子串，不匹配即丢弃并计入
 //   dropped_quotes（不阻断、不重试）；空串 / 纯空白引用同样丢弃（否则 `includes("")` 恒真）
-// - 引用校验源按练习类型取：仿写 = 范文 `text` **或** 仿写稿 `draft`；自由练习 = 风格说明
-//   （用户覆盖 `??` shared 预置）**或** 自由稿 `draft`
+// - 引用校验**按字段分源**：`sample_quotes` ⊆ 该形态的依据（仿写 = 范文 `text`、自由练习 = 风格说明
+//   （用户覆盖 `??` shared 预置）），`draft_quotes` ⊆ 用户稿 `draft`
 // - 写库一律经 db helper——禁止在工具层直写表（库写入唯一入口）
 //
 // **分页预算实测**（真路径 `truncateToolResultText(stringifyToolResult(结果))`，纯 CJK 文本、正文 = 页

@@ -1231,7 +1231,7 @@ export type PracticeSamplesRes = z.infer<typeof practiceSamplesResSchema>;
 export const practiceSampleCreateReqSchema = z
   .object({
     work_id: z.string().nullable().optional(),
-    excerpt_label: z.string().max(MAX_PRACTICE_EXCERPT_LABEL_CHARS).optional(),
+    excerpt_label: z.string().trim().max(MAX_PRACTICE_EXCERPT_LABEL_CHARS).optional(), // 片段说明：可省略（空串 = 未填；写入前 trim）
     text: z.string().trim().min(1).max(MAX_PRACTICE_SAMPLE_CHARS), // 范文快照（落库后不可变）
   })
   .strict();
@@ -1281,7 +1281,7 @@ export const practicePieceCreateReqSchema = z
   .object({
     topic_source: practiceTopicSourceSchema,
     topic: z.string().trim().max(MAX_PRACTICE_TOPIC_CHARS).optional(),
-    brief: z.string().max(MAX_PRACTICE_BRIEF_CHARS).optional(),
+    brief: z.string().trim().max(MAX_PRACTICE_BRIEF_CHARS).optional(), // 写作要求：可省略（空串 = 无；写入前 trim）
   })
   .strict()
   .superRefine((value, ctx) => {

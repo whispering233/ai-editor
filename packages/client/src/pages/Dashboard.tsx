@@ -343,13 +343,14 @@ export default function Dashboard({ mode }: { mode: DashboardMode }) {
 
   /** 点未开始的作家卡 = **懒创建**练习工作区（`60-practice.md` §2）：
    * 名字 = 作家名（不可改，改名会与预置清单脱钩）、`author_id` = 预置作家 id，建档即打开 + 落 `#/practice`；
-   * 已存在（同名目录）时服务端 409，行内报错引导用户点已有的那张卡 */
+   * 目录已存在（同名目录，用户曾手建 / 并发点击）→ 服务端 409 ⇒ **直接打开那条路径** */
   async function handleStartPractice(author: AuthorEntry) {
     if (bookshelf === null || submitting) return;
+    const workspacePath = buildWorkspacePath(bookshelf.rootPath, "practice", author.name);
     setSubmitting(true);
     setBookOpenError(null);
     try {
-      await createProjectAt(buildWorkspacePath(bookshelf.rootPath, "practice", author.name), {
+      await createProjectAt(workspacePath, {
         name: author.name,
         language: "zh",
         kind: "practice",
@@ -359,6 +360,14 @@ export default function Dashboard({ mode }: { mode: DashboardMode }) {
       useUiStore.getState().showToast(`已开始《${author.name}》文风练习`);
       navigate(WORKSPACE_ENTRY_PATH.practice);
     } catch (err) {
+      // 该目录已是工作区：**直接打开它**——若它没有可识别的 `author_id`，它就不会出现在练习分区里，
+      // 行内报错（「请直接打开」）等于把人堵在死路；其余错误照旧行内提示
+      // （`PROJECT_ALREADY_EXISTS` 是服务端补充码，不在 shared `ERROR_CODES` 联合里 ⇒ 先宽化再比）
+      const code: string | null = err instanceof ApiError ? err.code : null;
+      if (code === "PROJECT_ALREADY_EXISTS") {
+        await handleOpenBook(workspacePath, "practice");
+        return;
+      }
       setBookOpenError(describeOpenError(openErrorCode(err)));
     } finally {
       setSubmitting(false);
@@ -945,7 +954,8 @@ export default function Dashboard({ mode }: { mode: DashboardMode }) {
                   <li key={card.author.id}>
                     <button
                       type="button"
-                      disabled={submitting}
+                      // 书库未到（首帧）同样禁点：以前点了会静默 `return`，用户看不出为何没反应
+                      disabled={submitting || bookshelf === null}
                       title={
                         card.workspace === null
                           ? `开始《${card.author.name}》文风练习`

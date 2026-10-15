@@ -258,7 +258,7 @@ describe("practice 端点（练习工作区，端到端）", () => {
     expectKeys(created.data, SAMPLE_DETAIL_KEYS, "POST 样本响应 = 详情形态");
     expect(created.data.id.startsWith("ps-")).toBe(true);
     expect(created.data.workId).toBe(WORK.id);
-    expect(created.data.excerptLabel).toBe(" 节选 "); // 片段说明原样存（不 trim——只有范文是 trim 非空）
+    expect(created.data.excerptLabel).toBe("节选"); // 片段说明 trim 后落库（可空字段同样去首尾空白）
     expect(created.data.text).toBe(TEXT); // 范文 trim 后落库
     expect(created.data.draft).toBe("");
     expect(created.data.feedback).toBeNull();
@@ -278,7 +278,7 @@ describe("practice 端点（练习工作区，端到端）", () => {
     expect(samples.data.samples[0]).toMatchObject({
       id: sampleId,
       workId: WORK.id,
-      excerptLabel: " 节选 ",
+      excerptLabel: "节选",
       charCount: TEXT.length,
       hasDraft: false,
       hasFeedback: false,
@@ -433,11 +433,11 @@ describe("前置守卫（kind / author_id）", () => {
     expect(res.error?.message).toBe(NO_AUTHOR_MESSAGE);
   });
 
-  it("13 个端点在练习工作区上不被守卫拦（404 / 200，绝不 KIND_MISMATCH / VALIDATION_ERROR）", async () => {
+  it("13 个端点在练习工作区上不被守卫拦（集合端 200 / 带 id 端 404，绝不 400 / 409 / 5xx）", async () => {
     const h = await startWorkspace("practice");
     for (const ep of PRACTICE_ENDPOINTS) {
       const res = await api(h, ep.method, ep.path, ep.body);
-      expect([400, 409], `${ep.method} ${ep.path}`).not.toContain(res.status);
+      expect([200, 404], `${ep.method} ${ep.path}`).toContain(res.status);
     }
   });
 

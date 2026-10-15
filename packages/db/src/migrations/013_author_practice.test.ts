@@ -20,6 +20,16 @@ const PRACTICE_TABLES = ["practice_samples", "practice_free_pieces", "practice_s
 /** v12 的旧两表（013 拆除目标） */
 const LEGACY_TABLES = ["practice_targets", "practice_samples"] as const;
 
+/** v12 的旧索引（013 的 `DROP INDEX IF EXISTS` 目标） */
+const LEGACY_SAMPLE_INDEX = "idx_practice_samples_target";
+
+/** 013 建出的三表列名与列序（DDL / CREATE_TABLES_SQL / docs/db/schema.md 逐字同形） */
+const PRACTICE_COLUMNS: Record<(typeof PRACTICE_TABLES)[number], string[]> = {
+  practice_samples: ["id", "work_id", "excerpt_label", "text", "draft", "feedback", "created_at", "updated_at"],
+  practice_free_pieces: ["id", "topic", "brief", "topic_source", "draft", "feedback", "created_at", "updated_at"],
+  practice_style_packs: ["author_id", "content", "updated_at"],
+};
+
 const T1 = "2026-10-01T00:00:00Z";
 
 /** 表结构快照（独立比对用，不经 drizzle 声明层） */
@@ -94,6 +104,11 @@ function tableStructure(d: Db, table: string): TableStructure {
   return { columns, indexes };
 }
 
+/** 某表上的非内部索引名（013 前后比对旧索引用） */
+function practiceSampleIndexNames(d: Db): string[] {
+  return tableStructure(d, "practice_samples").indexes.map((i) => i.name);
+}
+
 function tableNames(d: Db): string[] {
   const rows = d
     .prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%' ORDER BY name")
@@ -116,6 +131,10 @@ function createV12Db(path: string): Db {
   );
   setUserVersion(d, 11);
   runMigrations(d, { migrations: [migration012], dbPath: path }); // v11 → v12：旧两表
+  // 真实 v12 库持有的旧索引：012 修订后不再自己建它（见该文件头注释），故此处**显式造出**——
+  // 不造的话 013 的 `DROP INDEX IF EXISTS` 只走 no-op 分支，删除动作实际未被覆盖。
+  // 名字与 `LEGACY_SAMPLE_INDEX` 同名（下面的迁移前断言即锁住这条）。
+  d.exec("CREATE INDEX IF NOT EXISTS idx_practice_samples_target ON practice_samples (target_id)");
   d.prepare(
     "INSERT INTO practice_targets (id, name, observation, created_at, updated_at) VALUES (?, ?, ?, ?, ?)",
   ).run("pt-legacy", "旧目标", null, T1, T1);
@@ -148,6 +167,7 @@ describe("迁移 013（v12 → v13：练习模型重建）", () => {
  // 前置：v12 结构 = 旧两表（旧形状）+ 旧索引，自由练习与素材包两表尚不存在
       expect(tableNames(db)).toEqual(expect.arrayContaining([...LEGACY_TABLES]));
       expect(tableStructure(db, "practice_samples").columns.map((c) => c.name)).toContain("target_id");
+      expect(practiceSampleIndexNames(db)).toContain(LEGACY_SAMPLE_INDEX);
       for (const table of PRACTICE_TABLES.filter((t) => t !== "practice_samples")) {
         expect(tableStructure(db, table).columns, `${table} 迁移前应不存在`).toEqual([]);
       }
@@ -159,6 +179,7 @@ describe("迁移 013（v12 → v13：练习模型重建）", () => {
  // 旧结构拆除：旧目标表不存在、样本表换为新形状（旧索引随之消失）
       expect(tableNames(db)).not.toContain("practice_targets");
       expect(tableStructure(db, "practice_samples").columns.map((c) => c.name)).not.toContain("target_id");
+      expect(practiceSampleIndexNames(db)).not.toContain(LEGACY_SAMPLE_INDEX);
       expect(tableStructure(db, "practice_samples").indexes).toEqual([]);
 
  // 逐表逐项比对两条路径的结构快照（列/类型/NOT NULL/缺省/主键 + 索引名/唯一/部分/覆盖列）
@@ -170,31 +191,11 @@ describe("迁移 013（v12 → v13：练习模型重建）", () => {
       for (const table of PRACTICE_TABLES) {
         expect(tableStructure(fresh, table).indexes, `${table} 不应建索引`).toEqual([]);
       }
-      expect(tableStructure(fresh, "practice_samples").columns.map((c) => c.name)).toEqual([
-        "id",
-        "work_id",
-        "excerpt_label",
-        "text",
-        "draft",
-        "feedback",
-        "created_at",
-        "updated_at",
-      ]);
-      expect(tableStructure(fresh, "practice_free_pieces").columns.map((c) => c.name)).toEqual([
-        "id",
-        "topic",
-        "brief",
-        "topic_source",
-        "draft",
-        "feedback",
-        "created_at",
-        "updated_at",
-      ]);
-      expect(tableStructure(fresh, "practice_style_packs").columns.map((c) => c.name)).toEqual([
-        "author_id",
-        "content",
-        "updated_at",
-      ]);
+      for (const table of PRACTICE_TABLES) {
+        expect(tableStructure(fresh, table).columns.map((c) => c.name), table).toEqual(
+          PRACTICE_COLUMNS[table],
+        );
+      }
       expect(tableStructure(fresh, "practice_samples").columns.find((c) => c.name === "work_id")).toMatchObject({
         notNull: false,
         defaultValue: null,
@@ -274,7 +275,9 @@ describe("迁移 013（v12 → v13：练习模型重建）", () => {
     expect(readdirSync(dir).filter((f) => f.endsWith(".bak"))).toEqual([]);
  // 三表已由建库路径就位（无需迁移参与），旧两表不在
     for (const table of PRACTICE_TABLES) {
-      expect(tableStructure(active, table).columns.length).toBeGreaterThan(0);
+      expect(tableStructure(active, table).columns.map((c) => c.name), table).toEqual(
+        PRACTICE_COLUMNS[table],
+      );
     }
     for (const table of LEGACY_TABLES.filter((t) => t !== "practice_samples")) {
       expect(tableStructure(active, table).columns).toEqual([]);

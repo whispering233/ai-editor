@@ -21,6 +21,15 @@ import { ApiError, CLIENT_NETWORK_ERROR, updatePracticePieceDraft } from "./api"
 export type FreePracticeStatus = "待出题" | "待写稿" | "待点评" | "已点评";
 
 /**
+ * 题目 / 写作要求的文本口径（**唯一处**）：trim 掉首尾空白；**非字符串 = 未填**。
+ * 为什么收这一个守卫：字段直接来自响应体，服务端 shape 漂移（缺字段 / 类型错）时 `.trim()`
+ * 会把整页抛成 `TypeError`——视作未填即可降级展示。
+ */
+export function freePracticeTopicText(topic: unknown): string {
+  return typeof topic === "string" ? topic.trim() : "";
+}
+
+/**
  * 列表项 → 状态徽标（四态，纯函数）。
  * 先判空题：题目为空 = 这一篇还在等 AI 出题（`topicSource = "ai"` 建的空题行），与有没有稿件无关；
  * 再判卡：有点评卡必然有稿（点评由 AI 读稿产出），故 `hasFeedback` 优先不会掩盖稿件状态。
@@ -29,7 +38,7 @@ export type FreePracticeStatus = "待出题" | "待写稿" | "待点评" | "已�
 export function freePracticeStatus(
   piece: Pick<PracticePieceSummary, "topic" | "hasDraft" | "hasFeedback">,
 ): FreePracticeStatus {
-  if (piece.topic.trim() === "") return "待出题";
+  if (freePracticeTopicText(piece.topic) === "") return "待出题";
   if (piece.hasFeedback) return "已点评";
   if (piece.hasDraft) return "待点评";
   return "待写稿";
@@ -38,15 +47,15 @@ export function freePracticeStatus(
 /** 空题文案（**唯一字面量**）：列表行用加括号的占位、详情页头用不带括号的「待出题」 */
 export const FREE_TOPIC_TEXT = "待出题";
 
-/** 列表行题目文案（去首尾空白；空题 → 「（待出题）」） */
-export function freePracticeTopicLabel(topic: string): string {
-  const trimmed = topic.trim();
+/** 列表行题目文案（去首尾空白；空题 / 非字符串 → 「（待出题）」） */
+export function freePracticeTopicLabel(topic: unknown): string {
+  const trimmed = freePracticeTopicText(topic);
   return trimmed === "" ? `（${FREE_TOPIC_TEXT}）` : trimmed;
 }
 
-/** 详情页头题目文案（去首尾空白；空题 → 「待出题」，同 `DESIGN.md` §自由练习详情） */
-export function freePracticeTopicTitle(topic: string): string {
-  const trimmed = topic.trim();
+/** 详情页头题目文案（去首尾空白；空题 / 非字符串 → 「待出题」，同 `DESIGN.md` §自由练习详情） */
+export function freePracticeTopicTitle(topic: unknown): string {
+  const trimmed = freePracticeTopicText(topic);
   return trimmed === "" ? FREE_TOPIC_TEXT : trimmed;
 }
 

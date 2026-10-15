@@ -48,7 +48,7 @@
 // Req
 {
   work_id?: string | null;      // 关联作品：省略 / null = 「其他」；给了必须在预置作品清单内（否则 400 VALIDATION_ERROR）
-  excerpt_label?: string;       // 片段说明：可省略（空串 = 未填）；上限 MAX_PRACTICE_EXCERPT_LABEL_CHARS
+  excerpt_label?: string;       // 片段说明：可省略（空串 = 未填；写入前 trim）；上限 MAX_PRACTICE_EXCERPT_LABEL_CHARS
   text: string;                 // 必填：范文快照（trim 非空，上限 MAX_PRACTICE_SAMPLE_CHARS）
 }
 
@@ -193,13 +193,15 @@
 
 新建自由练习篇。
 
+> **可空文本字段写入前 trim**：`excerpt_label`（本文件上一端点）与 `brief` 都在 shared 请求 schema 里 trim——纯空白值入库即空串，不会在 AI 注入里产生只有标签的空内容行（`docs/api/80-api-chat.md` 的注入按空串判据整行省略）。
+
 ```typescript
 // Req
 {
   topic_source: "user" | "ai";  // 必填：用户自拟题 / 让 AI 出题
   topic?: string;               // topic_source = "user" 时必填（trim 非空，上限 MAX_PRACTICE_TOPIC_CHARS）；
                                 // = "ai" 时必须省略或为空串（建「待出题」空题行，题目由 submit_practice_topic 工具写入）
-  brief?: string;               // 写作要求：可省略（空串 = 无）；上限 MAX_PRACTICE_BRIEF_CHARS
+  brief?: string;               // 写作要求：可省略（空串 = 无；写入前 trim）；上限 MAX_PRACTICE_BRIEF_CHARS
 }
 
 // Res: 200 —— 同 GET /practice/free/:id 的响应（draft 为空串、feedback 为 null）
@@ -260,7 +262,7 @@
 | 仿写点评触发 | `POST /api/v1/chat`，`context.practice_sample_id = <ps-*>`，`message` = 用户可见的触发文案（如「请点评我的仿写稿」） |
 | 自由练习点评触发 | `POST /api/v1/chat`，`context.practice_free_piece_id = <pf-*>`，`message` = 如「请点评我的自由练习稿」 |
 | 自由练习出题触发 | `POST /api/v1/chat`，`context.practice_free_piece_id = <pf-*>`（该篇为**空题行**），`message` = 如「请出一道练习题目」 |
-| 服务端注入 | **现读**样本 / 篇 + 作家名注入本轮，**只给事实**；「必须提交点评卡 / 出题要给写作要求」这类指令语义唯一出处 = 练习内核提示词常量（注入段不复述）；范文 / 稿件 / 风格说明**不进 prompt**，由只读工具分页拉取 |
+| 服务端注入 | **现读**样本 / 篇 + 作家名注入本轮，**只给事实**；「点评必须走提交工具 / 出题必须走提交工具」这类指令语义唯一出处 = 练习内核提示词常量（注入段不复述）；范文 / 稿件 / 风格说明**不进 prompt**，由只读工具分页拉取 |
 | AI 产出 | 点评经 `submit_style_feedback` / `submit_free_feedback` 写 `feedback`（引用逐条校验子串，不匹配即丢弃；空串 / 纯空白同口径）；出题经 `submit_practice_topic` 写 `topic` / `brief`（题目非空 → 抛错拒写） |
 | 前端 | `tool_execution_end` 帧的 `details`（写库结果：点评 = `{ saved, dimension_count, dropped_quotes }`；出题 = `{ saved, piece_id }`）= **即时刷新信号**；卡体与题目从 `GET /practice/samples/:id` / `GET /practice/free/:id` 读（刷新/重载同此——帧里没有卡体与题目） |
 | 留痕 | 触发消息与整轮对话落在该工作区的 `sessions/`（点评与出题可回溯、可追问） |

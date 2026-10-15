@@ -25,6 +25,7 @@ import {
   FREE_TOPIC_MESSAGE,
   freePracticeStatus,
   freePracticeTopicLabel,
+  freePracticeTopicText,
 } from "../lib/free-practice";
 import { cn } from "../lib/utils";
 import { PageHeader } from "@/components/ui/page-header";
@@ -46,7 +47,7 @@ export interface FreePieceRowProps {
 /** 题目行（`data-row` 行语言）：题目（`truncate`；空题 = 「（待出题）」灰字）+ 四态徽标 + 相对时间；
  * 整行 = 进该篇详情的链接——hash 导航不另接 onClick，键盘/中键也照常工作 */
 export function FreePieceRow({ piece }: FreePieceRowProps) {
-  const topic = piece.topic.trim();
+  const topic = freePracticeTopicText(piece.topic);
   return (
     <a
       href={`#/free/${piece.id}`}

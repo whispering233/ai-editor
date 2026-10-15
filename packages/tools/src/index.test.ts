@@ -55,6 +55,8 @@ describe("@whispering233/ai-editor-tools 入口冒烟", () => {
     const topicDescription = m.getTool("submit_practice_topic")!.description;
     expect(topicDescription).toContain(`不超过 ${MAX_PRACTICE_TOPIC_CHARS} 字`);
     expect(topicDescription).toContain(`不超过 ${MAX_PRACTICE_BRIEF_CHARS} 字`);
+ // 题目非空拒写是**实现层守卫**（schema 拦不住）——描述必须把失败条件告诉模型，否则它会重试到死
+    expect(topicDescription).toContain("该篇题目已存在时本工具会失败");
  // 半衰期缺省映射防漂移：description 由 shared DEFAULT_HALF_LIFE 插值生成——
  // 改成手写数字 / 值改了没同步，逐项比对即报红
     const hookHealthDescription = m.getTool("analyze_hook_health")!.description;

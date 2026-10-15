@@ -474,6 +474,10 @@
 - **预置素材的内容语言本地化**
   - 现状：预置作家介绍 / 作品介绍 / 风格说明与界面文案同为中文（`project.json` 的 `language` 不能切换它们）。
   - 触发条件：出现非中文用户需求（届时按语言分文件组织 `shared/authors/`，仍是加文件 + 清单一行）。
+- **`PROJECT_ALREADY_EXISTS` 不在 shared `ERROR_CODES` 联合里**（卡 8 登记，report-only）
+  - 现状：它是服务端补充码（`packages/server/src/middleware/error.ts` 的 `EXTRA_CODES`；客户端多处按字面量比较，如 `lib/cloud-books.ts` 与 `Dashboard.tsx` 的懒创建兼容分支），shared 的 `ERROR_CODES` 里没有它 ⇒ `ApiError.code` 的类型联合不含该值，客户端比较前必须先把码宽化（`const code: string | null = ...`）否则 TS 报“no overlap”。
+  - 触发条件：下次批量整理错误码时（把服务端补充码并入 shared 联合，或给 `ApiError.code` 另立服务端码集）。
+  - 最小修法：在 shared `ERROR_CODES` 补该值（并同步 `docs/api/` 的码表），客户端可去掉宽化写法。
 
 ## MVP 明确不做（勿顺手实现）
 

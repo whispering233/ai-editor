@@ -34,6 +34,7 @@ import {
   FREE_REVIEW_MESSAGE,
   FREE_TOPIC_MESSAGE,
   freePracticeSignalPieceId,
+  freePracticeTopicText,
   freePracticeTopicTitle,
   saveFreeDraft,
   shouldRefreshFreePiece,
@@ -110,8 +111,8 @@ export function FreePieceSections({
   onRequestReview,
   onRequestTopic,
 }: FreePieceSectionsProps) {
-  const topic = detail.topic.trim();
-  const brief = detail.brief.trim();
+  const topic = freePracticeTopicText(detail.topic);
+  const brief = freePracticeTopicText(detail.brief);
   return (
     <div className="flex flex-col gap-4">
       {/* 一、题目卡：题目 + 写作要求（只读，不渲染 markdown、不给编辑入口）；空题态 = 引导 + 让 AI 出题 */}

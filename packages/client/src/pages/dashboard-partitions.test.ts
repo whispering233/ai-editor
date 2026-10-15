@@ -18,7 +18,11 @@ const routeGuard = readFileSync(new URL("../lib/workspace-route-guard.ts", impor
 describe("根首页分区（#/：小说 / 文风练习）", () => {
   it("分区口径只有一处：partitionWorkspaces（不按 kind 各写一遍 filter）", () => {
     expect(dashboard).toContain("partitionWorkspaces(bookshelf?.books ?? null)");
-    expect(dashboard).not.toMatch(/kind === "novel"\s*\)/);
+    // 调用只有一处（第二处就是自己又分了一遍）
+    expect(dashboard.match(/partitionWorkspaces\(/g)).toHaveLength(1);
+    // 现值挑选的写法不得回归：练习分区不自己挑书，比较口径只用 `!==`（如 `config?.kind !== "practice"`）
+    expect(dashboard).not.toContain('kind === "practice"');
+    expect(dashboard).not.toMatch(/\.filter\([^)]{0,30}\.kind ===/);
   });
 
   it("两个分区各带一行 section-title（标题取 WORKSPACE_SECTION_TITLE）", () => {
@@ -60,8 +64,16 @@ describe("小说分区的新建表单（练习分区没有新建入口）", () =
   });
 
   it("创建成功后刷新列表 + 创建即打开（小说侧行为不变）", () => {
-    expect(dashboard).toContain("await loadBookshelf();");
-    expect(dashboard).toContain("navigate(WORKSPACE_ENTRY_PATH.novel)");
+    // 三句必须在**同一个函数里按序出现**：只断言「文件里出现过 await loadBookshelf();」是空断言
+    //（文件内共四处），删掉新建路径里的那一处照样绿（卡 8 P2）。
+    const create = dashboard.indexOf(
+      'await createProjectAt(buildWorkspacePath(bookshelf.rootPath, "novel", name)',
+    );
+    const refresh = dashboard.indexOf("await loadBookshelf();", create);
+    const enter = dashboard.indexOf("navigate(WORKSPACE_ENTRY_PATH.novel)", create);
+    expect(create).toBeGreaterThan(-1);
+    expect(refresh).toBeGreaterThan(create);
+    expect(enter).toBeGreaterThan(refresh);
   });
 });
 
@@ -81,12 +93,22 @@ describe("练习分区 = 预置作家卡（卡 6）", () => {
   });
 
   it("点未开始的卡 = 懒创建（名字 = 作家名 + kind = practice + author_id），建完即打开并落 #/practice", () => {
-    expect(dashboard).toContain("card.workspace === null");
-    expect(dashboard).toContain("void handleStartPractice(card.author)");
+    expect(dashboard).toContain("if (card.workspace === null) void handleStartPractice(card.author);");
     expect(dashboard).toContain("name: author.name");
     expect(dashboard).toContain('kind: "practice"');
     expect(dashboard).toContain("author_id: author.id");
     expect(dashboard).toContain("navigate(WORKSPACE_ENTRY_PATH.practice)");
+  });
+
+  it("卡片禁点由 submitting 与书库未到共同决定（首帧不再点了没反应）；目录已存在（409）改直接打开", () => {
+    expect(dashboard).toContain("disabled={submitting || bookshelf === null}");
+    const start = dashboard.indexOf("async function handleStartPractice");
+    const create = dashboard.indexOf("await createProjectAt(workspacePath, {", start);
+    const open = dashboard.indexOf('await handleOpenBook(workspacePath, "practice");', start);
+    const report = dashboard.indexOf("setBookOpenError(describeOpenError(openErrorCode(err)));", start);
+    expect(create).toBeGreaterThan(start);
+    expect(open).toBeGreaterThan(create); // 懒创建撞上已有目录 → 先直接打开，不报死路
+    expect(report).toBeGreaterThan(open); // 其余错误才走行内提示
   });
 
   it("点已有的卡 = 打开（当前工作区直接落点，其余走 handleOpenBook）", () => {

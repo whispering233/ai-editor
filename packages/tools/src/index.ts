@@ -725,7 +725,8 @@ const practiceToolDefs: ToolDefinition[] = [
       MAX_FEEDBACK_DIMENSIONS +
       " 个维度（超出即失败）；每项 = name 维度名 / sample_trait 范文特征 / draft_trait 你的写法 / " +
       "sample_quotes 范文原句数组 / draft_quotes 稿件原句数组 / advice 可执行建议（引用数组可省 = 无证据）。" +
-      "每条引用必须能在**范文或仿写稿**里逐字找到（子串）：请照抄原文，不要改写、拼接或凭印象复述——" +
+      "sample_quotes 必须能在**范文**里逐字找到、draft_quotes 必须能在**仿写稿**里逐字找到（子串）：" +
+      "请照抄原文，不要改写、拼接或凭印象复述——" +
       "找不到的引用（含空串与纯空白）会被服务端丢弃并计入返回的 dropped_quotes（不阻断提交）；" +
       "所以提交前先用只读工具读到原文，引用以读到的文本为准。" +
       "summary 为可选一句话总评。卡片**没有「示范」字段**：只做诊断与建议，不代笔。" +

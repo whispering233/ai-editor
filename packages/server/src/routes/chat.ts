@@ -167,7 +167,7 @@ export function buildFocusText(
  * **只给事实**——样本 id、作家名、作品名（`work_id` 空 / 未知 → shared `PRACTICE_OTHER_WORK_LABEL` 兜底）、
  * 片段说明（空则不注入该行）。
  * 范文 `text` 与用户稿 `draft` **绝不注入**（它们走两个只读工具分页拉取）；
- * 「必须提交点评卡」这类**指令语义只活在练习内核提示词常量**（agent 包 `PRACTICE_KERNEL_PROMPT`）
+ * 「点评必须走提交工具」这类**指令语义只活在练习内核提示词常量**（agent 包 `PRACTICE_KERNEL_PROMPT`）
  * ——注入段再写一份 = 第二事实源。
  * 样本不存在 / 工作区未关联预置作家（`author_id` 缺失或未知）→ undefined（静默省略，不报错，
  * **不编造空作家名**；与样本端点的 400 守卫不同：注入是可选项，不能打挂本轮对话）。

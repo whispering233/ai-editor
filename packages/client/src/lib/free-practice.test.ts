@@ -20,6 +20,7 @@ import {
   freePracticeSignalPieceId,
   freePracticeStatus,
   freePracticeTopicLabel,
+  freePracticeTopicText,
   freePracticeTopicTitle,
   saveFreeDraft,
   shouldRefreshFreePiece,
@@ -64,6 +65,18 @@ describe("题目文案（空题的唯一字面量来源）", () => {
   it("详情页头：空题 → 「待出题」（不带括号，同 DESIGN.md §自由练习详情）", () => {
     expect(freePracticeTopicTitle("写一段雨夜的告别")).toBe("写一段雨夜的告别");
     expect(freePracticeTopicTitle("")).toBe(FREE_TOPIC_TEXT);
+  });
+
+  it("非字符串题目（服务端 shape 漂移）→ 当未填，不抛 TypeError", () => {
+    for (const drift of [undefined, null, 7, { topic: "雨夜" }]) {
+      expect(freePracticeTopicText(drift)).toBe("");
+      expect(freePracticeTopicLabel(drift)).toBe(`（${FREE_TOPIC_TEXT}）`);
+      expect(freePracticeTopicTitle(drift)).toBe(FREE_TOPIC_TEXT);
+      expect(
+        freePracticeStatus({ topic: drift as unknown as string, hasDraft: true, hasFeedback: true }),
+      ).toBe("待出题");
+    }
+    expect(freePracticeTopicText("  写一段雨夜的告别  ")).toBe("写一段雨夜的告别");
   });
 });
 

@@ -1,8 +1,8 @@
 // 查询类工具测试：作家文风练习（四只读 + 三写 AI 产出，2026-10 改版）
 // 覆盖：四个只读工具的形状与分页（截断显式告知 + 两页拼回原文 + clamp 上限 + 越界与负 offset）/
 // 未写稿空态 / 风格说明「用户覆盖 ?? 预置」与 customized / 作品名兜底「其他」/ 样本与篇不存在报错 /
-// 两个提交点评卡的引用校验源（仿写 = 范文或仿写稿；自由练习 = 风格说明或自由稿；合法保留、非法丢弃计数、
-// 空串与纯空白丢弃、全部非法仍写卡）/ 维度超上限报错 / 出题题目的「题目非空 / 空白 / 篇不存在」拒绝 /
+// 两个提交点评卡的引用校验源（按字段分源：`sample_quotes` ⊆ 依据——仿写 = 范文、自由练习 = 风格说明；
+// `draft_quotes` ⊆ 稿件；合法保留、非法丢弃计数、空串与纯空白丢弃、全部非法仍写卡）/ 维度超上限报错 / 出题题目的「题目非空 / 空白 / 篇不存在」拒绝 /
 // 三个写工具「只写 AI 自己的列」的边界（直查行验证其他列一字不动）
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { mkdtempSync, rmSync } from "node:fs";
@@ -206,6 +206,36 @@ describe("get_free_draft / get_style_notes（只读分页）", () => {
       text: "",
       truncated: false,
     });
+  });
+
+  it("自由稿分页续读：截断页附续读提示，按 returned_chars 推移 offset 拼回原文（提示不计入 returned_chars）", () => {
+    const long = "自".repeat(MAX_TEXT_PAGE_CHARS + 500);
+    const id = seedPiece({ topic: "写一段雨夜", draft: long });
+
+    const first = runGetFreeDraft(makeCtx(), { piece_id: id });
+    expect(first.truncated).toBe(true);
+    expect(first.returned_chars).toBe(DEFAULT_TEXT_PAGE_CHARS);
+    expect(first.char_count).toBe(long.length);
+    expect(first.text).toContain(`已截断，可用 offset=${first.offset + first.returned_chars} 继续读取`);
+
+    const second = runGetFreeDraft(makeCtx(), { piece_id: id, offset: first.returned_chars });
+    expect(second.truncated).toBe(false);
+    expect(long.slice(0, first.returned_chars) + second.text).toBe(long);
+  });
+
+  it("风格说明分页续读：长覆盖内容截断后同样给续读 offset，分页拼回原文", () => {
+    const long = "风".repeat(MAX_TEXT_PAGE_CHARS + 400);
+    upsertStylePack(db, AUTHOR_ID, long);
+
+    const first = runGetStyleNotes(makeCtx(), {});
+    expect(first.customized).toBe(true);
+    expect(first.char_count).toBe(long.length);
+    expect(first.truncated).toBe(true);
+    expect(first.text).toContain(`offset=${first.offset + first.returned_chars}`);
+
+    const second = runGetStyleNotes(makeCtx(), { offset: first.returned_chars });
+    expect(second.truncated).toBe(false);
+    expect(long.slice(0, first.returned_chars) + second.text).toBe(long);
   });
 
   it("风格说明：无用户覆盖 → shared 预置内容、customized=false", () => {

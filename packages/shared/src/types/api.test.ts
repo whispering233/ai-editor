@@ -51,13 +51,14 @@ import {
   practiceStylePackPutReqSchema,
 } from "./api.js";
 import {
+  MAX_PRACTICE_DRAFT_CHARS,
   MAX_PRACTICE_SAMPLE_CHARS,
   MAX_PRACTICE_STYLE_PACK_CHARS,
   MAX_PRACTICE_TOPIC_CHARS,
 } from "../constants/practice.js";
 
 describe("ErrorCode 完整性", () => {
-  it("包含全部 10 个现行错误码", () => {
+  it("包含全部现行错误码", () => {
     for (const code of [
       "VALIDATION_ERROR",
       "ENTITY_NOT_FOUND",
@@ -936,7 +937,7 @@ describe("practice 端点 schema（docs/api/120-api-practice.md；2026-10 改版
   it("写稿请求（两类练习共用）：draft 允许空串（清空）；strict 单字段", () => {
     expect(practiceDraftPutReqSchema.safeParse({ draft: "" }).success).toBe(true);
     expect(practiceDraftPutReqSchema.safeParse({ draft: "稿", extra: 1 }).success).toBe(false);
-    expect(practiceDraftPutReqSchema.safeParse({ draft: "d".repeat(20001) }).success).toBe(false);
+    expect(practiceDraftPutReqSchema.safeParse({ draft: "d".repeat(MAX_PRACTICE_DRAFT_CHARS + 1) }).success).toBe(false);
   });
 
   it("文本类字段 trim 非空：纯空白范文 / 风格说明一律拒绝，带空白值落库前 trim", () => {
@@ -945,6 +946,14 @@ describe("practice 端点 schema（docs/api/120-api-practice.md；2026-10 改版
     expect(practiceSampleCreateReqSchema.parse({ text: "  明海出家已经四年了。  " })).toEqual({
       text: "明海出家已经四年了。",
     });
+    // 可空文本字段同样 trim（纯空白片段说明 / 写作要求在注入里会变空内容行，见 chat 注入的 `!== ""` 判据）
+    expect(
+      practiceSampleCreateReqSchema.parse({ excerpt_label: " 节选 ", text: "范文" }).excerpt_label,
+    ).toBe("节选");
+    expect(
+      practicePieceCreateReqSchema.parse({ topic_source: "user", topic: "雨夜", brief: " 三百字 " })
+        .brief,
+    ).toBe("三百字");
     expect(practiceStylePackPutReqSchema.safeParse({ content: "  " }).success).toBe(false);
   });
 

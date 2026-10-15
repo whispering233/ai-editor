@@ -107,8 +107,10 @@ get_practice_draft(sample_id, offset?, max_chars?)
   → 同形状（text = 用户仿写稿；未写稿 → char_count=0、text=""）
 
 get_free_draft(piece_id, offset?, max_chars?)
-  → 同形状（text = 自由练习稿）
-  注：刻意**不做「一个工具 + 多态 id」**——两张表的语义与引用校验源不同，多态会让工具描述含糊
+  → { piece_id, char_count, offset, returned_chars, text, truncated }
+  注：字段名以 `piece_id` 开头（**没有** `sample_id` / `work_name` / `excerpt_label`——那三项属范文侧）；
+      text = 用户自由练习稿（未写稿 → char_count=0、text=""）；分页口径同上（同一对常量、同一续读提示）
+      刻意**不做「一个工具 + 多态 id」**——两张表的语义与引用校验源不同，多态会让工具描述含糊
 
 get_style_notes(offset?, max_chars?)
   → { author_id, author_name, customized, char_count, offset, returned_chars, text, truncated }
@@ -124,15 +126,15 @@ submit_free_feedback(piece_id, dimensions[], summary?)
 
 // 两个提交工具的口径（卡体形状同形，差别只在引用校验源）：
 // - dimensions 上限 = 常量 `MAX_FEEDBACK_DIMENSIONS`（工具描述由该常量**插值生成**）
-// - 每条引用（sample_quotes / draft_quotes）必须是**该项练习的依据或用户稿件的逐字子串**（仿写 = 范文 或 仿写稿；
-//   自由练习 = 风格说明 或 自由稿），服务端逐条校验，不匹配即丢弃（不阻断、不重试）并计入 dropped_quotes；
+// - 每条引用**按字段分源**：`sample_quotes` ⊆ 该形态的依据（仿写 = 范文、自由练习 = 风格说明）、
+//   `draft_quotes` ⊆ 用户稿件；服务端逐条校验，不匹配即丢弃（不阻断、不重试）并计入 dropped_quotes；
 //   空串 / 纯空白引用走同一条丢弃路径（否则 `includes("")` 恒真，无意义的引用会进卡片）
 // - 卡片**没有「示范」字段**——模型没有位置放成段文字（诊断，不代笔）
 // - 两个工具的 `details`（写库结果）**随 `tool_execution_end` 帧下发**（清单 = shared `TOOL_DETAILS_TO_CLIENT`）
 //   ——前端据此即时刷新点评卡（卡体仍从 `GET /practice/samples/:id` / `GET /practice/free/:id` 读）
 
 submit_practice_topic(piece_id, topic, brief?)
-  → { saved: true }
+  → { saved: true, piece_id }
   用途：AI 出题（写 practice_free_pieces.topic / brief）
   口径：topic 上限 = 常量 `MAX_PRACTICE_TOPIC_CHARS`、brief 上限 = `MAX_PRACTICE_BRIEF_CHARS`（描述插值）；
        **题目非空 → 抛错拒写**（`execute` 抛错即失败，防覆盖已出的题 / 用户已开始的练习））；

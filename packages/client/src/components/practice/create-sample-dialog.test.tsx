@@ -36,7 +36,6 @@ function render(overrides: Partial<Parameters<typeof CreateSampleFormBody>[0]> =
       onExcerptLabelChange={() => {}}
       text="路明非站在走廊尽头。"
       onTextChange={() => {}}
-      excerptLabelError={null}
       textError={null}
       importError={null}
       onImportClick={() => {}}
@@ -71,10 +70,18 @@ describe("CreateSampleFormBody（新建范文样本弹窗内容体）", () => {
     expect(html).toContain(`最多 ${MAX_PRACTICE_SAMPLE_CHARS} 字`);
   });
 
-  it("两项都可内联报错（各自指出缺哪一项）", () => {
-    const html = render({ excerptLabelError: "片段说明太长", textError: "请粘贴或导入范文" });
-    expect(html).toContain("片段说明太长");
+  it("缺范文可内联报错（SSR 注入可见；片段说明由 maxLength 收口，无错误态）", () => {
+    const html = render({ textError: "请粘贴或导入范文" });
     expect(html).toContain("请粘贴或导入范文");
+    expect(render()).not.toContain("请粘贴或导入范文");
+  });
+
+  it("关联作品默认「其他」真被 Select 选中（选中项 = shared 兜底文案，不手抄字面量）", () => {
+    const html = render(); // workId = OTHER_WORK_SELECT_VALUE
+    // `has-value` = 真选中（不是 placeholder）且选中项文案就是「其他」
+    expect(html).toMatch(
+      new RegExp(`ant-select-content-has-value"[^>]*>${PRACTICE_OTHER_WORK_LABEL}<`),
+    );
   });
 
   it("导入失败文案与正文错误互斥（同一位置三态：正文错 > 导入错 > 上限提示）", () => {

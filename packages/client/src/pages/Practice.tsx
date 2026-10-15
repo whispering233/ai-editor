@@ -13,7 +13,7 @@
 //
 // 分层：`PracticeList` / `PracticeWorkGroup` / `PracticeSampleRow` = 纯展示（无 effect、无请求，
 // 导出供 SSR 走查——仓内无 jsdom）；默认导出 = 容器（取数 + 弹窗开关）。
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { PracticeSampleSummary } from "@whispering233/ai-editor-shared";
 import { formatRelativeTime, resolveAuthor } from "@whispering233/ai-editor-shared";
 import { Alert, Button, Skeleton, Typography } from "antd";
@@ -61,10 +61,12 @@ export interface PracticeWorkGroupProps {
   group: PracticeSampleGroup;
   /** 组内「+ 新建样本」（该组作品预选；弹窗由容器开） */
   onCreateSample: (workId: string | null) => void;
+  /** 作家未解析时禁建（与页头按钮同口径：服务端同样按 400 拒） */
+  disabled: boolean;
 }
 
 /** 作品分组：`section-title` 作品名 + `caption-text` 计数 + 组内 `[+ 新建样本]` + 样本行 */
-export function PracticeWorkGroup({ group, onCreateSample }: PracticeWorkGroupProps) {
+export function PracticeWorkGroup({ group, onCreateSample, disabled }: PracticeWorkGroupProps) {
   return (
     <section>
       <div className="flex items-center gap-3">
@@ -75,7 +77,12 @@ export function PracticeWorkGroup({ group, onCreateSample }: PracticeWorkGroupPr
           {group.samples.length} 篇范文
         </Typography.Text>
         <span className="ml-auto flex shrink-0 items-center gap-2">
-          <Button size="small" icon={<PlusOutlined />} onClick={() => onCreateSample(group.workId)}>
+          <Button
+            size="small"
+            icon={<PlusOutlined />}
+            disabled={disabled}
+            onClick={() => onCreateSample(group.workId)}
+          >
             新建样本
           </Button>
         </span>
@@ -94,10 +101,12 @@ export interface PracticeListProps {
   /** `null` = 加载中（骨架）；`[]` = 无样本（空态） */
   groups: PracticeSampleGroup[] | null;
   onCreateSample: (workId: string | null) => void;
+  /** 作家未解析（配置未到 / 不在清单）→ 两处「新建样本」都禁点 */
+  disabled: boolean;
 }
 
 /** 列表主体：加载态 / 空态 / 作品分组（页头之外的全部滚动内容） */
-export function PracticeList({ groups, onCreateSample }: PracticeListProps) {
+export function PracticeList({ groups, onCreateSample, disabled }: PracticeListProps) {
   if (groups === null) return <Skeleton active title={false} paragraph={{ rows: 3 }} />;
   if (groups.length === 0) {
     return (
@@ -111,6 +120,7 @@ export function PracticeList({ groups, onCreateSample }: PracticeListProps) {
           key={group.workId ?? "other"}
           group={group}
           onCreateSample={onCreateSample}
+          disabled={disabled}
         />
       ))}
     </div>
@@ -125,6 +135,8 @@ export default function Practice() {
   const [samples, setSamples] = useState<PracticeSampleSummary[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [reloadTick, setReloadTick] = useState(0);
+  /** 首帧是否已拿到列表：重拉（提案确认 / InfoBar）时保留旧列表，不整页回骨架 */
+  const loadedOnceRef = useRef(false);
   /** 新建样本弹窗的预选作品（`null` = 关窗；`{ workId: null }` = 预选「其他」） */
   const [sampleDialog, setSampleDialog] = useState<{ workId: string | null } | null>(null);
 
@@ -140,11 +152,14 @@ export default function Practice() {
 
   useEffect(() => {
     let cancelled = false;
-    setSamples(null);
+    // 只有首帧置 `null`（骨架）；重拉保留旧列表（提案确认后不闪）
+    if (!loadedOnceRef.current) setSamples(null);
     setError(null);
     getPracticeSamples()
       .then((res) => {
-        if (!cancelled) setSamples(res.samples);
+        if (cancelled) return;
+        loadedOnceRef.current = true;
+        setSamples(res.samples);
       })
       .catch((e) => {
         if (!cancelled) setError(e instanceof ApiError ? e.message : "加载失败，请重试");
@@ -198,7 +213,11 @@ export default function Practice() {
 
       {/* 滚动区：列表（页头不随内容滚动） */}
       <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">
-        <PracticeList groups={groups} onCreateSample={(workId) => setSampleDialog({ workId })} />
+        <PracticeList
+          groups={groups}
+          onCreateSample={(workId) => setSampleDialog({ workId })}
+          disabled={disabled}
+        />
       </div>
 
       {/* 每次打开都是新挂载（初值 = 预选作品、表单干净），关窗即卸载，不残留上一条范文 */}

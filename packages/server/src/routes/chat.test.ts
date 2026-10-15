@@ -1211,7 +1211,7 @@ describe("练习点评链路：注入与卡片下发", () => {
     // 范文与用户稿正文零命中（它们走只读工具分页拉取，不进 prompt）
     expect(whole).not.toContain(SAMPLE_TEXT_MARK);
     expect(whole).not.toContain(DRAFT_TEXT_MARK);
-    // 「必须提交点评卡」这类指令语义只活在练习内核提示词（system）里，注入段不复述
+    // 「提交工具」这类指令语义只活在练习内核提示词（system）里（下面正向命中），注入段不复述
     const systemPrompt = getCurrentSystemPrompt(request.messages);
     expect(systemPrompt).toContain("点评必须走提交工具");
     const userTexts = request.messages
@@ -1221,7 +1221,6 @@ describe("练习点评链路：注入与卡片下发", () => {
     expect(userTexts).toContain("请点评我的仿写稿");
     expect(userTexts).toContain("当前聚焦"); // 注入是本轮用户消息的一部分
     expect(userTexts).not.toContain("点评必须走提交工具");
-    expect(userTexts).not.toContain("必须提交点评卡");
   });
 
   it("注入：样本不存在 → 该段静默省略（无空段标题残留），本轮照常完成；帧集零新增", async () => {
@@ -1536,6 +1535,57 @@ describe("练习点评链路：注入与卡片下发", () => {
     const card = stored.feedback as { dimensions: { draft_quotes: string[] }[] };
     expect(card.dimensions[0]!.draft_quotes).toEqual([FREE_DRAFT_QUOTE]);
     expect(stored.draft).toContain(FREE_DRAFT_MARK);
+  });
+
+  it("自由练习点评：空串 / 纯空白引用一律丢弃（帧里的 dropped_quotes 与库里落盘一致）", async () => {
+    const project = openPracticeProject();
+    const pieceId = seedPiece(project);
+    const env = await createFauxEnv();
+    scripted(env, [
+      () =>
+        fauxAssistantMessage([
+          fauxToolCall("submit_free_feedback", {
+            piece_id: pieceId,
+            dimensions: [
+              {
+                name: "句长节奏",
+                sample_trait: "以短句推进",
+                draft_trait: "长句偏多",
+                // 依据侧两条空 / 纯空白 + 稿件侧一条逐字命中 + 一条纯空白
+                sample_quotes: ["", "   "],
+                draft_quotes: [FREE_DRAFT_QUOTE, "\n\t"],
+                advice: "把超过三行的句子拆开",
+              },
+            ],
+          }),
+        ]),
+      () => fauxAssistantMessage("点评完成。"),
+    ]);
+    const app = buildApp(createChatRoutes({ runtimeFactory: env.factory }));
+
+    const frames = await readSseFrames(
+      await app.request(
+        "/api/v1/chat",
+        postChat({ message: "请点评我的自由练习稿", context: { practice_free_piece_id: pieceId } }),
+      ),
+    );
+    const end = frames.find(
+      (f) =>
+        f.event === "tool_execution_end" &&
+        (f.data as { toolName: string }).toolName === "submit_free_feedback",
+    )!;
+    const details = (
+      end.data as { result: { details?: { dimension_count: number; dropped_quotes: number } } }
+    ).result.details!;
+    expect(details.dimension_count).toBe(1);
+    expect(details.dropped_quotes).toBe(3);
+
+    // 落盘与帧一致：空串 / 纯空白不进卡（`includes("")` 恒真会让无意义引用蒙过校验）
+    const card = getPracticePiece(project.db, pieceId)!.feedback as {
+      dimensions: { sample_quotes: string[]; draft_quotes: string[] }[];
+    };
+    expect(card.dimensions[0]!.sample_quotes).toEqual([]);
+    expect(card.dimensions[0]!.draft_quotes).toEqual([FREE_DRAFT_QUOTE]);
   });
 });
 

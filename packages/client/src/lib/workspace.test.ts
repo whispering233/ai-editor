@@ -64,7 +64,11 @@ describe("practiceAuthorCards（练习分区 = 预置作家清单 ∪ 已有工�
     expect(cards.every((c) => practiceCardStatus(c, null) === "未开始")).toBe(true);
   });
 
-  it("已有数据的在前（列表顺序 = updatedAt 倒序），未开始的按预置清单顺序垫后", () => {
+  it("已有数据的在前——同作家多张卡只出最新那张（顺序规则的可证伪用例在 `workspace-order.test.ts`）", () => {
+    // 前置：真实清单只有一位作家（`AUTHOR_IDS.length === 1`）⇒ 本用例只能钉「同作家去重 + 取最新」，
+    // 「未开始按清单顺序垫后」在这里恒真（`slice(1)` 恒空），故那一条搬去 mock 三位作家的
+    // `workspace-order.test.ts`（卡 8 P2）。
+    expect(AUTHOR_IDS).toHaveLength(1);
     // 服务端已按 updatedAt 倒序：p-new → p-old
     const newer = practiceBook({ id: "p-new", updatedAt: "2026-10-05T10:00:00Z" });
     const older = practiceBook({ id: "p-old", updatedAt: "2026-10-02T10:00:00Z" });
@@ -72,8 +76,6 @@ describe("practiceAuthorCards（练习分区 = 预置作家清单 ∪ 已有工�
     expect(cards).toHaveLength(AUTHOR_IDS.length);
     // p-old 与 p-new 同作家 ⇒ 只出一张卡（取列表里最新的那个）
     expect(cards[0].workspace?.id).toBe("p-new");
-    expect(cards.slice(1).map((c) => c.author.id)).toEqual(AUTHOR_IDS.slice(1));
-    expect(cards.slice(1).every((c) => c.workspace === null)).toBe(true);
   });
 
   it("小说工作区不进练习卡列（`kind` 判据）", () => {

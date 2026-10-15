@@ -9,6 +9,7 @@
 // - 上限取 shared 常量（`docs/api/120-api-practice.md`「范文样本」：`text` trim 非空 +
 //   `MAX_PRACTICE_SAMPLE_CHARS`；`excerpt_label` 可空 + `MAX_PRACTICE_EXCERPT_LABEL_CHARS`）
 //   ——提示文案的数字由常量插值，不复述
+// - 片段说明没有内联错误态：它由控件 `maxLength` 收口（服务端只校验上限，无「必填」语义）
 // - 导入 = 「读文件（`readTextFile`：UTF-8 → GB18030 回落）→ 校验 → 落地」：超上限 / 空文件
 //   只报框内错误并**保留用户已输入内容**，不静默截断、不覆盖；文件名去扩展名预填「片段说明」（可改可清）
 // - 范文是**快照**：落库后不可变（`60-practice.md` §1），故本弹窗只负责粘贴 / 导入落库，不提供编辑入口
@@ -81,7 +82,6 @@ export interface CreateSampleFormBodyProps {
   onExcerptLabelChange: (value: string) => void;
   text: string;
   onTextChange: (value: string) => void;
-  excerptLabelError: string | null;
   textError: string | null;
   /** 导入失败文案（读不出文本 / 超上限；框内可见，原输入保留） */
   importError: string | null;
@@ -101,7 +101,6 @@ export function CreateSampleFormBody({
   onExcerptLabelChange,
   text,
   onTextChange,
-  excerptLabelError,
   textError,
   importError,
   onImportClick,
@@ -134,7 +133,6 @@ export function CreateSampleFormBody({
           placeholder="如：开头一段（可留空）"
           onChange={(e) => onExcerptLabelChange(e.target.value)}
         />
-        {excerptLabelError !== null && <p className={FIELD_ERROR_CLASS}>{excerptLabelError}</p>}
       </div>
 
       <div className={FIELD_CLASS}>
@@ -199,7 +197,6 @@ export function CreateSampleDialog({
   const [workId, setWorkId] = useState(defaultWorkId ?? OTHER_WORK_SELECT_VALUE);
   const [excerptLabel, setExcerptLabel] = useState("");
   const [text, setText] = useState("");
-  const [excerptLabelError, setExcerptLabelError] = useState<string | null>(null);
   const [textError, setTextError] = useState<string | null>(null);
   const [importError, setImportError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -221,11 +218,11 @@ export function CreateSampleDialog({
         return;
       }
       setText(plan.text);
-      // 文件名预填片段说明（用户可改可清）；导入成功即清掉上一次的导入错误
-      setExcerptLabel(plan.excerptLabel);
+      // 文件名预填片段说明——**仅在该字段还是空的时候**（不静默覆盖用户已输入的说明）；
+      // 导入成功即清掉上一次的导入错误
+      setExcerptLabel((current) => (current === "" ? plan.excerptLabel : current));
       setImportError(null);
       setTextError(null);
-      setExcerptLabelError(null);
     } catch {
       setImportError("文件读取失败，请重试");
     }
@@ -271,17 +268,13 @@ export function CreateSampleDialog({
           workId={workId}
           onWorkIdChange={setWorkId}
           excerptLabel={excerptLabel}
-          onExcerptLabelChange={(value) => {
-            setExcerptLabel(value);
-            setExcerptLabelError(null);
-          }}
+          onExcerptLabelChange={setExcerptLabel}
           text={text}
           onTextChange={(value) => {
             setText(value);
             setTextError(null);
             setImportError(null);
           }}
-          excerptLabelError={excerptLabelError}
           textError={textError}
           importError={importError}
           onImportClick={() => fileInputRef.current?.click()}

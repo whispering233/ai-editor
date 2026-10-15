@@ -10,12 +10,12 @@
 // - 空态 = 「还没有范文——点「新建样本」导入或粘贴一段」（不再有「新建目标」入口与目标分组）
 // - 页头常驻模板（`section` 全高 + 内容进内层可滚容器）
 // - 用户侧文案口径：不出现「画像 / 维度 / scope」这类设计侧词（`60-practice.md` §文案口径）
-import type { ReactElement } from "react";
+import { Children, isValidElement, type ReactElement, type ReactNode } from "react";
 import { renderToString } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import { AUTHOR_CATALOG, PRACTICE_OTHER_WORK_LABEL } from "@whispering233/ai-editor-shared";
 import type { PracticeSampleSummary } from "@whispering233/ai-editor-shared";
-import Practice, { PracticeList, PracticeSampleRow } from "./Practice";
+import Practice, { PracticeList, PracticeSampleRow, PracticeWorkGroup } from "./Practice";
 import { practiceSampleGroups, type PracticeSampleGroup } from "../lib/practice";
 
 const JIANGNAN = AUTHOR_CATALOG.jiangnan;
@@ -54,6 +54,25 @@ function oneGroup(samples = [makeSample()]): PracticeSampleGroup[] {
 
 const noop = (): void => {};
 
+/** 元素树里的全部元素（纯展示组件无 hooks ⇒ 可直接调用取树：SSR 不能点按钮，但树里的 `onClick` 能取证） */
+function elements(node: ReactNode): ReactElement[] {
+  if (!isValidElement(node)) return [];
+  const out: ReactElement[] = [node];
+  Children.forEach((node.props as { children?: ReactNode }).children, (child) => {
+    out.push(...elements(child));
+  });
+  return out;
+}
+
+/** 文案为 `label` 的元素（新建按钮） */
+function elementWithText(node: ReactNode, label: string): ReactElement {
+  const found = elements(node).find(
+    (el) => (el.props as { children?: ReactNode }).children === label,
+  );
+  expect(found, label).toBeDefined();
+  return found as ReactElement;
+}
+
 describe("练习列表页容器（#/practice）", () => {
   it("页头常驻模板：section 全高 + 内容进内层可滚容器", () => {
     const html = renderHtml(<Practice />);
@@ -76,7 +95,7 @@ describe("练习列表页容器（#/practice）", () => {
 
 describe("列表主体（加载 / 空态 / 作品分组）", () => {
   it("空态：一行引导文案（指向页头「新建样本」；不出现设计侧词与旧入口）", () => {
-    const html = renderHtml(<PracticeList groups={[]} onCreateSample={noop} />);
+    const html = renderHtml(<PracticeList groups={[]} onCreateSample={noop} disabled={false} />);
     expect(html).toContain("还没有范文——点「新建样本」导入或粘贴一段");
     expect(html).toContain("border-dashed"); // empty-state 基座
     expect(html).not.toContain("新建目标");
@@ -90,6 +109,7 @@ describe("列表主体（加载 / 空态 / 作品分组）", () => {
       <PracticeList
         groups={oneGroup([makeSample(), makeSample({ id: "ps-2" })])}
         onCreateSample={noop}
+        disabled={false}
       />,
     );
     expect(html).toContain(JIANGNAN.works[0].name);
@@ -104,6 +124,7 @@ describe("列表主体（加载 / 空态 / 作品分组）", () => {
       <PracticeList
         groups={oneGroup([makeSample({ workId: null }), makeSample({ id: "ps-2", workId: "gone" })])}
         onCreateSample={noop}
+        disabled={false}
       />,
     );
     expect(html).toContain(PRACTICE_OTHER_WORK_LABEL);
@@ -111,8 +132,46 @@ describe("列表主体（加载 / 空态 / 作品分组）", () => {
   });
 
   it("加载态：groups = null → 骨架（不渲染空态文案）", () => {
-    const html = renderHtml(<PracticeList groups={null} onCreateSample={noop} />);
+    const html = renderHtml(<PracticeList groups={null} onCreateSample={noop} disabled={false} />);
     expect(html).not.toContain("还没有范文");
+  });
+});
+
+describe("组内「新建样本」（作家未解析禁点 + 把该组作品传出去）", () => {
+  it("组内按钮把**该组**的 workId 交给容器（点它取证，不靠源码文案）", () => {
+    const group = oneGroup()[0];
+    const calls: (string | null)[] = [];
+    const tree = PracticeWorkGroup({
+      group,
+      onCreateSample: (workId) => calls.push(workId),
+      disabled: false,
+    });
+    (elementWithText(tree, "新建样本").props as { onClick: () => void }).onClick();
+    expect(calls).toEqual([group.workId]);
+
+    // 「其他」组同理（`workId = null` 也要原样传出——弹窗据此预选「其他」）
+    const other = practiceSampleGroups(JIANGNAN, [makeSample({ workId: null })])[0];
+    const otherCalls: (string | null)[] = [];
+    (elementWithText(
+      PracticeWorkGroup({ group: other, onCreateSample: (w) => otherCalls.push(w), disabled: false }),
+      "新建样本",
+    ).props as { onClick: () => void }).onClick();
+    expect(otherCalls).toEqual([null]);
+  });
+
+  it("作家未解析（disabled）→ 两处「新建样本」都禁点（与页头按钮同口径，不当路障后静默 400）", () => {
+    const group = oneGroup()[0];
+    const html = renderHtml(
+      <PracticeWorkGroup group={group} onCreateSample={noop} disabled />,
+    );
+    const index = html.indexOf("新建样本");
+    const tag = html.slice(html.lastIndexOf("<button", index), html.indexOf(">", index));
+    expect(tag).toContain("disabled");
+
+    // 列表把开关透传给每个组（组只是展示层，开关由容器给）
+    const list = PracticeList({ groups: oneGroup(), onCreateSample: noop, disabled: true });
+    const groupElement = elements(list).find((el) => el.type === PracticeWorkGroup);
+    expect((groupElement?.props as { disabled?: boolean }).disabled).toBe(true);
   });
 });
 

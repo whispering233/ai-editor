@@ -26,6 +26,7 @@ import FreeDetail, {
   FreePieceMissing,
   FreePieceSections,
 } from "./FreeDetail";
+import { canRequestPracticeReview } from "../lib/practice";
 import { DEFAULT_WRITING_PREFS, type WritingPrefs } from "../hooks/use-writing-prefs";
 
 /** SSR 在相邻文本节点之间插 `<!-- -->`（数字与「 字」是两段）——断言前归一掉 */
@@ -199,8 +200,11 @@ describe("「让 AI 点评」可点性（有已保存且非空的稿件才可点
     expect(buttonHtml(html, "让 AI 点评")).toContain("disabled");
   });
 
-  it("输入框有未保存改动（canReview=false）→ 禁点，且不给生成中的重复点击", () => {
-    expect(buttonHtml(render({ canReview: false }), "让 AI 点评")).toContain("disabled");
+  it("输入框有未保存改动 → 谓词判 `canReview=false`，禁点（生成在途同样禁点）", () => {
+    // 真实场景：库里的稿是 A，输入框里是 B（未保存）⇒ AI 读的会是旧稿，禁点
+    const canReview = canRequestPracticeReview(DETAIL, `${DETAIL.draft}又添一句`);
+    expect(canReview).toBe(false);
+    expect(buttonHtml(render({ canReview }), "让 AI 点评")).toContain("disabled");
     expect(buttonHtml(render({ streaming: true }), "让 AI 点评")).toContain("disabled");
   });
 });
