@@ -58,21 +58,26 @@
 | GET | `/api/v1/manuscript/:chapterNodeId` | 章正文（块文档） |
 | PUT | `/api/v1/manuscript/:chapterNodeId` | 章正文（块文档） |
 
-### 文风仿写练习（[120-api-practice.md](./120-api-practice.md)）
+### 作家文风练习（[120-api-practice.md](./120-api-practice.md)）
 
 | 方法 | 路径 | 文档 |
 | :--- | :--- | :--- |
-| GET | `/api/v1/practice/targets` | 文风仿写练习 |
-| POST | `/api/v1/practice/targets` | 文风仿写练习 |
-| PUT | `/api/v1/practice/targets/:id` | 文风仿写练习 |
-| DELETE | `/api/v1/practice/targets/:id` | 文风仿写练习 |
-| GET | `/api/v1/practice/targets/:id/samples` | 文风仿写练习 |
-| POST | `/api/v1/practice/targets/:id/samples` | 文风仿写练习 |
-| GET | `/api/v1/practice/samples/:id` | 文风仿写练习 |
-| PUT | `/api/v1/practice/samples/:id` | 文风仿写练习 |
-| DELETE | `/api/v1/practice/samples/:id` | 文风仿写练习 |
+| GET | `/api/v1/practice/samples` | 作家文风练习 |
+| POST | `/api/v1/practice/samples` | 作家文风练习 |
+| GET | `/api/v1/practice/samples/:id` | 作家文风练习 |
+| PUT | `/api/v1/practice/samples/:id` | 作家文风练习 |
+| DELETE | `/api/v1/practice/samples/:id` | 作家文风练习 |
+| GET | `/api/v1/practice/style-pack` | 作家文风练习 |
+| PUT | `/api/v1/practice/style-pack` | 作家文风练习 |
+| DELETE | `/api/v1/practice/style-pack` | 作家文风练习 |
+| GET | `/api/v1/practice/free` | 作家文风练习 |
+| POST | `/api/v1/practice/free` | 作家文风练习 |
+| GET | `/api/v1/practice/free/:id` | 作家文风练习 |
+| PUT | `/api/v1/practice/free/:id` | 作家文风练习 |
+| DELETE | `/api/v1/practice/free/:id` | 作家文风练习 |
 
-> 点评不在本模块：触发走 `POST /api/v1/chat` + `context.practice_sample_id`（见 120 文档「点评链路」）。
+> 点评与出题不在本模块：触发走 `POST /api/v1/chat` + `context.practice_sample_id` / `context.practice_free_piece_id`（见 120 文档「点评 / 出题链路」）。
+> 作家介绍 / 作品清单 / 风格说明的**预置文本**没有端点（shared 常量客户端直读）；只有风格说明的**用户覆盖**走 `style-pack` 三个端点。
 
 ### 关系管理（[40-api-relation.md](./40-api-relation.md)）
 

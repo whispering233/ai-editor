@@ -44,7 +44,7 @@ node packages/server/dist/index.js [projectRoot]   # 或安装态 npx ai-editor 
 
 - `projectRoot` = 创作根（缺省 process.cwd()）。
 - `detectProject`：根自身有 `project.json` → 打开（旧单项目部署兼容）；**无 → 读 `<创作根>/.ai-editor/config.json` 的 `lastProject`**（上次 open 成功的目录绝对路径）→ 该目录仍含 `project.json` 则直接打开（「开机回到上次那本书」）；路径已被删除/移动、`project.json` 损坏不可读 → **静默回待命**（书架页）。**打开/迁移失败（含未来版本库、data.db 损坏）→ 记日志 + 回待命**（与「宁回书架也不让坏数据把服务起不起来」语义一致；未来版本另有明确文案）——**绝不静默重建/删库**。开始/显式 open 均走**同一条开放管道**（迁移前快照、无路径删库重建、未来版本拒绝三态一致）。两者皆空 → 待命（不初始化、不建任何文件，前端引导 create/open）。
-- 书架模式：创建书 = `创作根/books/<书名>/` 子目录（三数据文件）；`GET /api/v1/project/list` 扫描列书（待命态可用）。练习工作区（`kind = "practice"`）= `创作根/practice/<名字>/`，三文件结构同构，`list` 一并列出（带 `kind`）。
+- 书架模式：创建书 = `创作根/books/<书名>/` 子目录（三数据文件）；`GET /api/v1/project/list` 扫描列书（待命态可用）。练习工作区（`kind = "practice"`）= `创作根/practice/<作家名>/`（`project.json` 带 `author_id`），三文件结构同构，`list` 一并列出（带 `kind` 与 `authorId`）。
 - **端口策略 = 分段隔离**：分段唯一定义 = shared `PORT_RANGES`（守卫测试 = shared `constants.test.ts`，断言窗口两两不相交且落在合法端口区间）；三形态各自独占窗口，任何形态被占用后的 +1 兜底都出不了自己窗口：
 
 | 形态 | 分段 | 被占时 |

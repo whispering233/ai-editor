@@ -23,7 +23,7 @@ InkOS 按 sessionKind 切换工具集（chat/play/write 各有不同工具），
 
 （2026-08 修订：原「二次确认」级无任何工具挂靠，删除。删除操作由提案确认 + 回收站软删兜底覆盖——软删可还原、提案确认，用户始终是最终决策者。）
 
-**按工作区类型收窄（2026-10）**：工具定义带 `scope`（`"novel"` / `"practice"` / `"common"`），装配 AgentSession 时**按当前工作区 `kind` 过滤**——小说工作区注册小说工具与提案工具，练习工作区只注册它的两个只读工具与一个提交工具。这是**结构性边界**（靠注册过滤，不靠提示词）：非小说工作区里 `get_outline` / `propose_*` 一类**根本不存在**。
+**按工作区类型收窄（2026-10）**：工具定义带 `scope`（`"novel"` / `"practice"` / `"common"`），装配 AgentSession 时**按当前工作区 `kind` 过滤**——小说工作区注册小说工具与提案工具，练习工作区只注册它的**四个只读工具 + 三个写 AI 自己产出的工具**（点评卡 / 题目；工具面无写稿工具）。这是**结构性边界**（靠注册过滤，不靠提示词）：非小说工作区里 `get_outline` / `propose_*` 一类**根本不存在**。
 
 ## 工具目录
 
@@ -95,29 +95,48 @@ get_chapter_text(node_id, offset?, max_chars?)
 // get_entity('reference', id) 的 reference 分支返回 data.content 的**投影文本**（content_text），
 // 不是块 JSON 原文——列表摘要定长截断与详情全文分离，防长文撑爆响应（见下 search_references）
 
-// === 练习（2026-10；**仅 kind = "practice" 工作区注册**，设计见 ../design/60-practice.md）===
+// === 作家文风练习（2026-10；**仅 kind = "practice" 工作区注册**，设计见 ../design/60-practice.md）===
+// 七件工具 = **四只读 + 三写自己产出**；工具面**没有任何能写 draft 的工具**（结构性：AI 改不了用户稿）
 get_practice_sample(sample_id, offset?, max_chars?)
-  → { sample_id, target_name, observation, source_label, char_count, offset, returned_chars, text, truncated }
-  用途：读范文快照（点评与追问时按需拉取）
+  → { sample_id, work_name, excerpt_label, char_count, offset, returned_chars, text, truncated }
+  用途：读范文快照（仿写点评与追问时按需拉取）
   口径：默认/上限 max_chars = `DEFAULT_TEXT_PAGE_CHARS` / `MAX_TEXT_PAGE_CHARS`（**与 get_chapter_text 同一对常量**——文本分页预算单源）；
-       truncated = true 时提示用 offset 续读
+       truncated = true 时提示用 offset 续读；work_name = 关联作品名（空 = 「其他」兜底文案）
 
 get_practice_draft(sample_id, offset?, max_chars?)
   → 同形状（text = 用户仿写稿；未写稿 → char_count=0、text=""）
-  注：**只读**——工具面不存在写稿工具（用户的稿只有用户能写）
+
+get_free_draft(piece_id, offset?, max_chars?)
+  → 同形状（text = 自由练习稿）
+  注：刻意**不做「一个工具 + 多态 id」**——两张表的语义与引用校验源不同，多态会让工具描述含糊
+
+get_style_notes(offset?, max_chars?)
+  → { author_id, author_name, customized, char_count, offset, returned_chars, text, truncated }
+  用途：读作家风格说明（自由练习点评的**唯一依据**；仿写点评可按需参考，不强制引用）
+  口径：内容 = 用户覆盖 `??` 预置常量（同一对分页常量；truncated 时提示续读）
 
 submit_style_feedback(sample_id, dimensions[], summary?)
   → { saved: true, dimension_count, dropped_quotes }
-  用途：提交点评卡（写 practice_samples.feedback）
-  口径：dimensions 上限 = 常量 `MAX_FEEDBACK_DIMENSIONS`（工具描述由该常量**插值生成**）；
-       每条引用（sample_quotes / draft_quotes）必须是范文或稿件的**子串**，服务端逐条校验，
-       不匹配即丢弃（不阻断、不重试）并计入 dropped_quotes；空串 / 纯空白引用走同一条丢弃路径
-       （否则 `includes("")` 恒真，无意义的引用会进卡片）；
-       卡片**没有「示范」字段**——模型没有位置放成段文字（诊断，不代笔）
-  注：这是**唯一**能写练习数据的工具，且只写 AI 自己的产出字段（feedback），不碰用户稿；
-      它的 `details`（写库结果）**随 `tool_execution_end` 帧下发**（AUTO 工具的唯一非提案例外，
-      清单 = shared `TOOL_DETAILS_TO_CLIENT`）——前端据此即时刷新点评卡（卡正体仍从
-      `GET /practice/samples/:id` 读，见 120 文档「点评链路」）
+  用途：提交仿写点评卡（写 practice_samples.feedback）
+
+submit_free_feedback(piece_id, dimensions[], summary?)
+  → 同上形状（写 practice_free_pieces.feedback）
+
+// 两个提交工具的口径（卡体形状同形，差别只在引用校验源）：
+// - dimensions 上限 = 常量 `MAX_FEEDBACK_DIMENSIONS`（工具描述由该常量**插值生成**）
+// - 每条引用（sample_quotes / draft_quotes）必须是**该项练习的依据或用户稿件的逐字子串**（仿写 = 范文 或 仿写稿；
+//   自由练习 = 风格说明 或 自由稿），服务端逐条校验，不匹配即丢弃（不阻断、不重试）并计入 dropped_quotes；
+//   空串 / 纯空白引用走同一条丢弃路径（否则 `includes("")` 恒真，无意义的引用会进卡片）
+// - 卡片**没有「示范」字段**——模型没有位置放成段文字（诊断，不代笔）
+// - 两个工具的 `details`（写库结果）**随 `tool_execution_end` 帧下发**（清单 = shared `TOOL_DETAILS_TO_CLIENT`）
+//   ——前端据此即时刷新点评卡（卡体仍从 `GET /practice/samples/:id` / `GET /practice/free/:id` 读）
+
+submit_practice_topic(piece_id, topic, brief?)
+  → { saved: true }
+  用途：AI 出题（写 practice_free_pieces.topic / brief）
+  口径：topic 上限 = 常量 `MAX_PRACTICE_TOPIC_CHARS`、brief 上限 = `MAX_PRACTICE_BRIEF_CHARS`（描述插值）；
+       **题目非空 → 抛错拒写**（`execute` 抛错即失败，防覆盖已出的题 / 用户已开始的练习））；
+       它的 `details`（写库结果 `{ saved, piece_id }`）同走 `tool_execution_end` 帧（前端据此重拉详情）
 
 // === 状态查询（Delta 相关）===
 compute_state(target_type, target_id, at_node_id)

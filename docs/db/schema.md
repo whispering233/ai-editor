@@ -20,9 +20,9 @@
 │           └── document_records # 块文档（章正文 / 参考资料正文，2026-09）
 │       # 注：项目目录下**不再有** references/ 目录（2026-09 废弃：参考资料正文进 document_records，
 │       #     外部编辑能力改为单文件导入导出；历史遗留的同名目录不被读取、不被打包）
-├── practice/                 # 文风仿写练习工作区（kind = "practice"，2026-10）
-│   └── <名字>/               # 结构与书完全同构（project.json + outline.json + data.db + sessions/）
-│       └── data.db            #   └── practice_targets / practice_samples（见下文两张练习表）
+├── practice/                 # 作家文风练习工作区（kind = "practice"，2026-10；一个工作区 = 一位预置作家）
+│   └── <作家名>/             # 结构与书完全同构（project.json + outline.json + data.db + sessions/）；project.json 带 author_id
+│       └── data.db            #   └── practice_samples / practice_free_pieces / practice_style_packs（见下文三张练习表）
 
 # 兼容：启动目录本身含 project.json 时按旧语义打开；
 # 无 project.json 时进入书架模式——Dashboard 引导创建（按 kind 自动建 books/<书名>/ 或 practice/<名字>/）或打开
@@ -42,8 +42,8 @@
   - `user_version > SCHEMA_VERSION`（未来版本）→ **拒绝打开** 409 `PROJECT_VERSION_NEWER`（数据原封不动，提示升级程序）；
   - `user_version < SCHEMA_VERSION`（旧版本）→ **有迁移路径**（`packages/db/src/migrations/` 存在从当前版本到目标版本的连续迁移链）→ `runMigrations` 前向迁移；**无迁移路径** → 删库重建兜底（备份 `data.db.v{n}.bak` + `outline.json.v{n}.bak`）。
 - **迁移机制**：`migrations/` 目录每个文件导出一个 `Migration = { version, up }`（`001_xxx.ts` → version 1），`index.ts` 按 version 升序聚合导出 `MIGRATIONS`（tsc 编译进 dist 随包分发，无运行时目录读取）。`runMigrations` 对缺失版本逐个执行：**每个迁移一个事务（`up(db)` + `setUserVersion(version)` 原子提交——成功 ⇒ 版本已写入；失败 ⇒ 版本未变）**；**整批迁移前自动快照** data.db → `data.db.v{n}.{YYYYMMDDHHmmssSSSZ}.bak`（checkpoint 后复制主文件，时间戳命名，失败重试现场保留）。迁移失败 → 该迁移回滚 + 版本停在前一迁移后，下次 open 重试。（**粒度注**：迁移侧快照为毫秒时间戳且**无去重循环**——同一毫秒的两次批量迁移会后者覆盖前者；真实升级路径不可达，与备份侧 backup 的 +1ms 去重口径不同但已接受。）
-- 当前 `SCHEMA_VERSION = 12`；迁移链：`002_event_timeline.ts`（version 2：entities 表 CHECK 扩入 `'event'` + 新增 `sort_order` 列）、`003_timepoint.ts`（version 3，G2 修订：entities 表 CHECK 扩入 `'timepoint'` + `event.data.time_label` 迁移为 timepoint 实体 + occurs_at 关系，同名 time_label 合并为同一 timepoint）、`004_setting_tags.ts`（version 4，K2 修订：**无 DDL**——setting 旧 `data.rules` 分类值复制到 `data.tags` 并移除 rules，仅 data JSON 数据迁移）、`005_reference.ts`（version 5：entities 表 CHECK 扩入 `'reference'`，无数据搬移仅 DDL）、`006_sessions_jsonl.ts`（version 6：**对话历史出库**——`chat_messages` 全量导出为旧格式 `sessions/<session_id>.jsonl` 后 `DROP TABLE`；产物为旧 v1 格式，现已被 pi session 格式取代、不再被读取（数据保留在磁盘）；**id 不合法的旧会话以 `sess_legacy_<sha256 前 16 位>` 文件名导出**）、`007_character_ability_panel.ts`（version 7，2026-09：**无 DDL**——`character.data.abilities[]` 迁为 `ability_panel` 叶子并移除旧字段，幂等且不覆盖已有 `ability_panel`，仅 data JSON 数据迁移，同 004 先例）、`008_document_records.ts`（version 8，2026-09：新增 `document_records` 表（块文档），纯 DDL 无数据搬移——开发阶段，旧 `references/` 目录与旧参考资料行不作兼容读取）、`009_decompose.ts`（version 9：新增 `decompose_jobs` / `decompose_batches` 两表，纯 DDL 无数据搬移——旧项目没有 job 行，无需回填）、`010_decompose_concurrency.ts`（version 10：`decompose_jobs` 新增 `concurrency` 列，纯 DDL 无数据搬移——存量行回填 `DEFAULT 1`）、`011_drop_decompose.ts`（version 11：`DROP TABLE` 上述两表，纯 DDL——「拆解小说」功能已整功能移除（见 CHANGELOG），009/010 保留只为旧库升级链连续）、`012_practice.ts`（version 12，2026-10：新增 `practice_targets` / `practice_samples` 两张练习表，纯 DDL 无数据搬移——旧项目没有练习行，无需回填）。**SQLite 无法直接修改 CHECK 约束**，迁移走「建新表（新 CHECK）→ 拷贝数据 → drop 旧表 → rename」四步（`relation_records`/`delta_records` 无外键指向 entities，迁移只动 entities 表）；v1 → v12 迁移链存在 ⇒ 旧库 open 时自动前向迁移，不再走删库重建兜底。
-- **import 侧联动**：导入备份时 `user_version < SCHEMA_VERSION` 且**有迁移路径** → 接受（搬入后 open 自动迁移，v5 及更早备份经增量迁移升到 **v12**，含对话历史出库、能力面板迁移、块文档表创建与已下线功能的表清理）；无路径 → 409 `SCHEMA_VERSION_MISMATCH`；`>` 当前 → 409（未来版本语义）。
+- 当前 `SCHEMA_VERSION = 13`；迁移链：`002_event_timeline.ts`（version 2：entities 表 CHECK 扩入 `'event'` + 新增 `sort_order` 列）、`003_timepoint.ts`（version 3，G2 修订：entities 表 CHECK 扩入 `'timepoint'` + `event.data.time_label` 迁移为 timepoint 实体 + occurs_at 关系，同名 time_label 合并为同一 timepoint）、`004_setting_tags.ts`（version 4，K2 修订：**无 DDL**——setting 旧 `data.rules` 分类值复制到 `data.tags` 并移除 rules，仅 data JSON 数据迁移）、`005_reference.ts`（version 5：entities 表 CHECK 扩入 `'reference'`，无数据搬移仅 DDL）、`006_sessions_jsonl.ts`（version 6：**对话历史出库**——`chat_messages` 全量导出为旧格式 `sessions/<session_id>.jsonl` 后 `DROP TABLE`；产物为旧 v1 格式，现已被 pi session 格式取代、不再被读取（数据保留在磁盘）；**id 不合法的旧会话以 `sess_legacy_<sha256 前 16 位>` 文件名导出**）、`007_character_ability_panel.ts`（version 7，2026-09：**无 DDL**——`character.data.abilities[]` 迁为 `ability_panel` 叶子并移除旧字段，幂等且不覆盖已有 `ability_panel`，仅 data JSON 数据迁移，同 004 先例）、`008_document_records.ts`（version 8，2026-09：新增 `document_records` 表（块文档），纯 DDL 无数据搬移——开发阶段，旧 `references/` 目录与旧参考资料行不作兼容读取）、`009_decompose.ts`（version 9：新增 `decompose_jobs` / `decompose_batches` 两表，纯 DDL 无数据搬移——旧项目没有 job 行，无需回填）、`010_decompose_concurrency.ts`（version 10：`decompose_jobs` 新增 `concurrency` 列，纯 DDL 无数据搬移——存量行回填 `DEFAULT 1`）、`011_drop_decompose.ts`（version 11：`DROP TABLE` 上述两表，纯 DDL——「拆解小说」功能已整功能移除（见 CHANGELOG），009/010 保留只为旧库升级链连续）、`012_practice.ts`（version 12，2026-10：新增 `practice_targets` / `practice_samples` 两张练习表，纯 DDL 无数据搬移——旧项目没有练习行，无需回填）、`013_author_practice.ts`（version 13，2026-10：**练习数据模型重建**——drop `practice_targets` 与旧形状 `practice_samples`（含索引 `idx_practice_samples_target`），建 `practice_samples`（新形状：`work_id` 可空 + `excerpt_label`）/ `practice_free_pieces` / `practice_style_packs` 三表，纯 DDL 无数据搬移——旧「文风目标」是自由文本，无法映射到预置作家与作品，且练习功能当时尚未发布、无正式用户数据）。**SQLite 无法直接修改 CHECK 约束**，迁移走「建新表（新 CHECK）→ 拷贝数据 → drop 旧表 → rename」四步（`relation_records`/`delta_records` 无外键指向 entities，迁移只动 entities 表）；v1 → v13 迁移链存在 ⇒ 旧库 open 时自动前向迁移，不再走删库重建兜底。
+- **import 侧联动**：导入备份时 `user_version < SCHEMA_VERSION` 且**有迁移路径** → 接受（搬入后 open 自动迁移，v5 及更早备份经增量迁移升到 **v13**，含对话历史出库、能力面板迁移、块文档表创建与已下线功能的表清理）；无路径 → 409 `SCHEMA_VERSION_MISMATCH`；`>` 当前 → 409（未来版本语义）。
 - **全新空库短路（2026-09）**：`user_version = 0` 且**表结构与当前 DDL 一致**且**业务表无行** → 直接写入 `SCHEMA_VERSION`（**不重建、不备份、不碰 `outline.json`**）——覆盖“书目录有 project.json/outline.json 但缺 data.db”的场景（否则会走无路径重建兼重置大纲）。**反向守住**：结构陈旧（旧 CHECK / 残留表）或有数据的 v0 库仍走既有重建兑底。**已知不对称（已登记）**：备份包内的 v0 空库仍在导入侧被 409 拒绝（`validateBackupPackage` 复用 `hasMigrationPath`），而盘上同内容文件现在会被接受——偏差方向只宽松、无数据风险。
 
 ## entities — 实体表
@@ -234,41 +234,48 @@ CREATE TABLE document_records (
 
 **读取投影的两个消费面**：① AI 工具（单章只读拉取 / 参考资料全文）——只拿 `content_text`，绝不拿块 JSON；② 列表与摘要（参考资料列表的 `content` 摘要定长截断（长度单一定义 = db `toSummary`）、`GET /outline?with_metadata=true` 的章 `charCount`）——用 `length(content_text)` 与切片，不解析块体。
 
-## practice_targets / practice_samples — 练习表（2026-10）
+## practice_samples / practice_free_pieces / practice_style_packs — 练习三表（2026-10）
 
-文风仿写练习的数据（**独立工作区** `kind = "practice"` 专属；设计见 `../design/60-practice.md`）：
+作家文风练习的数据（**独立工作区** `kind = "practice"` 专属，一个工作区 = 一位预置作家；设计见 `../design/60-practice.md`）：
 
 ```sql
-CREATE TABLE IF NOT EXISTS practice_targets (
-  id          TEXT PRIMARY KEY,   -- 'pt-*'
-  name        TEXT NOT NULL,      -- 文风目标名（上限 = 常量 MAX_PRACTICE_TARGET_NAME_CHARS）
-  observation TEXT,               -- 用户自己观察到的文风特点（可选；上限 = 常量 MAX_PRACTICE_OBSERVATION_CHARS）
-  created_at  TEXT NOT NULL,      -- ISO 8601，应用层写入
-  updated_at  TEXT NOT NULL
+CREATE TABLE IF NOT EXISTS practice_samples (
+  id            TEXT PRIMARY KEY,          -- 'ps-*'
+  work_id       TEXT,                      -- 关联预置作品 id（NULL = 「其他」；无 FK，存在性由写入侧守卫）
+  excerpt_label TEXT NOT NULL DEFAULT '',  -- 片段说明（空串 = 未填；上限 = 常量 MAX_PRACTICE_EXCERPT_LABEL_CHARS）
+  text          TEXT NOT NULL,             -- 范文快照（不可变；上限 = 常量 MAX_PRACTICE_SAMPLE_CHARS）
+  draft         TEXT NOT NULL DEFAULT '',  -- 用户仿写稿（**只有用户能写**）
+  feedback      TEXT,                      -- 点评卡 JSON（AI 产出；NULL = 未点评）
+  created_at    TEXT NOT NULL,
+  updated_at    TEXT NOT NULL
 );
 
-CREATE TABLE IF NOT EXISTS practice_samples (
-  id           TEXT PRIMARY KEY,          -- 'ps-*'
-  target_id    TEXT NOT NULL,             -- 'pt-*'（无 FK，存在性由写入侧守卫）
-  source_kind  TEXT NOT NULL,             -- 'paste'（MVP 唯一值；跨工作区快照导入为升级路径，见 backlog）
-  source_label TEXT NOT NULL,             -- 快照来源说明（用户手填，如「汪曾祺《受戒》节选」）
-  text         TEXT NOT NULL,             -- 范文快照（不可变）
-  draft        TEXT NOT NULL DEFAULT '',  -- 用户仿写稿（**只有用户能写**）
+CREATE TABLE IF NOT EXISTS practice_free_pieces (
+  id           TEXT PRIMARY KEY,          -- 'pf-*'
+  topic        TEXT NOT NULL DEFAULT '',  -- 题目（空串 = 待出题；上限 = 常量 MAX_PRACTICE_TOPIC_CHARS）
+  brief        TEXT NOT NULL DEFAULT '',  -- 写作要求（空串 = 无；上限 = 常量 MAX_PRACTICE_BRIEF_CHARS）
+  topic_source TEXT NOT NULL,             -- 'user' | 'ai'（出题来源；也是「待出题」状态的判据）
+  draft        TEXT NOT NULL DEFAULT '',  -- 用户稿件（**只有用户能写**；上限同仿写稿常量）
   feedback     TEXT,                      -- 点评卡 JSON（AI 产出；NULL = 未点评）
   created_at   TEXT NOT NULL,
   updated_at   TEXT NOT NULL
 );
 
-CREATE INDEX IF NOT EXISTS idx_practice_samples_target ON practice_samples(target_id);
+CREATE TABLE IF NOT EXISTS practice_style_packs (
+  author_id  TEXT PRIMARY KEY,            -- 预置作家 id（shared AUTHOR_CATALOG 的键）
+  content    TEXT NOT NULL,               -- 用户对作家风格说明的覆盖（上限 = 常量 MAX_PRACTICE_STYLE_PACK_CHARS）
+  updated_at TEXT NOT NULL                -- 无覆盖 = 无行（读侧回退 shared 常量里的预置文本）
+);
 ```
 
 | 不变式 | 口径 |
 | :--- | :--- |
-| **无外键** | `target_id` 的存在性由写入侧守卫（同 `document_records` 先例） |
-| **无软删** | 删除 = **物理删**（回收站是小说语义：联动大纲节点与实体级联）；删目标**级联删样本** |
+| **无外键、无索引** | `work_id` 的存在性由写入侧守卫（同 `document_records` 先例）；单工作区数据量小、列表全扫，不建索引 |
+| **无软删** | 删除 = **物理删**（回收站是小说语义：联动大纲节点与实体级联） |
 | **范文不可变** | `text` 落库后不更新——练习工作区独立于书，实时引用做不到也不该做 |
 | **用户稿唯一写入口** | `draft` 只由用户经 REST 写；AI 工具面**不存在**写稿工具 |
-| **点评只由工具写** | `feedback` 由提交点评的工具写入（AI 能写自己的产出，不能写用户的产出） |
+| **AI 产出字段** | `feedback` 由提交点评工具写、`practice_free_pieces.topic` / `brief` 由出题工具写（AI 能写自己的产出，不能写用户的产出） |
+| **素材包覆盖** | `practice_style_packs` 只存**用户覆盖**；生效内容 = 覆盖 `??` shared 预置常量（无覆盖即无行，删除行 = 恢复预置） |
 | **JSON 列防御解析** | `feedback` 读取一律防御解析（坏 JSON 不得打挂列表查询）——与既有 JSON 列同款 |
 | **不进小说语义** | 不参与 Delta / 关系表 / 回收站；表集与小说语义表互不混装 |
 
@@ -353,6 +360,7 @@ CREATE INDEX IF NOT EXISTS idx_practice_samples_target ON practice_samples(targe
   "name": "我的小说",
   "language": "zh",
   "kind": "novel",
+  "author_id": "jiangnan",
   "schema_version": 1,
   "current_position": "ch-12",
   "deduction_nodes": ["ch-3", "ch-7"],
@@ -360,9 +368,7 @@ CREATE INDEX IF NOT EXISTS idx_practice_samples_target ON practice_samples(targe
   "created_at": "2026-08-01T10:00:00Z",
   "updated_at": "2026-08-01T10:00:00Z"
 }
-```
-
-> **`prompt` 字段已废弃（2026-08）**：项目规则唯一事实源改为项目目录 `AGENTS.md` 文件（见下节），`prompt` **不再读写**——新写入不再产生该字段；旧文件中的残留字段宽松读取（不参与 schema_version 判定）。打开项目时若 `prompt` 存在且无 AGENTS.md → 自动迁移写入 AGENTS.md（内容原样，一次性）。
+```：项目规则唯一事实源改为项目目录 `AGENTS.md` 文件（见下节），`prompt` **不再读写**——新写入不再产生该字段；旧文件中的残留字段宽松读取（不参与 schema_version 判定）。打开项目时若 `prompt` 存在且无 AGENTS.md → 自动迁移写入 AGENTS.md（内容原样，一次性）。
 
 | 字段 | 类型 | 说明 |
 |------|------|------|
@@ -370,6 +376,7 @@ CREATE INDEX IF NOT EXISTS idx_practice_samples_target ON practice_samples(targe
 | `name` | string | 项目名称，默认取目录名；**与目录名绑定**（「目录名 = 书名」不变式：同名并存时目录与 name 同步去重为 `<书名> (N)`） |
 | `language` | `"zh"` \| `"en"` | 语言 |
 | `kind` | `"novel"` \| `"practice"` | **工作区类型（可选字段，2026-10）**：缺省 `novel`（旧文件兜底）。它决定目录映射（`books/` / `practice/`）、AI 工具集与内核提示词、路由守卫与左栏导航；**不参与 schema_version 判定**（宽松读取）。**API 恒下发**（服务端兜底后输出，客户端不二次兜底） |
+| `author_id` | string | **作家文风练习工作区专属（可选字段，2026-10）**：预置作家 id（shared `AUTHOR_CATALOG` 的键），仅 `kind = "practice"` 有意义；**写侧只在懒创建练习工作区时写入**（复用 `POST /project/create` 的 `author_id` 入参），`PUT /project/config` 不接受修改；缺失 / 未知值的练习工作区**不在根首页列出**（其练习端点访问 → 400 `VALIDATION_ERROR`，文案「练习工作区未关联预置作家」）。不参与 schema_version 判定（宽松读取）；小说工作区不写该字段 |
 | `origin` | string | **已废止（2026-09）**：项目出处字段（原用于书架分组）随「拆解小说」移除而废止——**读侧容忍残留键、不再写**（旧文件里的值一律忽略，不参与任何判定与展示） |
 | `prompt` | string | **已废弃**：项目级提示词——不再读写；项目规则改由项目目录 `AGENTS.md` 承载（见下节）。旧文件中的残留字段宽松读取（不参与 schema_version 判定），新写入不再产生该字段 |
 | `schema_version` | number | JSON 结构版本（与 outline.json 顶层同步写入） |

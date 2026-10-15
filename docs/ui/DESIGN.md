@@ -541,7 +541,7 @@ components:
 ### 导航与外壳
 
 **`sidebar`** — 左栏底 `{colors.surface}`（比内容面板暗一档），右侧 1px `{colors.hairline}`；**顶部标识 = `app-mark` 品牌标记 + 「书架」（根首页入口，`#/`）**（固定两字、**不挂 `truncate`**——合成斜体（`italic` 无真斜体字面可用）的墨迹会越出字宽，`overflow: hidden` 会切掉「架」右缘）、其下**书名按钮**（`#/overview` 项目概览入口）、八项一级导航、工具区（回收站）、底部四快捷入口（立即备份 / 同步云端 / 设置 / 主题）。**「概览」不再占一级导航位**（入口收敛到书名按钮，`#/overview` 时书名按钮用选中面；书架路由 `#/` 下左栏无选中面——书架自身就是当前页）。
-**左栏按工作区类型渲染（2026-10）**：小说工作区（`kind = "novel"`）= 上方形态；**练习工作区（`kind = "practice"`）= 顶部标识文案改「文风练习」（仍回根首页 `#/`）+ 一级导航只有「文风练习」（`#/practice`）+ 工具区不渲染（无回收站概念）+ 书名按钮不渲染**（它指向 `#/overview` 项目概览，练习工作区没有概览页——`#/overview` 在练习工作区被路由守卫挡回 `#/practice`，留着就是死按钮）+ **底部四入口中「立即备份 / 同步云端 / 设置 / 主题」保持不变**（备份与云端对两种工作区同样适用）。导航项集是 client 常量表（kind → 项集），**不是插件式注册表**。
+**左栏按工作区类型渲染（2026-10；练习态 2026-10 改版）**：小说工作区（`kind = "novel"`）= 上方形态；**练习工作区（`kind = "practice"`）= 顶部标识文案改「文风练习」（仍回根首页 `#/`）+ 一级导航五项（顺序：作家介绍 `#/author` / 作品介绍 `#/works` / 作家风格说明 `#/style` / 文风练习 `#/practice` / 自由练习 `#/free`）+ 工具区不渲染（无回收站概念）+ 书名按钮不渲染**（它指向 `#/overview` 项目概览，练习工作区没有概览页——`#/overview` 在练习工作区被路由守卫挡回 `#/practice`，留着就是死按钮）+ **底部四入口中「立即备份 / 同步云端 / 设置 / 主题」保持不变**（备份与云端对两种工作区同样适用）。顶部标识保持**分区身份**（不是作家名）；**作家身份由 InfoBar 项目名（纯文本）+ 各页内容表达**。导航项集是 client 常量表（kind → 项集），**不是插件式注册表**。
 **导航入口不受「文字按钮必须带边框」约束**：左栏导航项（Menu 八项 + 书名 / 设置 / 主题三个入口）与 Menu 项同级——无边框、选中态用 `{colors.surface-muted}` 灰面（Tailwind `bg-accent` = `colorFillTertiary`）、文字不变色，禁用 H4 只约束操作按钮（新建/重命名/重试/删除等）。**左栏底部区形态单一**：立即备份 / 同步云端 / 设置 / 主题四入口同为 `block` + `color="default" variant="text"` 的无边框文字按钮（**四行固定顺序**，「同步云端」在「立即备份」与「设置」之间）；「立即备份」「同步云端」是动作而非导航，形态随底部区（**H4 登记例外，仅此两处**）；禁用/加载态由 antd Button 派发（无项目 → 禁用；在途 → `loading` 防连点），失败经 `message` 提示。**`menu-item`** / **`menu-item-selected`** — 菜单项 32px 高、`{rounded.sm}`；**选中 = `{colors.surface-muted}` 灰面 + 文字不变色**（antd 默认的彩色选中项要显式覆盖：`itemSelectedBg` / `itemSelectedColor`）。**`info-bar`** — 中栏顶部 1px 底线；项目名（点击进 `#/overview` 项目概览）+ 阅读进度 + 语言 + 小屏聊天开关。字号 `{typography.caption}`。**形态按工作区类型（`kind`，2026-10）**：**练习工作区**下项目名降为**纯文本（不挂 `href`）**、**阅读进度不渲染**——练习工作区没有项目概览页，且 `#/overview` / `#/outline` 都被路由守卫挡回 `#/practice`，留着就是「点了没反应」的死链（点项目名还会瞬时挂载小说概览页并打出 400）；语言与小屏聊天开关两种 kind 都保留。
 
 **`tabs`（二级 tab）** — 页面内分区导航（设置页二级 tab / 人物页四 tab）：antd `Tabs` line 型（`items` 数组，`activeKey` 受控）。未选中 `{colors.secondary}`，选中与悬浮 `{colors.primary}`（`itemSelectedColor` / `itemHoverColor` / `inkBarColor` 的 antd 默认值就是 `colorPrimary`，**不重复覆盖**），选中指示条 2px `{colors.primary}`，底线 1px `{colors.hairline}` = 页头分割线（见 §Layout「中栏页头结构」）。**页内 tab 不进 URL、不参与左栏导航高亮**，选中态是页面 state（刷新回落默认 tab）。
@@ -679,7 +679,7 @@ components:
 | 分区 | 内容 |
 | :--- | :--- |
 | **小说** | 原「书架主页」形态（下方内容不变），标题行 + 行列表 |
-| **文风练习** | 练习工作区卡列表（名字 + 最近更新 + 样本数）+ 「新建练习区」（复用新建书弹窗，加 `kind` 参数） |
+| **文风练习** | **预置作家卡列表**（作家名 `section-title` + 一行作家介绍摘录 `caption-text` + 状态行：未开始 / `N 篇范文 · 最近更新 …`）。点已有数据卡 = 打开（落 `#/practice`）；点未开始卡 = **懒创建**（`practice/<作家名>/` 三文件 + `author_id`）再打开。**无「新建练习区」入口**（作家为产品预置，不可新建；也不提供重命名）。**`author_id` 缺失 / 未知的存量练习工作区不列出**（目录留盘、备份包与云端份不受影响）。排序：已有数据的在前（`updatedAt` 倒序），未开始的按预置清单顺序垫后 |
 
 两个分区各带一行 `section-title`；某分区为空时给一行 `caption-text` 引导文案（不渲染空卡片）。**当前打开的工作区高亮仍按项目 id 判定**（`GET /project/list` 回传 `id` 与 `kind`）。
 
@@ -706,22 +706,29 @@ components:
 
 > 本小节**不新增色值 / 字号 / 圆角**：沿用 `button-default` / `button-primary` / `card` / `data-row` / `icon-button` / `type-badge` / `caption-text` / `section-title` / 受控 Dialog（复选项与单选组都沿用 antd `Checkbox` / `Radio` 走全局 seed 派生；导出类型框不引 Tooltip、不写死样式）。
 
-### 文风练习区（`#/practice`，2026-10）
+### 作家文风练习区（2026-10 改版）
 
 **设计契约见 `../design/60-practice.md`；本节只定视觉与几何，不新增色值 / 字号 / 圆角。**
 
 | 面 | 形态 |
 | :--- | :--- |
-| **练习列表页（`#/practice`）** | 页头常驻模板（`section: h-full min-h-0 flex flex-col` + 内容进内层 `flex min-h-0 flex-1 flex-col overflow-y-auto`）；目标分组行（`section-title` + `caption-text` 计数）+ 样本行（`data-row`）= 来源说明（`truncate`）+ `type-badge` 状态（「未写稿」/「待点评」/「已点评」）+ 相对时间；页头右端组 = `[+ 新建目标]` / 目标内 `[+ 新建样本]` |
-| **新建目标 / 新建样本弹窗** | 受控 Dialog（复用 `components/ui/dialog.tsx`）：目标 = 名字 + 「我的观察」（可选，`Input.TextArea`，上限取常量）；样本 = 来源说明 + 范文 `TextArea`（粘贴） |
-| **练习页（`#/practice/:sampleId`）** | 页头（样本来源说明 + 目标名）+ 三段纵向：**范文（只读）** → **我的稿（可编辑）** → **点评卡** |
-| **范文块** | `card` 面 + 只读文本（`whitespace-pre-wrap`，不渲染 markdown）；不给编辑入口 |
-| **我的稿** | 纯文本 `TextArea`（**不引块编辑器**）；字体 / 字号 / 行高**间接引用 `--writing-*` 变量**（与写作面一致，**不引 `--paper-bg`**）；页内「保存」按钮（`button-primary`）+ 全站 `Ctrl/Cmd+S`（接入既有保存注册栈，失败 `return false` 阻断存档） |
-| **「让 AI 点评」** | 页内 `button-default`（有稿才可点）→ 发一条普通用户消息 + 聚焦右栏聊天（流式可见；点评留痕在会话历史） |
-| **点评卡** | `card` 面：`summary`（`caption-text`）+ 每个维度一组——维度名（`section-title` 级）+ 四行（范文特征 / 你的写法 / 引用 / 建议）；引用以引号列成行内文本（`{colors.secondary}`），**不做原文高亮定位**；无卡片时给一行 `caption-text` 空态（「还没点评」） |
-| **不做** | 引用高亮定位、卡片导出、评分、维度历史对比、多稿切换 |
+| **作家介绍（`#/author`）** | 页头常驻模板（`section: h-full min-h-0 flex flex-col` + 内容进内层 `flex min-h-0 flex-1 flex-col overflow-y-auto`）；`card` 面 markdown 渲染（`@ant-design/x-markdown`，**只读**） |
+| **作品介绍（`#/works`）** | 同上骨架；每部作品一个 `card`（作品名 `section-title` + 介绍 markdown）；**无编辑入口、无「新建作品」** |
+| **作家风格说明（`#/style`）** | 同上骨架；默认渲染态 = `card` 面 markdown（`x-markdown`）；页头右端组 = `[编辑]` `[导入 .md]` `[恢复预置]`；编辑态 = `Input.TextArea`（md 源码，上限取常量）+ `[保存]`（primary）+ `[取消]`；有用户覆盖时给一行 `caption-text`「当前为自定义版本」。**导入与恢复预置都会丢弃当前生效内容 ⇒ 先过受控确认框（`[取消]` + `[确认]`，按钮 danger）**；恢复预置后按钮组只留 `[编辑]` `[导入 .md]` |
+| **文风练习列表（`#/practice`）** | 页头常驻模板；**按作品分组**——组标题 = 作品名（`section-title`）+ `caption-text`「N 篇范文」；分组顺序 = 预置作品清单顺序 + 末尾「其他」组（**无样本的组不渲染**），组内按 `updatedAt` 倒序；样本行（`data-row`）= 片段说明（`truncate`；**空着不占文本**）+ `type-badge` 状态（未写稿 / 待点评 / 已点评）+ 相对时间；组内 `[+ 新建样本]`（预选该组作品）；页头右端组 `[+ 新建样本]`（默认「其他」） |
+| **新建样本弹窗** | 受控 Dialog（复用 `components/ui/dialog.tsx`）：`select` 关联作品（预置作品 + 「其他」；**必选，默认「其他」**；`popupMatchSelectWidth={false}`）+ `input` 片段说明（可空；**导入文件时用文件名预填**）+ 范文 `Input.TextArea` + 「导入文本文件」按钮（`.txt` / `.md`；**编码先试 UTF-8 再回落 GB18030**；超上限 → 框内错误提示且保留原输入）+ 一行 `caption-text` 字数上限（数字由常量插值） |
+| **练习详情（`#/practice/:sampleId`）** | 页头 title = 片段说明（空则回作品名，`truncateTitle`），description = 作品名 + 作家名；三段纵向：**范文（只读）** → **我的稿（可编辑）** → **点评卡** |
+| **自由练习列表（`#/free`）** | 页头常驻模板；平铺 `data-row`（题目 `truncate`；空题显示「（待出题）」）+ `type-badge` 四态（待出题 / 待写稿 / 待点评 / 已点评）+ 相对时间；页头右端组 `[+ 新建题目]` `[让 AI 出题]` |
+| **新建题目弹窗** | 受控 Dialog：题目（必填 `input`）+ 写作要求（可空 `Input.TextArea`；上限取常量） |
+| **自由练习详情（`#/free/:pieceId`）** | 页头 title = 题目（空则不挂标题，页头写「待出题」）；三段 = **题目卡**（题目 + 写作要求；空题态给 `[让 AI 出题]` 按钮 + 一行 `caption-text` 引导）→ **我的稿** → **点评卡** |
+| **范文块 / 题目卡** | `card` 面 + 只读文本（`whitespace-pre-wrap`，不渲染 markdown）；不给编辑入口 |
+| **我的稿** | 纯文本 `TextArea`（**不引块编辑器**）；字体 / 字号 / 行高**间接引用 `--writing-*` 变量**（与写作面一致，**不引 `--paper-bg`**）；页内「保存」按钮（`button-primary`）+ 全站 `Ctrl/Cmd+S`（接入既有保存注册栈，失败 `return false` 阻断存档）；字数 + 已保存时刻 |
+| **「让 AI 点评」** | 页内 `button-default`（**有已保存且非空的稿件才可点**）→ 发一条普通用户消息 + 聚焦右栏聊天（流式可见；留痕在会话历史） |
+| **「让 AI 出题」** | 空题篇的 `button-default` → 发一条普通用户消息 + 聚焦右栏聊天；AI 经工具写题目与写作要求，客户端收到写库帧后重拉详情 |
+| **点评卡** | `card` 面：`summary`（`caption-text`）+ 每个维度一组——维度名（`section-title` 级）+ 四行（**仿写 = 「范文特征」/ 自由练习 = 「风格特征」** / 你的写法 / 引用 / 建议）；引用以引号列成行内文本（`{colors.secondary}`），**不做原文高亮定位**；无卡片时给一行 `caption-text` 空态（「还没点评」） |
+| **不做** | 引用高亮定位、卡片导出、评分、维度历史对比、多稿切换、作品增删改、作家介绍 / 作品介绍编辑、双栏 markdown 预览 |
 
-**文案口径**：用户侧只用「范文 / 我的稿 / 点评 / 我的观察」——**不出现「画像」「维度校验」「scope」这类设计侧词**。
+**文案口径**：用户侧只用「范文 / 我的稿 / 点评 / 作品 / 风格说明 / 题目 / 写作要求」——**不出现「画像」「维度校验」「scope」这类设计侧词**。
 
 ### antd 组件 token 覆盖（全部覆盖项就这些）
 

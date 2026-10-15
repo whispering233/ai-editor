@@ -17,6 +17,9 @@
     name?: string;       // 项目名称，默认取目录名
     language?: "zh" | "en";
     kind?: "novel" | "practice";  // 工作区类型（缺省 novel）；落 project.json，决定目录约定之外的 AI 工具集/提示词/导航
+    author_id?: string;  // **仅 kind = "practice"**：预置作家 id（shared AUTHOR_CATALOG 的键），落 project.json 的 author_id
+                         //   （懒创建练习工作区时由客户端传入）；kind = "novel" 传入 → 400 VALIDATION_ERROR；
+                         //   给了但不在预置清单内 → 400 VALIDATION_ERROR
     // prompt 已废弃：不再接受（strict schema 传入 → 400 VALIDATION_ERROR）；
     // 项目规则改由 PUT /api/v1/project/agents 写入 AGENTS.md
   };
@@ -87,7 +90,7 @@
 
 ### POST /api/v1/project/delete
 
-删除书架中的一本书（本地目录 + 可选云端目录）。**删除不可恢复**：本地 `.backups/` 在该书目录内，随目录一并删除。
+删除书架中的一本书（本地目录 + 可选云端目录）。**删除不可恢复**：本地 `.backups/` 在该书目录内，随目录一并删除。**练习工作区的删除 = 重置**（删后预置作家卡回到「未开始」；作家素材与预置说明不受影响）。
 
 ```typescript
 // Req
@@ -135,6 +138,8 @@
     name: string;      // 目录名（书名 / 练习区名）
     path: string;      // 工作区目录绝对路径（创作根/<kind 目录>/<名字>/）
     kind: "novel" | "practice";  // 工作区类型（旧文件缺 kind → 服务端兜底 novel 后输出）
+    authorId: string | null;      // **仅练习工作区**：预置作家 id（project.json 的 author_id；缺失/未知 → null）——
+                                  //   客户端据此把练习行与预置作家清单对应；**解析不到预置作家的练习行客户端不展示**（存量目录留盘）
     updatedAt: string; // project.json 的 updated_at（ISO 8601）
   }>;
 }
@@ -142,7 +147,7 @@
 
 **语义**：
 - **不依赖当前项目**——待命（无 currentProject）时同样可用；目录不存在返回空数组（不报错）。
-- 排序按 `updatedAt` 倒序（最近更新在前）；**分区渲染由客户端做**（服务端不做分组逻辑）。
+- 排序按 `updatedAt` 倒序（最近更新在前）；**分区渲染由客户端做**（服务端不做分组逻辑；练习分区与预置作家清单的合并（未开始卡）也在客户端——服务端只报盘上已有工作区）。
 - 过滤规则：仅目录 + 含 `project.json`（`readProjectFile` 探测）；无 project.json 的目录（如草稿箱）与普通文件不列出。
 - 兼容旧语义：创作根自身若有 `project.json`（旧部署模式）仍按 `detectProject` 打开，`list` 只列工作区子目录（根自身不是工作区）。
 
@@ -160,6 +165,8 @@
   language: "zh" | "en";
   kind: "novel" | "practice";  // 工作区类型（**恒下发**）：服务端经 shared resolveWorkspaceKind 兜底后输出——
                                //   旧 project.json 缺 kind / 未知值 → "novel"（客户端不二次兜底）
+  authorId: string | null;   // **仅练习工作区有值**：预置作家 id（shared AUTHOR_CATALOG 的键）；
+                             //   小说工作区 / 存量练习工作区缺 author_id → null（后者不在根首页列出，其练习端点 → 400 VALIDATION_ERROR）
   // prompt 字段已废弃：不再返回——项目规则唯一事实源改为项目目录 AGENTS.md
   // （见 GET /api/v1/project/agents）；旧 project.json 中的 prompt 残留字段不再读取
   schemaVersion: number;     // schema 版本（对应 project.json 的 schema_version）
