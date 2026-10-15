@@ -33,6 +33,7 @@
   "dependencies": {
     "@earendil-works/pi-ai": "1.0.4",
     "@earendil-works/pi-coding-agent": "1.0.4",
+    "@earendil-works/pi-codemode": "1.0.4",
     "@hono/node-server": "^2.0.12",
     "@whispering233/ai-editor-agent": "workspace:*",
     "@whispering233/ai-editor-db": "workspace:*",
