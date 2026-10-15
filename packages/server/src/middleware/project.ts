@@ -194,13 +194,13 @@ function logStartupOpenFailure(root: string, err: unknown): void {
  * 避免后续 open 时 ensureSchemaCompatible 触发无意义重建并留空库 data.db.v0.bak）。
  * 注：`prompt` 已废弃——新项目不再写入该字段（项目规则改由 承载）。
  *
- * @param configOverride 可选覆盖 {name?, language?}（create 请求的 config 字段）；
+ * @param configOverride 可选覆盖 {name?, language?, kind?, author_id?}（create 请求的 config 字段）；
  * 传入时 updated_at 一并刷新。
  * @returns 已打开的项目上下文（调用方负责 closeProject；create 路由创建后即关闭）
  */
 export function initProject(
   root: string,
-  configOverride?: Partial<Pick<ProjectFileConfig, "name" | "language" | "kind">>,
+  configOverride?: Partial<Pick<ProjectFileConfig, "name" | "language" | "kind" | "author_id">>,
 ): ProjectContext {
   mkdirSync(root, { recursive: true });
   const now = nowIso();
@@ -214,7 +214,7 @@ export function initProject(
     backup_frequency_minutes: DEFAULT_BACKUP_FREQUENCY_MINUTES,
     created_at: now,
     updated_at: now,
-    ...configOverride, // 覆盖参数 name / language（若有）；updated_at 已含当前时间
+    ...configOverride, // 覆盖参数 name / language / kind / author_id（若有）；updated_at 已含当前时间
  // 工作区类型：创建时**显式写入**（缺省 novel）——存量文件缺 kind 的读侧兜底不落盘，
  // 新文件恒带该键；归一唯一入口 = shared resolveWorkspaceKind
     kind: resolveWorkspaceKind(configOverride?.kind),

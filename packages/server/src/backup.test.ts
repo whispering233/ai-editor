@@ -14,11 +14,11 @@ import {
   AGENTS_FILE_NAME,
   closeDatabase,
   createEntity,
+  createPracticePiece,
   createPracticeSample,
-  createPracticeTarget,
   DATA_DB_FILE_NAME,
+  listPracticePieces,
   listPracticeSamples,
-  listPracticeTargets,
   openDatabase,
   OUTLINE_FILE_NAME,
   PROJECT_FILE_NAME,
@@ -938,12 +938,10 @@ describe("POST /project/backup/restore", () => {
       { ...makeConfig("proj-kind-target", "仿写练习"), kind: "practice" },
       { id: "root", type: "root", schema_version: SCHEMA_VERSION, children: [] },
     );
- // 练习数据（专属两表；恢复被拒后行数必须不变）
+ // 练习数据（范文样本 + 自由练习篇；恢复被拒后行数必须不变）
     const seedDb = openDatabase(join(dir, DATA_DB_FILE_NAME));
-    const target = createPracticeTarget(seedDb, { name: "范文目标" });
-    expect(
-      createPracticeSample(seedDb, { targetId: target.id, sourceLabel: "范文一", text: "范文正文" }),
-    ).not.toBeNull();
+    createPracticeSample(seedDb, { excerptLabel: "节选", text: "范文正文" });
+    createPracticePiece(seedDb, { topicSource: "user", topic: "题目" });
     closeDatabase(seedDb);
 
     const app = await openProject(dir);
@@ -969,8 +967,8 @@ describe("POST /project/backup/restore", () => {
  // 练习数据行数不变（专属表直查）
     const checkDb = openDatabase(join(dir, DATA_DB_FILE_NAME));
     try {
-      expect(listPracticeTargets(checkDb)).toHaveLength(1);
-      expect(listPracticeSamples(checkDb, target.id)).toHaveLength(1);
+      expect(listPracticeSamples(checkDb)).toHaveLength(1);
+      expect(listPracticePieces(checkDb)).toHaveLength(1);
     } finally {
       closeDatabase(checkDb);
     }

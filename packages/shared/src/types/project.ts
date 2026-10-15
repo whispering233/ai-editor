@@ -19,6 +19,12 @@ export interface ProjectConfig {
  * 客户端不二次兜底。决定目录映射（`books/` / `practice/`）、AI 工具集与提示词、导航
  */
   kind: WorkspaceKind;
+ /**
+ * 预置作家 id（**仅练习工作区有值**，2026-10）：project.json 的 `author_id`，键集 = shared
+ * `AUTHOR_CATALOG`；小说工作区 / 存量练习工作区缺该字段（或值已不在预置清单）→ null。
+ * 恒下发，客户端不二次兜底
+ */
+  authorId: string | null;
  /** schema 版本（对应 project.json 的 schema_version） */
   schemaVersion: number;
  /** 大纲「当前位置」节点 id（伏笔健康指标依赖）；null = 未设置 */
@@ -46,6 +52,12 @@ export interface ProjectFileConfig {
  * 读侧兜底**不落盘**（不因读取把缺省值补进存量文件）
  */
   kind?: WorkspaceKind;
+ /**
+ * 预置作家 id（**可选字段**，2026-10）：仅 `kind = "practice"` 有意义；**写侧只在懒创建练习工作区时
+ * 写入**（`POST /project/create` 的 `author_id` 入参），`PUT /project/config` 不接受修改。
+ * 缺失 / 未知值的练习工作区不在根首页列出，其练习端点 → 400 `VALIDATION_ERROR`
+ */
+  author_id?: string;
  /**
  * **已废弃**：项目级提示词——不再读写；项目规则改由项目目录 承载。
  * 旧文件中的残留字段宽松读取（不参与 schema_version 判定），新写入不再产生该字段

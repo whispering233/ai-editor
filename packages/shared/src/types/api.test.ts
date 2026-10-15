@@ -44,11 +44,17 @@ import {
   relationUpdateMetaReqSchema,
   settingsLlmGetResSchema,
   settingsLlmPutReqSchema,
+  practicePieceCreateReqSchema,
   practiceSampleCreateReqSchema,
   practiceSampleDetailResSchema,
-  practiceSampleDraftPutReqSchema,
+  practiceDraftPutReqSchema,
+  practiceStylePackPutReqSchema,
 } from "./api.js";
-import { MAX_PRACTICE_SAMPLE_CHARS } from "../constants/practice.js";
+import {
+  MAX_PRACTICE_SAMPLE_CHARS,
+  MAX_PRACTICE_STYLE_PACK_CHARS,
+  MAX_PRACTICE_TOPIC_CHARS,
+} from "../constants/practice.js";
 
 describe("ErrorCode 完整性", () => {
   it("包含全部 10 个现行错误码", () => {
@@ -107,6 +113,7 @@ describe("project 端点", () => {
       name: "我的小说",
       language: "zh",
       kind: "novel",
+      authorId: null,
       schemaVersion: 1,
       currentPosition: "sc-42",
       deductionNodes: [],
@@ -178,6 +185,30 @@ describe("project 端点", () => {
     expect(projectAgentsPutResSchema.safeParse({ saved: true }).success).toBe(false); // 缺 updatedAt
   });
 
+  it("projectConfigSchema：authorId 恒下发（nullable；练习工作区带作家 id，小说工作区 null）", () => {
+    expect(projectConfigSchema.parse(validConfig()).authorId).toBeNull();
+    expect(projectConfigSchema.parse({ ...validConfig(), kind: "practice", authorId: "jiangnan" }).authorId).toBe(
+      "jiangnan",
+    );
+    const withoutAuthor = { ...validConfig() } as Record<string, unknown>;
+    delete withoutAuthor.authorId;
+    expect(projectConfigSchema.safeParse(withoutAuthor).success).toBe(false); // 缺 authorId（响应形态必填，无值用 null）
+    expect(projectConfigSchema.safeParse({ ...validConfig(), authorId: 42 }).success).toBe(false);
+  });
+
+  it("projectCreateReqSchema：config.author_id 可选（落 project.json）；strict 拒绝非法字段", () => {
+    expect(
+      projectCreateReqSchema.parse({ path: "/x", config: { kind: "practice", author_id: "jiangnan" } }).config,
+    ).toEqual({ kind: "practice", author_id: "jiangnan" });
+    expect(projectCreateReqSchema.parse({ path: "/x", config: { name: "x" } }).config?.author_id).toBeUndefined();
+    expect(projectCreateReqSchema.safeParse({ path: "/x", config: { authorId: "jiangnan" } }).success).toBe(false); // 请求体 snake_case
+    expect(projectCreateReqSchema.safeParse({ path: "/x", config: { author_id: 42 } }).success).toBe(false);
+  });
+
+  it("projectConfigUpdateReqSchema：不接受 author_id（strict 拒绝——作家只在懒创建时写入）", () => {
+    expect(projectConfigUpdateReqSchema.safeParse({ author_id: "jiangnan" }).success).toBe(false);
+  });
+
   it("language 非法拒绝；currentPosition null 允许；backupFrequencyMinutes null（关闭）允许", () => {
     expect(projectConfigSchema.safeParse({ ...validConfig(), language: "fr" }).success).toBe(false);
     expect(projectConfigSchema.parse({ ...validConfig(), currentPosition: null }).currentPosition).toBeNull();
@@ -191,6 +222,7 @@ describe("project 端点", () => {
         id: "proj-1",
         name: "我的小说",
         language: "zh",
+        authorId: null,
         schemaVersion: 1,
         currentPosition: null,
         backupFrequencyMinutes: 10,
@@ -250,8 +282,22 @@ describe("project 端点", () => {
     const res = projectListResSchema.parse({
       rootPath: "/home/me/bookshelf",
       books: [
-        { id: "proj-2", name: "第二本", path: "/home/me/bookshelf/books/第二本", kind: "novel", updatedAt: "2026-08-02T10:00:00Z" },
-        { id: "proj-1", name: "第一本", path: "/home/me/bookshelf/books/第一本", kind: "novel", updatedAt: "2026-08-01T10:00:00Z" },
+        {
+          id: "proj-2",
+          name: "第二本",
+          path: "/home/me/bookshelf/books/第二本",
+          kind: "novel",
+          authorId: null,
+          updatedAt: "2026-08-02T10:00:00Z",
+        },
+        {
+          id: "proj-1",
+          name: "第一本",
+          path: "/home/me/bookshelf/books/第一本",
+          kind: "novel",
+          authorId: null,
+          updatedAt: "2026-08-01T10:00:00Z",
+        },
       ],
     });
     expect(res.rootPath).toBe("/home/me/bookshelf");
@@ -259,53 +305,72 @@ describe("project 端点", () => {
     expect(res.books[0].name).toBe("第二本");
     expect(res.books[0].id).toBe("proj-2");
     expect(res.books[0].kind).toBe("novel");
+    expect(res.books[0].authorId).toBeNull(); // 小说工作区恒 null（客户端据此不列练习行）
   });
 
   it("projectListResSchema：books 为空数组合法；缺字段（id / name / path / kind / updatedAt）/ 类型不符拒绝", () => {
  // 空书架合法
     expect(projectListResSchema.parse({ rootPath: "/x", books: [] }).books).toEqual([]);
- // 工作区类型（kind）必填：练习工作区原样过（分区渲染由客户端做）
+ // 工作区类型（kind）必填：练习工作区带预置作家 id（authorId 回传，客户端据此与作家清单对应）
     expect(
       projectListResSchema.parse({
         rootPath: "/x",
         books: [
+          {
+            id: "proj-p",
+            name: "练习区",
+            path: "/x/practice/练习区",
+            kind: "practice",
+            authorId: "jiangnan",
+            updatedAt: "2026-08-01T10:00:00Z",
+          },
+        ],
+      }).books[0],
+    ).toMatchObject({ kind: "practice", authorId: "jiangnan" });
+ // 练习行缺 authorId（响应形态必填，无值用 null）→ 拒绝
+    expect(
+      projectListResSchema.safeParse({
+        rootPath: "/x",
+        books: [
           { id: "proj-p", name: "练习区", path: "/x/practice/练习区", kind: "practice", updatedAt: "2026-08-01T10:00:00Z" },
         ],
-      }).books[0].kind,
-    ).toBe("practice");
+      }).success,
+    ).toBe(false);
  // 书缺 kind → 拒绝（服务端兜底后恒下发；缺值 = 服务端 bug）
     expect(
       projectListResSchema.safeParse({
         rootPath: "/x",
-        books: [{ id: "proj-1", name: "书", path: "/x/books/书", updatedAt: "2026-08-01T10:00:00Z" }],
+        books: [{ id: "proj-1", name: "书", path: "/x/books/书", authorId: null, updatedAt: "2026-08-01T10:00:00Z" }],
       }).success,
     ).toBe(false);
  // kind 未知值 → 拒绝
     expect(
       projectListResSchema.safeParse({
         rootPath: "/x",
-        books: [{ id: "proj-1", name: "书", path: "/x/books/书", kind: "x", updatedAt: "2026-08-01T10:00:00Z" }],
+        books: [
+          { id: "proj-1", name: "书", path: "/x/books/书", kind: "x", authorId: null, updatedAt: "2026-08-01T10:00:00Z" },
+        ],
       }).success,
     ).toBe(false);
  // 书缺 updatedAt → 拒绝
     expect(
       projectListResSchema.safeParse({
         rootPath: "/x",
-        books: [{ id: "proj-1", name: "书", path: "/x/books/书", kind: "novel" }],
+        books: [{ id: "proj-1", name: "书", path: "/x/books/书", kind: "novel", authorId: null }],
       }).success,
     ).toBe(false);
  // 书缺 id（项目身份，不得缺失）→ 拒绝
     expect(
       projectListResSchema.safeParse({
         rootPath: "/x",
-        books: [{ name: "书", path: "/x/books/书", kind: "novel", updatedAt: "2026-08-01T10:00:00Z" }],
+        books: [{ name: "书", path: "/x/books/书", kind: "novel", authorId: null, updatedAt: "2026-08-01T10:00:00Z" }],
       }).success,
     ).toBe(false);
  // id 非 string → 拒绝
     expect(
       projectListResSchema.safeParse({
         rootPath: "/x",
-        books: [{ id: 1, name: "书", path: "/x/books/书", kind: "novel", updatedAt: "2026-08-01T10:00:00Z" }],
+        books: [{ id: 1, name: "书", path: "/x/books/书", kind: "novel", authorId: null, updatedAt: "2026-08-01T10:00:00Z" }],
       }).success,
     ).toBe(false);
  // rootPath 非 string → 拒绝
@@ -845,35 +910,71 @@ describe("settings/llm 端点 schema（pi provider 目录契约）", () => {
   });
 });
 
-describe("practice 端点 schema（docs/api/120-api-practice.md；旧 targets 模型已废）", () => {
+describe("practice 端点 schema（docs/api/120-api-practice.md；2026-10 改版）", () => {
   it("请求 schema 消费 shared 上限常量：恰好上限通过、超 1 字符拒绝（不复述数字）", () => {
     const text = "d".repeat(MAX_PRACTICE_SAMPLE_CHARS);
     expect(practiceSampleCreateReqSchema.safeParse({ text }).success).toBe(true);
     expect(practiceSampleCreateReqSchema.safeParse({ text: text + "d" }).success).toBe(false);
+    const pack = "d".repeat(MAX_PRACTICE_STYLE_PACK_CHARS);
+    expect(practiceStylePackPutReqSchema.safeParse({ content: pack }).success).toBe(true);
+    expect(practiceStylePackPutReqSchema.safeParse({ content: pack + "d" }).success).toBe(false);
   });
 
-  it('source_kind 收窄为 "paste"；请求字段名 snake_case（strict 拒绝 camelCase）', () => {
-    expect(practiceSampleCreateReqSchema.safeParse({ source_kind: "paste", text: "范文" }).success).toBe(true);
-    // 省略 = "paste"（不传 source_kind 也合法）
+  it("样本新建：work_id 可省略 / 可 null（「其他」）；strict 拒绝未知字段与 camelCase", () => {
     expect(practiceSampleCreateReqSchema.safeParse({ text: "范文" }).success).toBe(true);
-    expect(practiceSampleCreateReqSchema.safeParse({ source_kind: "file", text: "范文" }).success).toBe(false);
-    expect(practiceSampleCreateReqSchema.safeParse({ sourceKind: "paste", text: "范文" }).success).toBe(false);
-    expect(practiceSampleDraftPutReqSchema.safeParse({ draft: "" }).success).toBe(true); // 空串 = 清空稿件
-    expect(practiceSampleDraftPutReqSchema.safeParse({ draft: "稿", extra: 1 }).success).toBe(false); // strict 单字段
+    expect(practiceSampleCreateReqSchema.parse({ work_id: null, text: "范文" }).work_id).toBeNull();
+    expect(practiceSampleCreateReqSchema.parse({ work_id: "shoujie", excerpt_label: "节选", text: "范文" })).toEqual({
+      work_id: "shoujie",
+      excerpt_label: "节选",
+      text: "范文",
+    });
+    expect(practiceSampleCreateReqSchema.safeParse({ workId: "shoujie", text: "范文" }).success).toBe(false);
+    // 旧模型的 source_kind / source_label 随改版移除
+    expect(practiceSampleCreateReqSchema.safeParse({ source_kind: "paste", text: "范文" }).success).toBe(false);
   });
 
-  it("文本类字段 trim 非空：纯空白 text 一律拒绝，带空白值落库前 trim", () => {
+  it("写稿请求（两类练习共用）：draft 允许空串（清空）；strict 单字段", () => {
+    expect(practiceDraftPutReqSchema.safeParse({ draft: "" }).success).toBe(true);
+    expect(practiceDraftPutReqSchema.safeParse({ draft: "稿", extra: 1 }).success).toBe(false);
+    expect(practiceDraftPutReqSchema.safeParse({ draft: "d".repeat(20001) }).success).toBe(false);
+  });
+
+  it("文本类字段 trim 非空：纯空白范文 / 风格说明一律拒绝，带空白值落库前 trim", () => {
     expect(practiceSampleCreateReqSchema.safeParse({ text: "   " }).success).toBe(false);
     expect(practiceSampleCreateReqSchema.safeParse({ text: "\n\t " }).success).toBe(false);
     expect(practiceSampleCreateReqSchema.parse({ text: "  明海出家已经四年了。  " })).toEqual({
       text: "明海出家已经四年了。",
     });
+    expect(practiceStylePackPutReqSchema.safeParse({ content: "  " }).success).toBe(false);
+  });
+
+  it('自由练习新建：topic_source = "user" 要求题目 trim 非空', () => {
+    expect(practicePieceCreateReqSchema.safeParse({ topic_source: "user", topic: "雨夜" }).success).toBe(true);
+    expect(practicePieceCreateReqSchema.safeParse({ topic_source: "user" }).success).toBe(false);
+    expect(practicePieceCreateReqSchema.safeParse({ topic_source: "user", topic: "   " }).success).toBe(false);
+    const tooLong = practicePieceCreateReqSchema.safeParse({
+      topic_source: "user",
+      topic: "d".repeat(MAX_PRACTICE_TOPIC_CHARS + 1),
+    });
+    expect(tooLong.success).toBe(false);
+    if (!tooLong.success) expect(tooLong.error.issues[0]?.path).toEqual(["topic"]);
+  });
+
+  it('自由练习新建：topic_source = "ai" 时题目必须省略或空串（待出题空题行）', () => {
+    expect(practicePieceCreateReqSchema.safeParse({ topic_source: "ai" }).success).toBe(true);
+    expect(practicePieceCreateReqSchema.safeParse({ topic_source: "ai", topic: "" }).success).toBe(true);
+    expect(practicePieceCreateReqSchema.safeParse({ topic_source: "ai", topic: "AI 出的题" }).success).toBe(false);
+    expect(practicePieceCreateReqSchema.safeParse({ topic_source: "ai", topic: "   " }).success).toBe(true); // trim 后为空 = 省略
+    expect(practicePieceCreateReqSchema.safeParse({ topic_source: "x" }).success).toBe(false);
+    expect(practicePieceCreateReqSchema.safeParse({ topic_source: "user", topic: "题", extra: 1 }).success).toBe(false);
   });
 
   it("响应 schema 与文档字段形状一致（详情含范文全文 + 稿 + 卡体；卡内层 snake_case）", () => {
     const T = "2026-10-01T10:00:00Z";
     const detail = practiceSampleDetailResSchema.parse({
       id: "ps-1",
+      workId: null,
+      excerptLabel: "",
       text: "明海出家已经四年了。",
       draft: "",
       feedback: {
@@ -893,6 +994,7 @@ describe("practice 端点 schema（docs/api/120-api-practice.md；旧 targets �
       updatedAt: T,
     });
     expect(detail.feedback?.dimensions[0].sample_trait).toBe("短句"); // 卡内层 snake_case（嵌套透传）
+    expect(detail.workId).toBeNull(); // null = 「其他」
   });
 });
 
@@ -903,6 +1005,7 @@ function validConfig() {
     name: "我的小说",
     language: "zh" as const,
     kind: "novel" as const, // 工作区类型（恒下发字段）
+    authorId: null as string | null, // 预置作家 id（仅练习工作区有值）
     schemaVersion: 1,
     currentPosition: "sc-42",
     deductionNodes: [], // （推演标记字段）

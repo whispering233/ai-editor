@@ -212,6 +212,18 @@ describe("项目映射", () => {
     expect(mapConfigToProjectFile(mapProjectFileToConfig(file))).not.toHaveProperty("kind");
   });
 
+  it("author_id 读侧映射：kind = practice 且命中预置清单 → authorId；缺字段 / 未知值 / 小说工作区 → null", () => {
+    expect(mapProjectFileToConfig(file).authorId).toBeNull(); // 旧文件（无该键）
+    const practice = { ...file, kind: "practice" as const };
+    expect(mapProjectFileToConfig({ ...practice, author_id: "jiangnan" }).authorId).toBe("jiangnan");
+    expect(mapProjectFileToConfig({ ...practice, author_id: "不存在" }).authorId).toBeNull(); // 未知值（客户端不列该行）
+    expect(mapProjectFileToConfig({ ...file, author_id: "jiangnan" }).authorId).toBeNull(); // 小说工作区：无值
+ // 写回不因读侧映射而凭空添加 author_id 键（与 kind 同口径：写侧只写显式值）
+    expect(mapConfigToProjectFile(mapProjectFileToConfig({ ...practice, author_id: "jiangnan" }))).not.toHaveProperty(
+      "author_id",
+    );
+  });
+
   it("backup 频率读侧语义：显式 null/0 → null（关闭）；缺失 → 10（读映射宽松、写只写显式）", () => {
     expect(mapProjectFileToConfig({ ...file, backup_frequency_minutes: null }).backupFrequencyMinutes).toBeNull();
     expect(mapProjectFileToConfig({ ...file, backup_frequency_minutes: 0 }).backupFrequencyMinutes).toBeNull();

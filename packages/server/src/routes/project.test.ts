@@ -313,6 +313,77 @@ describe("POST /project/create", () => {
     expect((await cfg.json()).data.kind).toBe("practice");
   });
 
+  it("author_id：kind = practice 时落 project.json；GET /config 回 authorId（懒创建练习工作区的唯一写入口）", async () => {
+    const root = makeTmpDir();
+    setProjectRoot(root);
+    const dir = join(root, "practice", "江南");
+    const app = buildApp();
+    const res = await app.request("/api/v1/project/create", {
+      method: "POST",
+      headers: HOST_HEADERS,
+      body: JSON.stringify({ path: dir, config: { name: "江南", kind: "practice", author_id: "jiangnan" } }),
+    });
+    expect(res.status).toBe(200);
+    expect(readProjectFile(dir)?.author_id).toBe("jiangnan");
+
+    const openRes = await app.request("/api/v1/project/open", {
+      method: "POST",
+      headers: HOST_HEADERS,
+      body: JSON.stringify({ path: dir }),
+    });
+    expect((await openRes.json()).data.config.authorId).toBe("jiangnan"); // open / config 同口径
+    const cfg = await app.request("/api/v1/project/config", { headers: HOST_HEADERS });
+    expect((await cfg.json()).data.authorId).toBe("jiangnan");
+
+ // list 同样回 authorId（根首页练习分区据此对应预置作家）
+    const list = await app.request("/api/v1/project/list", { headers: HOST_HEADERS });
+    expect((await list.json()).data.books).toEqual([
+      expect.objectContaining({ kind: "practice", authorId: "jiangnan" }),
+    ]);
+  });
+
+  it("author_id：kind = novel 传入 → 400 VALIDATION_ERROR（不静默丢弃）；project.json 不落该键", async () => {
+    const dir = makeTmpDir();
+    const res = await buildApp().request("/api/v1/project/create", {
+      method: "POST",
+      headers: HOST_HEADERS,
+      body: JSON.stringify({ path: dir, config: { kind: "novel", author_id: "jiangnan" } }),
+    });
+    expect(res.status).toBe(400);
+    const body = await res.json();
+    expect(body.error.code).toBe("VALIDATION_ERROR");
+    expect(body.error.message).toContain("author_id");
+ // 拒绝的请求不留痕（三文件都没建）
+    expect(readProjectFile(dir)).toBeNull();
+  });
+
+  it("author_id：值不在预置作家清单 → 400 VALIDATION_ERROR；缺省 = 不写该键", async () => {
+    const root = makeTmpDir();
+    setProjectRoot(root);
+    const app = buildApp();
+    const rejected = await app.request("/api/v1/project/create", {
+      method: "POST",
+      headers: HOST_HEADERS,
+      body: JSON.stringify({
+        path: join(root, "practice", "未知作家"),
+        config: { kind: "practice", author_id: "汪曾祺" },
+      }),
+    });
+    expect(rejected.status).toBe(400);
+    expect((await rejected.json()).error.code).toBe("VALIDATION_ERROR");
+
+ // 不传 author_id 的练习工作区：照常创建，project.json 不出现该键（存量 / 未关联形态）
+    const dir = join(root, "practice", "未关联");
+    expect(
+      (await app.request("/api/v1/project/create", {
+        method: "POST",
+        headers: HOST_HEADERS,
+        body: JSON.stringify({ path: dir, config: { kind: "practice" } }),
+      })).status,
+    ).toBe(200);
+    expect(readProjectFile(dir)).not.toHaveProperty("author_id");
+  });
+
   it("create config 传非法 kind → 400 VALIDATION_ERROR（枚举限 novel / practice）", async () => {
     const dir = makeTmpDir();
     const res = await buildApp().request("/api/v1/project/create", {
@@ -406,6 +477,7 @@ describe("POST /project/open", () => {
       name: "我的小说",
       language: "zh",
       kind: "novel", // 旧文件缺 kind → 读侧兜底缺省
+      authorId: null, // 小说工作区恒 null（仅练习工作区有值）
       schemaVersion: SCHEMA_VERSION,
       currentPosition: "sc-1",
       deductionNodes: [], // 旧文件缺字段 → 读侧兜底空数组
@@ -747,6 +819,7 @@ describe("GET/PUT /project/config", () => {
         name: "配置项目",
         language: "zh",
         kind: "novel", // makeConfig 缺 kind → 读侧兜底缺省
+        authorId: null, // makeConfig 缺 author_id → null
         schemaVersion: SCHEMA_VERSION,
         currentPosition: null,
         deductionNodes: [], // makeConfig 缺字段 → 读侧兜底空数组
@@ -811,6 +884,22 @@ describe("GET/PUT /project/config", () => {
     });
  // 盘上 kind 不被写入（无当前项目 kind 变更，拒绝的 PUT 不留痕）
     expect(readProjectFile(dir)).not.toHaveProperty("kind");
+  });
+
+  it("PUT /config 传 author_id → 400 VALIDATION_ERROR（strict 拒绝：作家只在懒创建时写入）", async () => {
+    const dir = makeTmpDir();
+    const app = await openProject(dir);
+    const res = await app.request("/api/v1/project/config", {
+      method: "PUT",
+      headers: HOST_HEADERS,
+      body: JSON.stringify({ author_id: "jiangnan" }),
+    });
+    expect(res.status).toBe(400);
+    expect(await res.json()).toEqual({
+      success: false,
+      error: { code: "VALIDATION_ERROR", message: expect.stringContaining("author_id"), fields: expect.any(Array) },
+    });
+    expect(readProjectFile(dir)).not.toHaveProperty("author_id"); // 拒绝的 PUT 不留痕
   });
 
   it("PUT 更新 name/language → updated:true，GET 读回新值，project.json updated_at 刷新", async () => {
@@ -1403,10 +1492,16 @@ describe("GET /project/list（书架：创作根各工作区目录扫描）", ()
     name: string,
     updatedAt: string,
     kind?: ProjectFileConfig["kind"],
+    authorId?: string,
   ): string {
     const dir = join(root, dirName, name);
     mkdirSync(dir, { recursive: true });
-    writeProjectFile(dir, { ...makeConfig(`proj-${name}`, name), ...(kind === undefined ? {} : { kind }), updated_at: updatedAt });
+    writeProjectFile(dir, {
+      ...makeConfig(`proj-${name}`, name),
+      ...(kind === undefined ? {} : { kind }),
+      ...(authorId === undefined ? {} : { author_id: authorId }),
+      updated_at: updatedAt,
+    });
     return dir;
   }
 
@@ -1432,6 +1527,7 @@ describe("GET /project/list（书架：创作根各工作区目录扫描）", ()
         name: "第二本",
         path: join(root, "books", "第二本"),
         kind: "novel",
+        authorId: null, // 小说工作区无作家
         updatedAt: "2026-08-02T10:00:00Z",
       },
       {
@@ -1439,6 +1535,7 @@ describe("GET /project/list（书架：创作根各工作区目录扫描）", ()
         name: "第一本",
         path: join(root, "books", "第一本"),
         kind: "novel",
+        authorId: null,
         updatedAt: "2026-08-01T10:00:00Z",
       },
     ]);
@@ -1449,7 +1546,7 @@ describe("GET /project/list（书架：创作根各工作区目录扫描）", ()
     setProjectRoot(root);
  // 小说区旧、练习区新 → 练习区排前（跨目录统一排序，服务端不分组）
     seedWorkspace(root, "books", "旧小说", "2026-08-01T10:00:00Z");
-    seedWorkspace(root, "practice", "仿写练习", "2026-08-03T10:00:00Z", "practice");
+    seedWorkspace(root, "practice", "仿写练习", "2026-08-03T10:00:00Z", "practice", "jiangnan");
 
     const res = await buildApp().request("/api/v1/project/list", { headers: HOST_HEADERS });
     expect(res.status).toBe(200);
@@ -1459,6 +1556,7 @@ describe("GET /project/list（书架：创作根各工作区目录扫描）", ()
         name: "仿写练习",
         path: join(root, "practice", "仿写练习"),
         kind: "practice",
+        authorId: "jiangnan", // 练习行回预置作家 id（客户端据此与作家清单对应）
         updatedAt: "2026-08-03T10:00:00Z",
       },
       {
@@ -1466,6 +1564,7 @@ describe("GET /project/list（书架：创作根各工作区目录扫描）", ()
         name: "旧小说",
         path: join(root, "books", "旧小说"),
         kind: "novel",
+        authorId: null,
         updatedAt: "2026-08-01T10:00:00Z",
       },
     ]);
@@ -1482,6 +1581,7 @@ describe("GET /project/list（书架：创作根各工作区目录扫描）", ()
       name: "无 kind 练习",
       path: join(root, "practice", "无 kind 练习"),
       kind: "novel",
+      authorId: null, // kind 兜底为 novel ⇒ 即便盘上有 author_id 也不下发（仅练习工作区有值）
       updatedAt: "2026-08-01T10:00:00Z",
     });
   });
@@ -1510,6 +1610,7 @@ describe("GET /project/list（书架：创作根各工作区目录扫描）", ()
         name: "真书",
         path: join(root, "books", "真书"),
         kind: "novel",
+        authorId: null,
         updatedAt: "2026-08-01T10:00:00Z",
       },
     ]);
@@ -1541,6 +1642,7 @@ describe("GET /project/list（书架：创作根各工作区目录扫描）", ()
         name: "书架上的书",
         path: join(root, "books", "书架上的书"),
         kind: "novel",
+        authorId: null,
         updatedAt: "2026-08-01T10:00:00Z",
       },
     ]);
@@ -1581,6 +1683,7 @@ describe("GET /project/list（书架：创作根各工作区目录扫描）", ()
         name: "联动书",
         path: bookDir,
         kind: "novel",
+        authorId: null,
         updatedAt: readProjectFile(bookDir)?.updated_at,
       },
     ]);

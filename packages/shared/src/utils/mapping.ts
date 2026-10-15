@@ -21,6 +21,7 @@ import type {
 import type { ProjectConfig, ProjectFileConfig } from "../types/project.js";
 import { DEFAULT_BACKUP_FREQUENCY_MINUTES } from "../constants/backup.js";
 import { resolveWorkspaceKind } from "../constants/workspace.js";
+import { resolveAuthor } from "../authors/catalog.js";
 
 /** 单层键映射：snake_case → camelCase（仅用于顶层字段，不递归 data） */
 export function snakeToCamelKey(key: string): string {
@@ -247,14 +248,16 @@ function resolveBackupFrequencyMinutes(value: number | null | undefined): number
   return value;
 }
 
-/** ProjectFileConfig → ProjectConfig（schema_version → schemaVersion、current_position → currentPosition、backup 频率读侧兜底、kind 读侧兜底；
- * `prompt` 已废弃不再映射——项目规则唯一事实源改为项目目录） */
+/** 项目文件配置 → API 配置（camelCase 映射 + kind / author_id 读侧兜底） */
 export function mapProjectFileToConfig(file: ProjectFileConfig): ProjectConfig {
+  const kind = resolveWorkspaceKind(file.kind); // 缺 kind / 未知值 → 缺省 novel（读侧兜底，不落盘）
   return {
     id: file.id,
     name: file.name,
     language: file.language,
-    kind: resolveWorkspaceKind(file.kind), // 缺 kind / 未知值 → 缺省 novel（读侧兜底，不落盘）
+    kind,
+ // 预置作家 id：**仅练习工作区有值**，且 author_id 需命中预置清单（缺失 / 未知 → null，不落盘）
+    authorId: kind === "practice" ? (resolveAuthor(file.author_id)?.id ?? null) : null,
     schemaVersion: file.schema_version,
     currentPosition: file.current_position,
     deductionNodes: file.deduction_nodes ?? [], // 旧文件缺字段 → 空数组（读侧兜底，不落盘）

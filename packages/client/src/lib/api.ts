@@ -21,11 +21,14 @@ import type {
   EntitySummary,
   ErrorCode,
   OutlineTree,
+  PracticeDeleted,
+  PracticeDraftPutRes,
+  PracticePieceDetail,
+  PracticePiecesRes,
   PracticeSampleDetail,
-  PracticeSampleDraftPutRes,
   PracticeSamplesRes,
-  PracticeTargetCreated,
-  PracticeTargetsRes,
+  PracticeStylePack,
+  PracticeTopicSource,
   ProjectAgents,
   ProjectConfig,
   ProjectDeleteRes,
@@ -742,6 +745,9 @@ export interface CreateProjectBody {
     language?: ProjectLanguage;
     /** 工作区类型（缺省 novel）：落 project.json，决定目录约定之外的工具集/提示词/导航 */
     kind?: WorkspaceKind;
+    /** **仅 kind = "practice"**：预置作家 id（shared AUTHOR_CATALOG 的键）——懒创建练习工作区时传；
+     *  novel 传入 / 值不在预置清单 → 400 VALIDATION_ERROR */
+    author_id?: string;
   };
 }
 
@@ -1311,53 +1317,35 @@ export function importCloudBook(options: {
   });
 }
 
-// ============ 文风仿写练习（卡 9；docs/api/120-api-practice.md） ============
-// 请求字段 snake_case / 响应顶层 camelCase；全部端点要求当前工作区 `kind = "practice"`
-// （小说工作区 → 400 KIND_MISMATCH，无当前工作区 → 409 NO_PROJECT_OPEN）。
+// ============ 作家文风练习（docs/api/120-api-practice.md，2026-10 改版） ============
+// 请求字段 snake_case / 响应顶层 camelCase；全部端点要求当前工作区 `kind = "practice"` **且**
+// `project.json` 的 `author_id` 能解析到预置作家——小说工作区 → 400 `KIND_MISMATCH`，
+// 未关联作家 → 400 `VALIDATION_ERROR`，无当前工作区 → 409 `NO_PROJECT_OPEN`。
+// 作家素材（介绍 / 作品清单 / 风格说明预置文本）**没有端点**：页面直读 shared 常量
+// （`AUTHOR_CATALOG` / `resolveAuthor`）；只有风格说明的用户覆盖走本章三个端点。
 
 /**
- * GET /api/v1/practice/targets —— 文风目标列表（按 `updatedAt` 倒序，含各目标样本数）。
- * 失败：409 NO_PROJECT_OPEN、400 KIND_MISMATCH。
- */
-export function getPracticeTargets(): Promise<PracticeTargetsRes> {
-  return apiFetch<PracticeTargetsRes>("/practice/targets");
-}
-
-/**
- * POST /api/v1/practice/targets —— 新建文风目标。
- * `observation` 省略 = 不写观察（空串由服务端归一为 null）。
- * 失败：400 VALIDATION_ERROR（名字 trim 空 / 超上限）、409 NO_PROJECT_OPEN、400 KIND_MISMATCH。
- */
-export function createPracticeTarget(body: {
-  name: string;
-  observation?: string;
-}): Promise<PracticeTargetCreated> {
-  return apiFetch<PracticeTargetCreated>("/practice/targets", { method: "POST", body });
-}
-
-/**
- * GET /api/v1/practice/targets/:id/samples —— 某目标下的样本列表（按 `updatedAt` 倒序）。
+ * GET /api/v1/practice/samples —— 本工作区全部范文样本（按 `updatedAt` 倒序）。
  * 列表不回范文正文与点评卡（只有 `charCount` / `hasDraft` / `hasFeedback`）。
- * 失败：404 PRACTICE_NOT_FOUND（目标不存在）、409 NO_PROJECT_OPEN、400 KIND_MISMATCH。
+ * 失败：409 NO_PROJECT_OPEN、400 KIND_MISMATCH、400 VALIDATION_ERROR（未关联预置作家）。
  */
-export function getPracticeSamples(targetId: string): Promise<PracticeSamplesRes> {
-  return apiFetch<PracticeSamplesRes>(`/practice/targets/${targetId}/samples`);
+export function getPracticeSamples(): Promise<PracticeSamplesRes> {
+  return apiFetch<PracticeSamplesRes>("/practice/samples");
 }
 
 /**
- * POST /api/v1/practice/targets/:id/samples —— 新建练习样本（粘贴范文，落库后不可变）。
+ * POST /api/v1/practice/samples —— 新建范文样本（粘贴或导入文本都走这里；导入只是客户端把文件读进输入框）。
+ * `work_id` 省略 / null = 「其他」；给了必须在预置作品清单内（否则 400）。
  * 响应 = 样本详情形状（新建时 `draft` 为空串、`feedback` 为 null）。
- * 失败：400 VALIDATION_ERROR（来源说明 / 范文 trim 空或超上限）、404 PRACTICE_NOT_FOUND、
+ * 失败：400 VALIDATION_ERROR（范文 trim 空 / 超上限、片段说明超上限、未知 work_id）、
  *      409 NO_PROJECT_OPEN、400 KIND_MISMATCH。
  */
-export function createPracticeSample(
-  targetId: string,
-  body: { source_label: string; text: string },
-): Promise<PracticeSampleDetail> {
-  return apiFetch<PracticeSampleDetail>(`/practice/targets/${targetId}/samples`, {
-    method: "POST",
-    body,
-  });
+export function createPracticeSample(body: {
+  work_id?: string | null;
+  excerpt_label?: string;
+  text: string;
+}): Promise<PracticeSampleDetail> {
+  return apiFetch<PracticeSampleDetail>("/practice/samples", { method: "POST", body });
 }
 
 /**
@@ -1371,18 +1359,97 @@ export function getPracticeSample(id: string): Promise<PracticeSampleDetail> {
 }
 
 /**
- * PUT /api/v1/practice/samples/:id —— 保存仿写稿（**全系统唯一的用户写稿入口**）。
+ * PUT /api/v1/practice/samples/:id —— 保存仿写稿（**用户写稿唯一入口**；AI 工具面没有写稿工具）。
  * 整体覆盖 `draft`（空串 = 清空稿件）；返回本次写入后的版本戳 `updatedAt`。
  * 并发口径 = 后写覆盖（不带版本戳——多标签页防覆盖是已登记的延期项）。
  * 失败：400 VALIDATION_ERROR（超 `MAX_PRACTICE_DRAFT_CHARS`）、404 PRACTICE_NOT_FOUND、
  *      409 NO_PROJECT_OPEN、400 KIND_MISMATCH。
  */
-export function updatePracticeSampleDraft(
-  id: string,
-  draft: string,
-): Promise<PracticeSampleDraftPutRes> {
-  return apiFetch<PracticeSampleDraftPutRes>(`/practice/samples/${id}`, {
-    method: "PUT",
-    body: { draft },
-  });
+export function updatePracticeSampleDraft(id: string, draft: string): Promise<PracticeDraftPutRes> {
+  return apiFetch<PracticeDraftPutRes>(`/practice/samples/${id}`, { method: "PUT", body: { draft } });
+}
+
+/**
+ * DELETE /api/v1/practice/samples/:id —— 删除样本（**物理删**，练习数据无回收站）。
+ * 失败：404 PRACTICE_NOT_FOUND（重复删除同样 404）、409 NO_PROJECT_OPEN、400 KIND_MISMATCH。
+ */
+export function deletePracticeSample(id: string): Promise<PracticeDeleted> {
+  return apiFetch<PracticeDeleted>(`/practice/samples/${id}`, { method: "DELETE" });
+}
+
+/**
+ * GET /api/v1/practice/style-pack —— 作家风格说明的**生效内容** = 用户覆盖 `??` 预置（恒非空）。
+ * `customized` = 是否有用户覆盖；`updatedAt` = 覆盖的写入时刻（无覆盖 = null）。
+ * 失败：409 NO_PROJECT_OPEN、400 KIND_MISMATCH、400 VALIDATION_ERROR（未关联预置作家）。
+ */
+export function getPracticeStylePack(): Promise<PracticeStylePack> {
+  return apiFetch<PracticeStylePack>("/practice/style-pack");
+}
+
+/**
+ * PUT /api/v1/practice/style-pack —— 写入用户覆盖（新建或覆盖；trim 非空）。
+ * **清空请用 `resetPracticeStylePack`**（空覆盖等于恢复预置，语义上无意义）。
+ * 失败：400 VALIDATION_ERROR（trim 空 / 超 `MAX_PRACTICE_STYLE_PACK_CHARS`）、
+ *      409 NO_PROJECT_OPEN、400 KIND_MISMATCH。
+ */
+export function updatePracticeStylePack(content: string): Promise<PracticeStylePack> {
+  return apiFetch<PracticeStylePack>("/practice/style-pack", { method: "PUT", body: { content } });
+}
+
+/**
+ * DELETE /api/v1/practice/style-pack —— 删除用户覆盖 = **恢复预置**（幂等：没有覆盖也 200）。
+ * 失败：409 NO_PROJECT_OPEN、400 KIND_MISMATCH、400 VALIDATION_ERROR（未关联预置作家）。
+ */
+export function resetPracticeStylePack(): Promise<PracticeStylePack> {
+  return apiFetch<PracticeStylePack>("/practice/style-pack", { method: "DELETE" });
+}
+
+/**
+ * GET /api/v1/practice/free —— 本工作区全部自由练习篇（按 `updatedAt` 倒序）。
+ * 列表不回稿件与点评卡（只有 `charCount` / `hasDraft` / `hasFeedback`）。
+ * 失败：409 NO_PROJECT_OPEN、400 KIND_MISMATCH、400 VALIDATION_ERROR（未关联预置作家）。
+ */
+export function getPracticePieces(): Promise<PracticePiecesRes> {
+  return apiFetch<PracticePiecesRes>("/practice/free");
+}
+
+/**
+ * POST /api/v1/practice/free —— 新建自由练习篇。`topic_source = "ai"` 时 `topic` 必须省略 / 空串
+ * （建「待出题」空题行，题目由 `submit_practice_topic` 工具写入）。
+ * 响应 = 详情形状（新建时 `draft` 为空串、`feedback` 为 null）。
+ * 失败：400 VALIDATION_ERROR（user 分支题目 trim 空 / 超上限、ai 分支带了题目、写作要求超上限）、
+ *      409 NO_PROJECT_OPEN、400 KIND_MISMATCH。
+ */
+export function createPracticePiece(body: {
+  topic_source: PracticeTopicSource;
+  topic?: string;
+  brief?: string;
+}): Promise<PracticePieceDetail> {
+  return apiFetch<PracticePieceDetail>("/practice/free", { method: "POST", body });
+}
+
+/**
+ * GET /api/v1/practice/free/:id —— 自由练习详情（**唯一**返回稿件全文与点评卡的读端点）。
+ * `feedback` 透传口径同样本详情（`sample_*` = 风格说明侧特征与引用）。
+ * 失败：404 PRACTICE_NOT_FOUND、409 NO_PROJECT_OPEN、400 KIND_MISMATCH。
+ */
+export function getPracticePiece(id: string): Promise<PracticePieceDetail> {
+  return apiFetch<PracticePieceDetail>(`/practice/free/${id}`);
+}
+
+/**
+ * PUT /api/v1/practice/free/:id —— 保存自由练习稿（与仿写稿同一口径：唯一用户写稿入口、后写覆盖）。
+ * 失败：400 VALIDATION_ERROR（超 `MAX_PRACTICE_DRAFT_CHARS`）、404 PRACTICE_NOT_FOUND、
+ *      409 NO_PROJECT_OPEN、400 KIND_MISMATCH。
+ */
+export function updatePracticePieceDraft(id: string, draft: string): Promise<PracticeDraftPutRes> {
+  return apiFetch<PracticeDraftPutRes>(`/practice/free/${id}`, { method: "PUT", body: { draft } });
+}
+
+/**
+ * DELETE /api/v1/practice/free/:id —— 删除自由练习篇（**物理删**；不满意的 AI 出题 = 删掉重建）。
+ * 失败：404 PRACTICE_NOT_FOUND（重复删除同样 404）、409 NO_PROJECT_OPEN、400 KIND_MISMATCH。
+ */
+export function deletePracticePiece(id: string): Promise<PracticeDeleted> {
+  return apiFetch<PracticeDeleted>(`/practice/free/${id}`, { method: "DELETE" });
 }

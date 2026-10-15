@@ -25,6 +25,7 @@ import {
   novelExportZipFileName,
   numberVisibleOutline,
   orderVisibleChapters,
+  resolveAuthor,
   resolveWorkspaceKind,
   WORKSPACE_DIRS,
   WORKSPACE_KINDS,
@@ -146,6 +147,17 @@ projectRoutes.post("/create", async (c) => {
     throw parsed.error; // → app.onError → 400 VALIDATION_ERROR（含 fields）
   }
   const { path: rawPath, config } = parsed.data;
+
+ // author_id（2026-10）：仅练习工作区可传，且必须是预置作家 id（**懒创建练习工作区**的唯一写入口）——
+ // novel 传入 / 值不在预置清单 → 400 VALIDATION_ERROR（不静默丢弃：静默会让练习区缺作家关联）
+  if (config?.author_id !== undefined) {
+    if (resolveWorkspaceKind(config.kind) !== "practice") {
+      throw new HttpError(400, "VALIDATION_ERROR", "author_id 仅练习工作区（kind = practice）可传");
+    }
+    if (resolveAuthor(config.author_id) === null) {
+      throw new HttpError(400, "VALIDATION_ERROR", `未知的预置作家 id: ${config.author_id}`);
+    }
+  }
 
  // 路径校验：绝对路径 + 规范化 + 链接检查；create 允许目录尚不存在——先建目录再校验
   if (!isAbsolute(rawPath)) {
@@ -302,15 +314,18 @@ function listWorkspaceDir(kind: WorkspaceKind, root: string): ProjectListBook[] 
     .map((e) => ({ name: e.name, dir: join(kindDir, e.name) }))
     .map((b) => {
       const config = readProjectFile(b.dir);
-      return config === null
-        ? null
-        : {
-            id: config.id,
-            name: b.name,
-            path: b.dir,
-            kind: resolveWorkspaceKind(config.kind),
-            updatedAt: config.updated_at,
-          };
+      if (config === null) return null;
+      const kind = resolveWorkspaceKind(config.kind); // 读侧兜底：旧文件缺 kind → novel
+      return {
+        id: config.id,
+        name: b.name,
+        path: b.dir,
+        kind,
+ // authorId：有值当且仅当 kind = practice 且 author_id 命中预置作家清单（缺失 / 未知 → null；
+ // 客户端据此与预置作家清单对应，解析不到的练习行不展示）
+        authorId: kind === "practice" ? (resolveAuthor(config.author_id)?.id ?? null) : null,
+        updatedAt: config.updated_at,
+      };
     })
     .filter((b): b is ProjectListBook => b !== null);
 }

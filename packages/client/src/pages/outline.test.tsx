@@ -51,6 +51,7 @@ const CONFIG: ProjectConfig = {
   name: "测试书",
   language: "zh",
   kind: "novel", // 工作区类型（恒下发字段，API 形态必填）
+  authorId: null, // 预置作家 id（仅练习工作区有值）
   schemaVersion: 1,
   currentPosition: null,
   deductionNodes: [],

@@ -17,6 +17,7 @@ function makeConfig(kind: WorkspaceKind): ProjectConfig {
     name: kind === "practice" ? "仿写练习区" : "青云记",
     language: "zh",
     kind,
+    authorId: kind === "practice" ? "jiangnan" : null, // 仅练习工作区有值
     schemaVersion: 1,
     currentPosition: kind === "practice" ? null : "ch-1",
     deductionNodes: [],

@@ -11,8 +11,8 @@
 // - POST /chat：开流前校验（400/404/409/LLM_API_KEY_MISSING）、首帧 session、事件集与
 //   `partial` 剥离、AUTO 工具 details 不下发、提案 details 下发、AGENTS.md 与聚焦注入、
 //   续聊历史喂回、单项目单流 409 CHAT_BUSY、断开取消（provider signal aborted + 提案作废）
-// - 练习点评链路：`context.practice_sample_id` 注入只给事实（范文/稿件零命中、未写观察不给该行）、
-//   样本或目标行缺失 → 静默省略、提交工具 details 随帧下发（同类只读工具不下发）、落库与帧一致、帧集零新增
+// - 练习点评链路：`context.practice_sample_id` 注入只给事实（样本 id + 作家名 + 作品名 + 片段说明；
+//   范文/稿件零命中、空片段说明不给该行）、样本不存在 / 工作区未关联作家 → 静默省略、帧集零新增
 // - 会话用量：turn_end / agent_end 的 usage、assistant message_end 的 speed、历史响应 usage 同源同值
 import { mkdirSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -42,18 +42,25 @@ import {
 import {
   createEntity,
   createPracticeSample,
-  createPracticeTarget,
   findOutlineNode,
   getPracticeSample,
   readOutlineFile,
   readProjectFile,
   SCHEMA_VERSION,
-  updatePracticeDraft,
+  updatePracticeSampleDraft,
   upsertDocument,
   writeOutlineFile,
   writeProjectFile,
 } from "@whispering233/ai-editor-db";
-import type { ChatSpeed, ChatUsage, OutlineFileTree } from "@whispering233/ai-editor-shared";
+import {
+  AUTHOR_IDS,
+  PRACTICE_OTHER_WORK_LABEL,
+  resolveAuthor,
+  resolveWork,
+  type ChatSpeed,
+  type ChatUsage,
+  type OutlineFileTree,
+} from "@whispering233/ai-editor-shared";
 import type { RuntimeFactory } from "../chat-runtime.js";
 import { errorHandler } from "../middleware/error.js";
 import {
@@ -1119,11 +1126,11 @@ const DOCUMENTED_SSE_EVENTS = new Set([
   "agent_end",
 ]);
 
-/** 打开新的练习工作区（`kind = "practice"`）并设为当前工作区（chat 组不挂 kind 守卫） */
+/** 打开新的练习工作区（`kind = "practice"` + 预置作家）并设为当前工作区（chat 组不挂练习守卫） */
 function openPracticeProject(): ProjectContext {
   const prev = getCurrentProject();
   if (prev) closeProject(prev);
-  const project = initProject(makeTmpDir(), { kind: "practice" });
+  const project = initProject(makeTmpDir(), { kind: "practice", author_id: AUTHOR_IDS[0] });
   setCurrentProject(project);
   return project;
 }
@@ -1140,25 +1147,32 @@ describe("练习点评链路：注入与卡片下发", () => {
   const SAMPLE_QUOTE = "范文原句。";
   const DRAFT_QUOTE = "我的仿写句。";
 
-  /** 建一个目标 + 一份样本（含范文与用户稿），返回样本 id 与目标 */
-  function seedPractice(project: ProjectContext): { sampleId: string; targetId: string } {
-    const target = createPracticeTarget(project.db, {
-      name: "汪曾祺式白描",
-      observation: "短句多、动词密，少用形容词",
-    });
+  /**
+   * 建一份样本（含关联作品 / 片段说明 / 范文与用户稿），返回样本 id 与期望的注入事实行。
+   * 注入只给事实（样本 id + 作家名 + 作品名 + 片段说明），口径 = docs/design/60-practice.md §8。
+   */
+  function seedPractice(project: ProjectContext, options: { workId?: string | null; excerptLabel?: string } = {}): {
+    sampleId: string;
+    workLine: string;
+  } {
+    const author = resolveAuthor(project.config.author_id)!;
+    const workId = options.workId === undefined ? author.works[0]!.id : options.workId;
     const sample = createPracticeSample(project.db, {
-      targetId: target.id,
-      sourceLabel: "汪曾祺《受戒》节选",
+      workId,
+      excerptLabel: options.excerptLabel ?? "《受戒》节选",
       text: `${SAMPLE_QUOTE}${SAMPLE_TEXT_MARK}${SAMPLE_TEXT_MARK.repeat(40)}`,
     });
-    if (sample === null) throw new Error("前置：样本未建立");
-    updatePracticeDraft(project.db, sample.id, `${DRAFT_QUOTE}${DRAFT_TEXT_MARK}${DRAFT_TEXT_MARK.repeat(40)}`);
-    return { sampleId: sample.id, targetId: target.id };
+    updatePracticeSampleDraft(project.db, sample.id, `${DRAFT_QUOTE}${DRAFT_TEXT_MARK}${DRAFT_TEXT_MARK.repeat(40)}`);
+    return {
+      sampleId: sample.id,
+      workLine: `作品：${workId === null ? PRACTICE_OTHER_WORK_LABEL : (resolveWork(author.id, workId)?.name ?? "")}`,
+    };
   }
 
-  it("注入：现读样本 id + 目标名 + 用户观察进本轮消息；范文与稿件零命中；指令语义不复述", async () => {
+  it("注入：现读样本 id + 作家名 + 作品名 + 片段说明进本轮消息；范文与稿件零命中；指令语义不复述", async () => {
     const project = openPracticeProject();
-    const { sampleId } = seedPractice(project);
+    const { sampleId, workLine } = seedPractice(project);
+    const author = resolveAuthor(project.config.author_id)!;
     const env = await createFauxEnv();
     scripted(env, [() => fauxAssistantMessage("收到")]);
     const app = buildApp(createChatRoutes({ runtimeFactory: env.factory }));
@@ -1172,10 +1186,11 @@ describe("练习点评链路：注入与卡片下发", () => {
 
     const request = env.requests[0]!;
     const whole = requestText(request);
-    // 事实进本轮消息（样本 id / 目标名 / 用户观察）
+    // 事实进本轮消息（样本 id / 作家名 / 作品名 / 片段说明）
     expect(whole).toContain(`练习样本：id=${sampleId}`);
-    expect(whole).toContain("汪曾祺式白描");
-    expect(whole).toContain("短句多、动词密，少用形容词");
+    expect(whole).toContain(`作家：${author.name}`);
+    expect(whole).toContain(workLine);
+    expect(whole).toContain("片段说明：《受戒》节选");
     // 范文与用户稿正文零命中（它们走只读工具分页拉取，不进 prompt）
     expect(whole).not.toContain(SAMPLE_TEXT_MARK);
     expect(whole).not.toContain(DRAFT_TEXT_MARK);
@@ -1192,7 +1207,7 @@ describe("练习点评链路：注入与卡片下发", () => {
     expect(userTexts).not.toContain("必须提交点评卡");
   });
 
-  it("注入：样本不存在 → 该段静默省略（无空段标题残留），本轮照常完成", async () => {
+  it("注入：样本不存在 → 该段静默省略（无空段标题残留），本轮照常完成；帧集零新增", async () => {
     openPracticeProject();
     const env = await createFauxEnv();
     scripted(env, [() => fauxAssistantMessage("收到")]);
@@ -1207,6 +1222,8 @@ describe("练习点评链路：注入与卡片下发", () => {
     const last = frames.at(-1)!;
     expect(last.event).toBe("agent_end");
     expect((last.data as { stopReason?: string; errorMessage?: string }).stopReason).toBeUndefined();
+    // 帧集零新增：全部帧名都在 docs/api/80-api-chat.md 的事件表里（注入不引入新帧）
+    expect(frames.filter((f) => !DOCUMENTED_SSE_EVENTS.has(f.event))).toEqual([]);
 
     const userTexts = env.requests[0]!.messages
       .filter((m) => m.role === "user")
@@ -1217,10 +1234,11 @@ describe("练习点评链路：注入与卡片下发", () => {
     expect(userTexts).not.toContain("练习样本：");
   });
 
-  it("注入：目标行缺失（绕过级联删的外部改库）→ 同样静默省略，不编造空目标名", async () => {
+  it("注入：工作区未关联预置作家（author_id 缺失）→ 同样静默省略，不编造空作家名", async () => {
     const project = openPracticeProject();
-    const { sampleId, targetId } = seedPractice(project);
-    project.db.prepare("DELETE FROM practice_targets WHERE id = ?").run(targetId); // 直改库：样本变孤儿行
+    const { sampleId } = seedPractice(project);
+    // 直改内存 config：模拟存量 / 坏值练习工作区（chat 组不做练习前置守卫，注入是可选项）
+    project.config = { ...project.config, author_id: undefined };
     expect(getPracticeSample(project.db, sampleId)).not.toBeNull();
 
     const env = await createFauxEnv();
@@ -1238,18 +1256,12 @@ describe("练习点评链路：注入与卡片下发", () => {
       .join("\n");
     expect(userTexts).toContain("本轮问题");
     expect(userTexts).not.toContain("当前聚焦");
-    expect(userTexts).not.toContain("文风目标：");
+    expect(userTexts).not.toContain("作家：");
   });
 
-  it("注入：目标未写观察 → 不给「用户观察」行（不塞空值；口径见 60-practice.md §6）", async () => {
+  it("注入：作品为「其他」+ 片段说明为空 → 作品行走 shared 兜底文案，且不给「片段说明」行", async () => {
     const project = openPracticeProject();
-    const target = createPracticeTarget(project.db, { name: "海明威式硬白描" });
-    const sample = createPracticeSample(project.db, {
-      targetId: target.id,
-      sourceLabel: "《老人与海》节选",
-      text: "范文快照",
-    });
-    if (sample === null) throw new Error("前置：样本未建立");
+    const { sampleId } = seedPractice(project, { workId: null, excerptLabel: "" });
     const env = await createFauxEnv();
     scripted(env, [() => fauxAssistantMessage("收到")]);
     const app = buildApp(createChatRoutes({ runtimeFactory: env.factory }));
@@ -1257,86 +1269,17 @@ describe("练习点评链路：注入与卡片下发", () => {
     await readSseFrames(
       await app.request(
         "/api/v1/chat",
-        postChat({ message: "请点评我的仿写稿", context: { practice_sample_id: sample.id } }),
-      ),
-    );
-    const injected = requestText(env.requests[0]!);
-    expect(injected).toContain(`练习样本：id=${sample.id}`);
-    expect(injected).toContain("海明威式硬白描");
-    expect(injected).not.toContain("用户观察");
-  });
-
-  it("点评一轮：提交工具 details 随帧下发 + 落库一致；只读工具 details 仍不下发；帧集零新增", async () => {
-    const project = openPracticeProject();
-    const { sampleId } = seedPractice(project);
-    const env = await createFauxEnv();
-    scripted(env, [
-      // 第一轮：先读范文与稿件（AUTO 只读工具，details 不下发）
-      () =>
-        fauxAssistantMessage([
-          fauxToolCall("get_practice_sample", { sample_id: sampleId }),
-          fauxToolCall("get_practice_draft", { sample_id: sampleId }),
-        ]),
-      // 第二轮：提交点评卡（AUTO 提交工具，details 随帧下发）
-      () =>
-        fauxAssistantMessage([
-          fauxToolCall("submit_style_feedback", {
-            sample_id: sampleId,
-            dimensions: [
-              {
-                name: "句长节奏",
-                sample_trait: "以短句推进",
-                draft_trait: "长句偏多",
-                sample_quotes: [SAMPLE_QUOTE],
-                draft_quotes: [DRAFT_QUOTE],
-                advice: "把超过三行的句子拆开",
-              },
-            ],
-            summary: "语感已接近，节奏还需收紧",
-          }),
-        ]),
-      () => fauxAssistantMessage("点评卡已提交。"),
-    ]);
-    const app = buildApp(createChatRoutes({ runtimeFactory: env.factory }));
-
-    const frames = await readSseFrames(
-      await app.request(
-        "/api/v1/chat",
         postChat({ message: "请点评我的仿写稿", context: { practice_sample_id: sampleId } }),
       ),
     );
-
-    // 帧集零新增：全部帧名都在 docs/api/80-api-chat.md 的事件表里
-    expect(frames.filter((f) => !DOCUMENTED_SSE_EVENTS.has(f.event))).toEqual([]);
-
-    const ends = frames.filter((f) => f.event === "tool_execution_end");
-    const sampleEnd = ends.find((f) => (f.data as { toolName: string }).toolName === "get_practice_sample")!;
-    const submitEnd = ends.find((f) => (f.data as { toolName: string }).toolName === "submit_style_feedback")!;
-
-    // 负控制：同类只读 AUTO 工具的 details 仍不下发（门控没收宽成「全放行」）
-    const sampleResult = (sampleEnd.data as { result: Record<string, unknown> }).result;
-    expect(Object.keys(sampleResult)).toEqual(["content"]);
-
-    // 提交工具的 details 随帧下发（前端即时数据面）
-    const submitResult = (submitEnd.data as { result: { details?: { saved: boolean; dimension_count: number; dropped_quotes: number } } })
-      .result;
-    expect(submitResult.details).toEqual({ saved: true, dimension_count: 1, dropped_quotes: 0 });
-
-    // 落库（经卡 6 工具写 feedback）+ 帧里 details 与库内容一致；范文与稿件一字未动
-    const stored = getPracticeSample(project.db, sampleId)!;
-    const card = stored.feedback as {
-      dimensions: { name: string; sample_quotes: string[]; draft_quotes: string[] }[];
-      summary?: string;
-    };
-    expect(card.dimensions.map((d) => d.name)).toEqual(["句长节奏"]);
-    expect(card.dimensions[0]!.sample_quotes).toEqual([SAMPLE_QUOTE]); // 引用逐字命中，未被丢弃
-    expect(card.dimensions[0]!.draft_quotes).toEqual([DRAFT_QUOTE]);
-    expect(card.summary).toBe("语感已接近，节奏还需收紧");
-    expect(submitResult.details!.dimension_count).toBe(card.dimensions.length);
-    expect(submitResult.details!.dropped_quotes).toBe(0);
-    expect(stored.text).toContain(SAMPLE_TEXT_MARK);
-    expect(stored.draft).toContain(DRAFT_TEXT_MARK);
+    const injected = requestText(env.requests[0]!);
+    expect(injected).toContain(`练习样本：id=${sampleId}`);
+    expect(injected).toContain(`作品：${PRACTICE_OTHER_WORK_LABEL}`);
+    expect(injected).not.toContain("片段说明");
   });
+
+  // **工具面轮次（点评卡 details 随帧下发 + 落库）不在本卡**：练习工具正在重建（卡 7），旧工具实现
+  // 依赖已删的 targets 模型 ⇒ 该用例随工具面一起在卡 7 恢复（见 docs/design/tasks.md 卡 7）。
 });
 
 // ============ 会话用量下发（usage / speed；口径见 docs/design/20-context.md §2.1） ============

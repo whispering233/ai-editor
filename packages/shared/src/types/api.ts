@@ -13,8 +13,12 @@ import { CONFLICT_LEVELS } from "../constants/outline.js";
 import { BACKUP_FREQUENCIES } from "../constants/backup.js";
 import { WORKSPACE_KINDS } from "../constants/workspace.js";
 import {
+  MAX_PRACTICE_BRIEF_CHARS,
   MAX_PRACTICE_DRAFT_CHARS,
+  MAX_PRACTICE_EXCERPT_LABEL_CHARS,
   MAX_PRACTICE_SAMPLE_CHARS,
+  MAX_PRACTICE_STYLE_PACK_CHARS,
+  MAX_PRACTICE_TOPIC_CHARS,
 } from "../constants/practice.js";
 import type { ComputeStateResult, DeltaRecord, EntitySummary, ProjectAgents, ProjectConfig, RelationRecord } from "./index.js";
 import type { CloudBackupEntry, CloudImportBookResult, CloudRemoteBooksResult } from "./cloud.js";
@@ -214,6 +218,7 @@ export const projectConfigSchema: z.ZodType<ProjectConfig> = z.object({
   name: z.string(),
   language: projectLanguageSchema,
   kind: workspaceKindSchema, // 工作区类型（恒下发；服务端兜底后输出，旧文件缺 kind → novel）
+  authorId: z.string().nullable(), // 预置作家 id（仅练习工作区有值；缺 author_id / 小说工作区 → null）
   schemaVersion: z.number().int(), //
   currentPosition: z.string().nullable(), // 「当前位置」节点 id；null = 未设置
   deductionNodes: z.array(z.string()), // 推演节点标记（章节点 id 数组；顺序 = 可见章先序；缺字段 = [] 由读侧兜底）
@@ -231,6 +236,8 @@ export const projectCreateReqSchema = z
         name: z.string().optional(),
         language: projectLanguageSchema.optional(),
         kind: workspaceKindSchema.optional(), // 工作区类型（缺省 novel）；落 project.json，决定目录约定之外的工具集/提示词/导航
+        author_id: z.string().optional(), // **仅 kind = "practice"**：预置作家 id（shared AUTHOR_CATALOG 的键）——
+ //  novel 传入 / 值不在预置清单 → 400 VALIDATION_ERROR（成员校验在路由层，见 docs/api/10-api-project.md）
  // prompt 已废弃：不再接受（strict schema 传入 → 400 VALIDATION_ERROR）；
  // 项目规则改由 PUT /api/v1/project/agents 写入 
       })
@@ -306,6 +313,9 @@ export const projectListResSchema = z.object({
       path: z.string(),
  /** 工作区类型（旧文件缺 kind → 服务端经 shared 兜底 novel 后输出） */
       kind: workspaceKindSchema,
+ /** 预置作家 id（**仅练习工作区**；project.json 的 author_id 缺失 / 未知 → null）——客户端据此
+  * 与预置作家清单对应，解析不到的练习行客户端不展示（存量目录留盘） */
+      authorId: z.string().nullable(),
  /** project.json 的 updated_at（ISO 8601，应用层写入） */
       updatedAt: z.string(),
     }),
@@ -962,11 +972,16 @@ export const chatSendReqSchema = z
  /** true = 注入「推演节点集合」段（服务端现读 project.json 的 deduction_nodes 展开；无标记/全失效 → 静默省略） */
         focus_deduction: z.boolean().optional(),
         /**
-         * 练习样本 id（`ps-*`）= 触发一次点评：服务端**现读**样本与目标，注入「样本 id + 目标名 + 用户观察」
-         * 的事实段（**范文与用户稿绝不进 prompt**，走只读工具分页拉取；观察文本不接受客户端传入）；
-         * 样本不存在 / 目标行缺失 → 静默省略该段。口径见 docs/design/60-practice.md §6。
+         * 练习样本 id（`ps-*`）= 触发一次仿写点评：服务端**现读**样本，注入「样本 id + 作家名 +
+         * 作品名 + 片段说明」的事实段（**范文与用户稿绝不进 prompt**，走只读工具分页拉取）；
+         * 样本不存在 → 静默省略该段。口径见 docs/design/60-practice.md §8。
          */
         practice_sample_id: z.string().optional(),
+        /**
+         * 自由练习篇 id（`pf-*`）= 触发一次自由练习点评 / 让 AI 出题：服务端**现读**该篇注入事实段
+         * （篇 id + 作家名 + 题目 + 写作要求）。口径与注入展开见 docs/design/60-practice.md §8。
+         */
+        practice_free_piece_id: z.string().optional(),
       })
       .optional(),
   })
@@ -1150,36 +1165,36 @@ export const namesResolveResSchema = z.object({
 
 export type NamesResolveResult = z.infer<typeof namesResolveResSchema>;
 
-// ============ practice 端点（「文风仿写练习」，docs/api/120-api-practice.md） ============
+// ============ practice 端点（「作家文风练习」，docs/api/120-api-practice.md） ============
 //
 // 全部端点要求当前工作区 kind = "practice"（反向守卫 requireKind("practice") 的挂载点只在
-// server/src/index.ts，且在该组 app.route 之前）；无当前工作区 → 409 NO_PROJECT_OPEN。
+// server/src/index.ts，且在该组 app.route 之前）**且** project.json 的 `author_id` 能解析到预置作家
+// （shared `resolveAuthor`）；kind 不符 → 400 KIND_MISMATCH，作家缺失/未知 → 400 VALIDATION_ERROR
+// （文案「练习工作区未关联预置作家」）；无当前工作区 → 409 NO_PROJECT_OPEN。
 // 请求字段 snake_case、响应顶层字段 camelCase（**嵌套对象内部字段按公共约定原样透传**，
 // 即点评卡内层恒 snake_case，见 `practiceFeedbackSchema`）；**长度上限一律取 shared 常量**
 // （constants/practice.ts，schema 里不复述数字）⇒ 超限 400 VALIDATION_ERROR；
-// 目标 / 样本不存在 → 404 PRACTICE_NOT_FOUND。点评链路（触发 / 落库 / 渲染）不在本模块。
-// **2026-10 改版进行中**：旧「文风目标」（`/practice/targets*`）模型已废（表随迁移删除），
-// 其 schema 已从本文件移除；样本 / 风格说明 / 自由练习的新契约由后续卡补齐。
-
-/** 范文来源种类：MVP 唯一值 `paste`（跨工作区快照导入为升级路径，见 backlog） */
-export const practiceSourceKindSchema = z.literal("paste");
-export type PracticeSourceKind = z.infer<typeof practiceSourceKindSchema>;
+// 样本 / 自由练习不存在 → 404 PRACTICE_NOT_FOUND。点评链路（触发 / 落库 / 渲染）不在本模块。
+// **作家素材（介绍 / 作品清单 / 风格说明预置文本）没有端点**——客户端与服务端都直读 shared 常量，
+// 本模块只有「风格说明的用户覆盖」三个端点。
 
 /**
- * 点评卡（`GET /practice/samples/:id` 的 `feedback`；写入侧形状同此，见 docs/design/60-practice.md §4）。
+ * 评论卡（`GET /practice/samples/:id` / `GET /practice/free/:id` 的 `feedback`）。
  * **卡内层字段恒 snake_case**——遵循公共约定的「嵌套对象内部字段原样透传」（docs/api/api-public.md），
  * camelCase 映射只作用于 API 顶层契约字段。
+ * 两形态练习同形（同一份 schema、同一个前端卡面组件），差别只在**引用校验源**与页面标签：
+ * 仿写 = 范文（`sample_*` 即范文侧特征与引用）、自由练习 = 作家风格说明（`sample_*` 即风格说明侧）。
  * **只描述形状、不做语义校验**：卡内形状校验在**写入侧**（提交点评工具），读取侧只做「非对象 → null」
  * 的防御解析（db 层：非法 JSON / 数组 / 字符串 / `null` → null；**合法 JSON 对象一律透传**，`{}` 亦然）。
- * `dimensions[]` 由 AI 从范文提炼（非固定清单，上限 = `MAX_FEEDBACK_DIMENSIONS`，写入侧约束）。
+ * `dimensions[]` 由 AI 从依据中提炼（非固定清单，上限 = `MAX_FEEDBACK_DIMENSIONS`，写入侧约束）。
  */
 export const practiceFeedbackSchema = z.object({
   dimensions: z.array(
     z.object({
       name: z.string(), // 维度名（如「句长节奏」）
-      sample_trait: z.string(), // 范文在该维度上的表现
+      sample_trait: z.string(), // 依据侧（仿写 = 范文；自由练习 = 风格说明）在该维度上的表现
       draft_trait: z.string(), // 用户稿在该维度上的表现
-      sample_quotes: z.array(z.string()), // 范文原句（写入侧已校验 = 范文子串）
+      sample_quotes: z.array(z.string()), // 依据原句（写入侧已校验 = 依据子串）
       draft_quotes: z.array(z.string()), // 用户稿原句（= 稿件子串）
       advice: z.string(), // 可执行建议
     }),
@@ -1188,37 +1203,47 @@ export const practiceFeedbackSchema = z.object({
 });
 export type PracticeFeedbackCard = z.infer<typeof practiceFeedbackSchema>;
 
-/** 练习样本列表项（**列表不回范文正文与稿件 / 卡体**） */
+/** 自由练习的题目来源：用户自拟 / 让 AI 出题（`ai` + 空题目 = 待出题） */
+export const practiceTopicSourceSchema = z.enum(["user", "ai"]);
+export type PracticeTopicSource = z.infer<typeof practiceTopicSourceSchema>;
+
+// ---- 范文样本
+
+/** 范文样本列表项（**列表不回范文正文与稿件 / 卡体**） */
 export const practiceSampleSummarySchema = z.object({
   id: z.string(),
-  sourceKind: practiceSourceKindSchema,
-  sourceLabel: z.string(), // 快照来源说明（用户手填）
-  charCount: z.number().int(), // 范文快照字符数（列表展示用）
+  workId: z.string().nullable(), // 关联作品 id（预置作品清单内的 slug；null = 「其他」）
+  excerptLabel: z.string(), // 片段说明（空串 = 未填）
+  charCount: z.number().int(), // 范文快照字符数（列表展示用；不返回正文）
   hasDraft: z.boolean(), // 是否已写稿
   hasFeedback: z.boolean(), // 是否已有点评卡
   createdAt: z.string(),
   updatedAt: z.string(),
 });
-export type PracticeSampleItem = z.infer<typeof practiceSampleSummarySchema>;
+export type PracticeSampleSummary = z.infer<typeof practiceSampleSummarySchema>;
 
-// GET /api/v1/practice/samples（按 updatedAt 倒序，同值按 id 升序）
+// GET /api/v1/practice/samples（本工作区全部样本，按 updatedAt 倒序）
 export const practiceSamplesResSchema = z.object({ samples: z.array(practiceSampleSummarySchema) });
 export type PracticeSamplesRes = z.infer<typeof practiceSamplesResSchema>;
 
-// POST /api/v1/practice/samples（粘贴范文）
+// POST /api/v1/practice/samples
+// `work_id` 省略 / null = 「其他」；给了必须在预置作品清单内（**成员校验在路由层**，shared 无常量级 schema）
 export const practiceSampleCreateReqSchema = z
   .object({
-    source_kind: practiceSourceKindSchema.optional(), // 省略 = "paste"
+    work_id: z.string().nullable().optional(),
+    excerpt_label: z.string().max(MAX_PRACTICE_EXCERPT_LABEL_CHARS).optional(),
     text: z.string().trim().min(1).max(MAX_PRACTICE_SAMPLE_CHARS), // 范文快照（落库后不可变）
   })
   .strict();
 
 /**
  * 样本详情（`GET /practice/samples/:id`；**唯一返回范文全文与点评卡的读端点**）——
- * 也是新建样本的响应形状（新建时 draft = ""、feedback = null）。
+ * 也是新建样本的响应形状（新建时 `draft` = ""、`feedback` = null）。
  */
 export const practiceSampleDetailResSchema = z.object({
   id: z.string(),
+  workId: z.string().nullable(),
+  excerptLabel: z.string(),
   text: z.string(), // 范文快照全文
   draft: z.string(), // 用户仿写稿（未写 = ""）
   feedback: practiceFeedbackSchema.nullable(), // 未点评 = null（db 层只把「非对象」按 null，合法 JSON 对象一律透传）
@@ -1227,20 +1252,96 @@ export const practiceSampleDetailResSchema = z.object({
 });
 export type PracticeSampleDetail = z.infer<typeof practiceSampleDetailResSchema>;
 
-// PUT /api/v1/practice/samples/:id（**全系统唯一的用户写稿入口**；strict 单字段，多字段 → 400）
-export const practiceSampleDraftPutReqSchema = z
+// ---- 自由练习
+
+/** 自由练习列表项（**列表不回稿件与卡体**） */
+export const practicePieceSummarySchema = z.object({
+  id: z.string(),
+  topic: z.string(), // 题目（空串 = 待出题）
+  brief: z.string(), // 写作要求（空串 = 无）
+  topicSource: practiceTopicSourceSchema,
+  charCount: z.number().int(), // 稿件字符数
+  hasDraft: z.boolean(),
+  hasFeedback: z.boolean(),
+  createdAt: z.string(),
+  updatedAt: z.string(),
+});
+export type PracticePieceSummary = z.infer<typeof practicePieceSummarySchema>;
+
+// GET /api/v1/practice/free（本工作区全部自由练习篇，按 updatedAt 倒序）
+export const practicePiecesResSchema = z.object({ pieces: z.array(practicePieceSummarySchema) });
+export type PracticePiecesRes = z.infer<typeof practicePiecesResSchema>;
+
+/**
+ * POST /api/v1/practice/free。
+ * `topic_source = "user"` ⇒ `topic` 必填（trim 非空）；`= "ai"` ⇒ `topic` 必须省略或为空串
+ * （建「待出题」空题行，题目由出题工具写入）——两条分支的一致性由 superRefine 表达，故不是 flat object。
+ */
+export const practicePieceCreateReqSchema = z
+  .object({
+    topic_source: practiceTopicSourceSchema,
+    topic: z.string().trim().max(MAX_PRACTICE_TOPIC_CHARS).optional(),
+    brief: z.string().max(MAX_PRACTICE_BRIEF_CHARS).optional(),
+  })
+  .strict()
+  .superRefine((value, ctx) => {
+    const topic = value.topic ?? "";
+    if (value.topic_source === "user" && topic === "") {
+      ctx.addIssue({ code: "custom", path: ["topic"], message: "用户自拟题目不能为空" });
+      return;
+    }
+    if (value.topic_source === "ai" && topic !== "") {
+      ctx.addIssue({ code: "custom", path: ["topic"], message: "让 AI 出题时题目必须留空" });
+    }
+  });
+
+/** 自由练习详情（`GET /practice/free/:id`；**唯一返回稿件全文与点评卡的读端点**）——也是新建的响应形状 */
+export const practicePieceDetailResSchema = z.object({
+  id: z.string(),
+  topic: z.string(), // 空串 = 待出题
+  brief: z.string(),
+  topicSource: practiceTopicSourceSchema,
+  draft: z.string(),
+  feedback: practiceFeedbackSchema.nullable(), // 形状同仿写（`sample_*` = 风格说明侧特征与引用）
+  createdAt: z.string(),
+  updatedAt: z.string(),
+});
+export type PracticePieceDetail = z.infer<typeof practicePieceDetailResSchema>;
+
+// ---- 两类练习共用的写稿 / 删除契约（仿写与自由练习完全同口径，见 docs/api/120-api-practice.md）
+
+/** PUT /api/v1/practice/samples/:id 与 PUT /api/v1/practice/free/:id（**用户写稿唯一入口**；strict 单字段） */
+export const practiceDraftPutReqSchema = z
   .object({
     draft: z.string().max(MAX_PRACTICE_DRAFT_CHARS), // 允许空串 = 清空稿件
   })
   .strict();
 
-// 版本戳（客户端据此判断保存结果；并发口径 = 后写覆盖，不带版本戳）
-export const practiceSampleDraftPutResSchema = z.object({ updatedAt: z.string() });
-export type PracticeSampleDraftPutRes = z.infer<typeof practiceSampleDraftPutResSchema>;
+/** 版本戳（客户端据此判断保存结果；并发口径 = 后写覆盖，不带版本戳） */
+export const practiceDraftPutResSchema = z.object({ updatedAt: z.string() });
+export type PracticeDraftPutRes = z.infer<typeof practiceDraftPutResSchema>;
 
-// DELETE /api/v1/practice/samples/:id（物理删）
-export const practiceSampleDeleteResSchema = z.object({ deleted: z.literal(true) });
-export type PracticeSampleDeleted = z.infer<typeof practiceSampleDeleteResSchema>;
+/** DELETE 两类练习（物理删） */
+export const practiceDeleteResSchema = z.object({ deleted: z.literal(true) });
+export type PracticeDeleted = z.infer<typeof practiceDeleteResSchema>;
+
+// ---- 作家风格说明素材包（用户覆盖；预置文本在 shared 常量，无端点）
+
+/** GET /api/v1/practice/style-pack：`content` = 用户覆盖 `??` 预置（恒非空） */
+export const practiceStylePackResSchema = z.object({
+  authorId: z.string(), // 当前工作区的预置作家 id
+  content: z.string(),
+  customized: z.boolean(), // 是否有用户覆盖
+  updatedAt: z.string().nullable(), // 用户覆盖的写入时刻；无覆盖 = null
+});
+export type PracticeStylePack = z.infer<typeof practiceStylePackResSchema>;
+
+// PUT /api/v1/practice/style-pack（清空请用 DELETE——空覆盖等于恢复预置）
+export const practiceStylePackPutReqSchema = z
+  .object({
+    content: z.string().trim().min(1).max(MAX_PRACTICE_STYLE_PACK_CHARS),
+  })
+  .strict();
 
 // ============ 云端存档（卡 2：账号配置段） ============
 //
