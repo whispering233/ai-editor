@@ -445,8 +445,6 @@
 
 ## 作家文风练习（2026-10，改版后的升级路径）
 
-- **pi 升级到与 `pi-codemode ≥ 1.2` 同线的版本（去掉解析锁 pin）** — 现状：`pi-coding-agent@1.0.4` 与 `pi-codemode ≥ 1.2` 不兼容，靠 `server`/`agent` 的 `@earendil-works/pi-codemode: "1.0.4"` 精确依赖锁住（见 `build.md`「发布管道坑记录」）。触发条件：下次 pi 升级批次（升级 = 一个显式 commit 齐抬 `pi-ai`/`pi-coding-agent`（及其传递包）+ 全量测试 + 复查三处「与 pi 同构」断言）；升到同线后应**删掉这两个 pin**并重跑无锁安装冒烟（`pnpm pack:test` + `pnpm start:test`）。
-- **pi 其余传递依赖未写精确版本** — 现状：`pi-coding-agent@1.0.4` 对 `pi-agent-core` / `pi-tui` / `chord` 也声明 `^1.0.x`；`pi-codemode` 已在 2026-10 因上游移除导出而补上直接依赖锁（`agent/package.json`），其余四个仍靠锁文件 + 上游自律。触发条件：任一上游 1.x 再现破坏性变更（症状 = 无锁安装后 server 启动报模块导出错），或下一次 pi 升级批次；届时把它们一并写成直接依赖 + 精确版本（同样靠 `pnpm pack:test` + `pnpm start:test` 验收）。
 - **风格说明素材包的结构化统计（NLP 画像）**
   - 现状：素材包 = markdown 文本（`practice_style_packs` 单列 `content`）+ 预置常量；**统计信息不落库**（有意不预留空列）。
   - 升级路径：**用代码算全文**（词频 / 句长分布 / 段落长度 / 对话与描写配比 / 标点密度 / 人称 / 词汇丰富度），以**后续迁移加列或加表**接入；读写仍走同一处（db helper + `style-pack` 端点族）。
@@ -491,7 +489,7 @@
 
 ## 有意保留（非待办，仅登记）
 
-- **`PROVIDER_ICONS` 里的「非内置家」品牌映射（2026-09 pi 升级 oracle 复核后登记，**不是死键**）** — 现状：映射表 41 键里有 6 个（`moonshot` / `qwen` / `zhipu` / `cohere` / `perplexity` / `grok`）不是 pi 内置 provider id——逐版核对 0.74.2 / 0.80.5 / 0.85.1 / 0.87.1 / 1.0.4 都没有这些 id（旧版里 `qwen` 的命中是 `thinkingFormat: "qwen"` 兼容标记，不是 provider）。它们随 `7288288` 从 pi-web 的同名表**整体搬入**（与该 svg 精灵一起，这 6 个 symbol 都在 `provider-icons.svg` 里）。**上游已核实（2026-10-08）**：`agegr/pi-web`（本机克隆 `~/projects/pi-web`，v0.9.1 / `8366762`）的 `components/ProviderIcon.tsx` —— 两表各 41 键、symbol 与 color **零差异**（唯一差别就是本卡的 `azure` 改名），且 `public/provider-icons.svg` 与本仓**逐字节相同（md5 `f19b29d3…`）**；pi-web 自己的 provider 列表同样来自 pi SDK（`lib/provider-listing-runtime.ts` 的 `modelRuntime.getProviders()`）并同样支持自定义 `models.json` 家 ⇒ 这 6 个在两边都是同一种东西，不是搬错的遗留。**为什么要留着**：provider 列表是数据驱动的（`modelRuntime.getProviders()`，无白名单），自定义 `models.json` 家（id 由用户起）同样走 `providerIcon(id)` ⇒ 自建一个叫 `cohere` / `grok` 的家能拿到正确品牌图标。本次升级只改了真被改名的 `azure-openai-responses` → `azure`（0.87.1 → 1.0.4 目录里被删/改名的 provider 仅此一个）。**别当死代码删**。
+- **`PROVIDER_ICONS` 里的「非内置家」品牌映射（2026-09 pi 升级 oracle 复核后登记，**不是死键**）** — 现状：映射表 41 键里有 6 个（`moonshot` / `qwen` / `zhipu` / `cohere` / `perplexity` / `grok`）不是 pi 内置 provider id——逐版核对 0.74.2 / 0.80.5 / 0.85.1 / 0.87.1 / 1.0.4 / 1.3.0 都没有这些 id（1.3.0 实测目录 43 个 provider id，旧版里 `qwen` 的命中是 `thinkingFormat: "qwen"` 兼容标记，不是 provider）。它们随 `7288288` 从 pi-web 的同名表**整体搬入**（与该 svg 精灵一起，这 6 个 symbol 都在 `provider-icons.svg` 里）。**上游已核实（2026-10-08）**：`agegr/pi-web`（本机克隆 `~/projects/pi-web`，v0.9.1 / `8366762`）的 `components/ProviderIcon.tsx` —— 两表各 41 键、symbol 与 color **零差异**（唯一差别就是本卡的 `azure` 改名），且 `public/provider-icons.svg` 与本仓**逐字节相同（md5 `f19b29d3…`）**；pi-web 自己的 provider 列表同样来自 pi SDK（`lib/provider-listing-runtime.ts` 的 `modelRuntime.getProviders()`）并同样支持自定义 `models.json` 家 ⇒ 这 6 个在两边都是同一种东西，不是搬错的遗留。**为什么要留着**：provider 列表是数据驱动的（`modelRuntime.getProviders()`，无白名单），自定义 `models.json` 家（id 由用户起）同样走 `providerIcon(id)` ⇒ 自建一个叫 `cohere` / `grok` 的家能拿到正确品牌图标。本次升级只改了真被改名的 `azure-openai-responses` → `azure`（0.87.1 → 1.0.4 目录里被删/改名的 provider 仅此一个）。**别当死代码删**。
 
 - **REST 保持泛型**：直连 API 仍可为 `hook.status` 写 `op=update`、为 character 写已移除字段。收窄落在前端 + AI 提案层 + executor；这是**分层口径**，不是漏改（已在 `10-data-model.md` §14 不变式 1 登记）。
 - **`filters.status`**：保留给 hook 生命周期查询，character 侧不再消费。
