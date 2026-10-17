@@ -38,7 +38,7 @@
 
 **显式不启用**：pi 的编码工具（read/bash/edit/write/…）、扩展加载（`noExtensions`）、技能与提示词模板（`noSkills`/`noPromptTemplates`）、项目信任门、TUI 交互模式。理由：本项目是创作顾问，不是编码 agent；项目目录内的可执行扩展是安全面而非能力面。
 
-**版本纪律**：`@earendil-works/*` 一律 exact pin（上游 pi 自身也用 `check-pinned-deps` 强制精确版本）。升级 = 显式 commit 齐抬版本 + 全量测试——本仓依赖的是 pi 的内部形态（事件名、session v3 格式、loader options），不是稳定公共契约语义。
+**版本纪律**：`@earendil-works/*` 一律 exact pin（上游 pi 自身也用 `check-pinned-deps` 强制精确版本）。升级 = 显式 commit 齐抬版本 + 全量测试 + **无锁安装冒烟**（`pnpm pack:test` + `pnpm start:test`；`pnpm test` 绿不代表装得上——只有 npm 全新安装能暴露上游传递包的破坏）——本仓依赖的是 pi 的内部形态（事件名、session v3 格式、loader options），不是稳定公共契约语义。**传递包不需要本仓写解析锁**：上游 1.3.0 起对内部 pi 包（`pi-agent-core`/`pi-codemode`/`pi-tui`/`pi-mcp`）同样 exact pin ⇒ 本仓只为**运行时 import 到的包**声明直接依赖（清单见下），不为解析形状额外钉钉子。
 
 ## 分包方案
 
@@ -134,7 +134,7 @@ shared（纯类型/常量/工具，零 Node 依赖，可被 client 安全 tree-s
     "@whispering233/ai-editor-db": "workspace:*",
     "@whispering233/ai-editor-tools": "workspace:*",
     "@whispering233/ai-editor-agent": "workspace:*",
-    "@earendil-works/pi-coding-agent": "1.3.0", // 会话/工具派发（exact pin）
+    "@earendil-works/pi-coding-agent": "1.3.0", // 会话/工具派发（exact pin；其内部 pi 包由上游精确钉住，本仓不另写解析锁）
     "@earendil-works/pi-ai": "1.3.0",         // 模型目录与凭据（运行时 import，必须进 dependencies）
     "@hono/node-server": "^2.0.12",
     "hono": "^4.7.0",
