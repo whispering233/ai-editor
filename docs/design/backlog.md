@@ -504,3 +504,10 @@
   - 收益只有两项：键盘导航（↑↓ `activeKey` / ←→ 折叠）、大树虚拟滚动（`virtual` 默认 true）——但**触发条件：单本项目大纲节点数百且展开卡顿，或明确需要键盘无障碍时**⇒ **按需单点补**（默认只展开卷 / 只给大纲页加虚拟列表 / rc-tree 直接接管），不换引擎。
   - 可用 token（日后真要迁）：`indentSize` / `titleHeight`（默认 = `controlHeightSM` 24，可按层级覆盖）、`nodeSelectedBg`；v6 语义槽 `classNames.item|itemTitle|itemSwitcher|itemIcon`。
   - **已失效的旧理由（不要再用）**：`DESIGN.md` 曾写「antd Tree 选中面派生 token 不可信」——`controlItemBgActive` 已在 `AntdProvider` 全局覆盖为 `{colors.surface-muted}`，并有 `antd-tokens.test.ts` 对比度守卫；真理由是行为集与拖拽语义。
+
+- **不引入 `@earendil-works/pi-durable` 作为会话内核（2026-10-24 评估结论）**
+  - 结论：会话继续用 `pi-coding-agent` 的 `AgentSession` + pi session v3 文件。pi-durable 是 pi 同线的**平行内核**（Harness / Conversation / Entry / Commit / Task / Storage），依赖 `chord` + `pi-ai` + `pi-codemode` + `pi-telemetry`、**不依赖 `pi-coding-agent`**，README 自述 Experimental（API 随发布变）⇒ 只登记，不采纳。
+  - 换内核的代价：本仓会话侧（`packages/agent/src/runtime/` 的 `sessions.ts` 扫盘、`message-projection.ts` 历史投影、`events.ts` SSE 投影、`usage.ts` 账目、`speed.ts` 速度计）与历史面板（`packages/client/src/components/chat/ChatPanel.tsx`）全建立在 `pi-coding-agent` 的 `SessionManager` / `SessionEntry` / `AgentSessionEvent` / `getSessionStats()` 上 ⇒ 全部重写；`packages/tools` 的工具装配换一套；并重新引入 `pi-coding-agent` 1.2.0 已移除的 `chord` 依赖。
+  - 收益错配：durable 的核心价值是「进程死掉后从 checkpoint 继续」，而本仓数据都在 `data.db`、AI 产出是带 TTL 的提案、会话丢失的代价 = 重发一句话。
+  - 保留事实：pi 的 `ModelRuntime implements Models`，durable 的 `HarnessOptions.models` 正好收 `Models`（或返回它的函数）⇒ 将来真要接入时，凭据/配置的唯一入口（`packages/server/src/model-runtime.ts`）不必重做。
+  - 重新评估触发条件：出现「后台长任务」（定时批量分析、跨会话编排、进程可被驱逐的托管形态）且现有备份 tick 链 / 提案机制无法承载时。
