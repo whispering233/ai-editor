@@ -9,6 +9,8 @@
 
 ## [Unreleased]
 
+## [v0.0.61] - 2026-10-24 — pi 内核升级至 1.4.0
+
 ### Changed
 
 - **升级 AI 内核 pi `1.0.4` → `1.4.0`**（`pi-ai` / `pi-coding-agent` 精确版本齐抬；传递包 `pi-agent-core` / `pi-codemode` / `pi-tui` / `pi-mcp` / `pi-telemetry` 随上游精确 pin 一并到 `1.4.0`）：
