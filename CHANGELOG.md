@@ -11,10 +11,13 @@
 
 ### Changed
 
-- **升级 AI 内核 pi `1.0.4` → `1.3.0`**（`pi-ai` / `pi-coding-agent` 精确版本齐抬；传递包 `pi-agent-core` / `pi-codemode` / `pi-tui` / `pi-mcp` / `pi-telemetry` 随上游精确 pin 一并到 1.3.0）：
-  - **存量会话无需迁移**：会话格式 `CURRENT_SESSION_VERSION` 仍为 3，`SessionInfo` / `SessionHeader` 字段逐行相同；凭据解析顺序（pi-ai `auth/resolve.js`）与出站 HTTP dispatcher（pi-coding-agent `core/http-dispatcher.js`）相对 1.0.4 无变化。
+- **升级 AI 内核 pi `1.0.4` → `1.4.0`**（`pi-ai` / `pi-coding-agent` 精确版本齐抬；传递包 `pi-agent-core` / `pi-codemode` / `pi-tui` / `pi-mcp` / `pi-telemetry` 随上游精确 pin 一并到 `1.4.0`）：
+  - **存量会话无需迁移**：会话格式 `CURRENT_SESSION_VERSION` 仍为 3，`SessionInfo` / `SessionHeader` 字段逐行相同；凭据解析顺序（pi-ai `auth/resolve.js`）与出站 HTTP dispatcher（pi-coding-agent `core/http-dispatcher.js`）相对 1.3.0 无变化。
+  - **压缩摘要不再受固定输出上限约束**（pi 1.4.0 修复「generation hit the token cap」）：compaction 与 branch summary 改用**模型输出上限**，思考占满固定摘要额度时不再失败；`compaction.reserveTokens` 现在**只控制压缩开始时机**，`keepRecentTokens` 语义不变。
+  - **provider attribution 头改由 pi-ai client identity 提供**：扩展的 `before_provider_headers` 不再看到 OpenRouter / NVIDIA NIM / OpenCode 的归属头（返回 `null` 仍可移除）——本仓嵌入形态不启用扩展系统，无行为影响。
+  - **默认模型变更不影响本仓**：GitHub Copilot（`gpt-5.4` 已下架 → `gpt-6.1-sol`）、NVIDIA、Xiaomi 的 pi 内置默认模型已调整，本仓默认模型取自 pi settings（`defaultProvider` / `defaultModel`）。
   - **`pi-codemode` 解析锁 pin 移除**：上游 1.3.0 把内部 pi 依赖全部写成精确版本（并删除 `chord` 依赖）⇒ `agent` / `server` 里作为解析锁存在的 `@earendil-works/pi-codemode: "1.0.4"` 直接依赖已删除，无锁安装不再有解到不兼容版本的风险。
-  - **本仓接口面零改动**：只使用包根导出（pi 1.2.0 移除的 `./client` / `./experimental/plugin` 与本仓从未使用的扩展系统无关）；provider 目录无删除 / 改名，`PROVIDER_ICONS` 无需调整。
+  - **本仓接口面零改动**：只使用包根导出（pi 1.2.0 移除的 `./client` / `./experimental/plugin` 与本仓从未使用的扩展系统无关）；provider 目录的家集合无删除 / 改名，`PROVIDER_ICONS` 无需调整。
   - **升级注意**：pi 1.3.0 把 `kimi-coding` 家改用官方 Kimi Code 的 Chat Completions 端点——在 `models.json` 覆盖过该家 base URL 的用户必须补 `/v1`（未覆盖者不受影响）。另有可见行为变化：切换模型时旧模型的思考块不再作为正文回灌；工具调用参数 JSON 尾部损坏时改为校验失败并回显原始参数，而不是静默丢弃已解析字段。
 
 ## [v0.0.60] - 2026-10-16 — 安装态修复（pin 落在安装根包 `server`）
