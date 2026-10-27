@@ -167,7 +167,7 @@ cloudRoutes.put("/config", async (c) => {
   });
 
   // 自动推送的排程条件依赖自动备份频率：本机开关可能在本次保存中改变——立即重排一次 tick
-  //（幂等；只在「备份频率关闭 + autoPush」时才真的排上 2h 兜底）——否则要等下次 open/restore
+  //（幂等；频率关闭时 `startAutoBackup` 直接不排程）——否则要等下次 open/restore
   const project = getCurrentProject();
   if (project !== null) startAutoBackup(project);
 

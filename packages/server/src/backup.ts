@@ -848,7 +848,7 @@ export interface ProjectTickHooks {
 let tickHooks: ProjectTickHooks = {};
 
 /**
- * 注册 tick 钩子（`middleware/project.ts` 启动时调用一次；**整体替换**，测试可注入小间隔）。
+ * 注册 tick 钩子（`middleware/project.ts` 启动时调用一次；**整体替换**；测试可注入 `onTick`）。
  * 用模块级注册而不是每次 `startAutoBackup` 传参：`overwriteProjectFiles` 尾部那次重启
  *（restore / 导入 / 云拉取后）也必须带上同一套钩子。
  */

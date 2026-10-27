@@ -54,7 +54,8 @@ describe("CloudBackupPanel · 自动推送条件提示", () => {
     const html = render(true, null);
 
     expect(html).toContain(HINT);
-    expect(html).toContain("随自动备份频率触发：备份频率关闭时不会自动推送");
+    expect(html).toContain("随自动备份频率触发：创作数据（正文数据、大纲、参考资料、项目规则）有变更");
+    expect(html).toContain("备份频率关闭时不会自动推送");
   });
 
   it("备份频率已选 → 不显示提示行", () => {

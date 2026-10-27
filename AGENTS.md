@@ -37,7 +37,7 @@
   - **备份命名唯一格式**（写入 = 解析，`shared/utils/backup.ts` 单正则；逐段语义、保留策略与“不解析旧命名”口径见 `docs/db/schema.md`「自动备份目录」）：三类旧命名**不解析**（留盘不列表）、**不做重命名迁移**；打开项目时若 `.backups/` 有文件但无一可解析 → 兜底生成一份（`ensureParseableBackup`）。
   - **凭据不得进文件名段**（2026-09 安全修复，不可回退）：设备名与备份标签都会进 `.backups/` 文件名 + 上传云盘 + 冲突框展示 ⇒ 等于 WebDAV 应用密码一律 400（唯一比较口径 = `cloud/state.ts` 的 `equalsCredential`；写侧 = `writeCloudConfig` + `backup.ts` 的 `writeBackup`/`renameBackup` 两入口）；读侧 `configuredDeviceName` 把存量坏值当未配置（回退 hostname，立刻止漏）。**新增任何「用户文本进文件名」的入口都要挂同一守卫。**
   - **三态与「有未备份改动」**：`local.backupStale` = `hasUnbackedChanges` **且** `dirty`（拉取/恢复后必为 false；`backupStale` 不随同步前移）；**自动推送的守卫用纯 `hasUnbackedChanges`**（更严格，避免推旧包上云）——两处口径不同是有意的。
-  - **自动推送复用备份 tick 链**（**不得新增第二套定时器**：排程条件 = 备份频率开启 **或** `autoPush` 开启，后者按 2h 兜底）；节流基准 `lastAutoPushAt` 只由定时路径推进；失败只记 `lastAutoPushError`（清除点 = `pushBackup` 成功写）。
+  - **自动推送复用备份 tick 链**（**不得新增第二套定时器**：排程条件恒等于「自动备份频率开启」，频率关闭即不排程、自动推送一并停；`AUTO_PUSH_THROTTLE_MS` 只是同一 tick 链上的节流窗口，不是排程间隔）；节流基准 `lastAutoPushAt` 只由定时路径推进；失败只记 `lastAutoPushError`（清除点 = `pushBackup` 成功写）。
   - **云端写入协议**：`PUT .tmp-<名>` → `MOVE` 成正式名（同名同大小已存在则跳过上传；`MOVE` 撞 409/412 时删目标重试一次）；书目录名 `<书名>-<id>` 被云盘拒时回退 `ai-editor-<id>` → `<id>`（回退扫描认 `name === id || endsWith('-'+id)`）；清理只删可解析时间戳或 `.tmp-` 前缀，**带用户标签的永不删**。
   - **坚果云实测口径**（改 WebDAV 客户端前必读）：`PROPFIND` 对不存在的集合回 `207`+空 body（**空 multistatus = 不存在**）；`MKCOL` **不带尾斜杠**；集合删除要**尾斜杠 + `Depth: infinity`**；根目录**不可直接写文件**（探针写工作子目录）；对单段名字长度限制严（`400 IllegalArgument / sandbox name is too long`）；`MOVE` 目标已存在时**不认 `Overwrite: T`**。
   - **并集语义已废止（2026-09）**：会话不进包 ⇒ pull 不再做目录合并；`overwriteProjectFiles` 只做**纯覆盖**（若仍带合并参数随本口径一并移除），restore/import/pull 都不得写或删本机 `sessions/`。
