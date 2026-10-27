@@ -1429,3 +1429,19 @@ export function getPracticePiece(id: string): Promise<PracticePieceDetail> {
 export function updatePracticePieceDraft(id: string, draft: string): Promise<PracticeDraftPutRes> {
   return apiFetch<PracticeDraftPutRes>(`/practice/free/${id}`, { method: "PUT", body: { draft } });
 }
+
+/**
+ * DELETE /api/v1/practice/samples/:id —— 删除样本（物理删，不回收）。
+ * 失败：404 PRACTICE_NOT_FOUND、409 NO_PROJECT_OPEN、400 KIND_MISMATCH。
+ */
+export function deletePracticeSample(id: string): Promise<{ deleted: true }> {
+  return apiFetch<{ deleted: true }>(`/practice/samples/${id}`, { method: "DELETE" });
+}
+
+/**
+ * DELETE /api/v1/practice/free/:id —— 删除自由练习篇（物理删，不回收）。
+ * 失败：404 PRACTICE_NOT_FOUND、409 NO_PROJECT_OPEN、400 KIND_MISMATCH。
+ */
+export function deletePracticePiece(id: string): Promise<{ deleted: true }> {
+  return apiFetch<{ deleted: true }>(`/practice/free/${id}`, { method: "DELETE" });
+}

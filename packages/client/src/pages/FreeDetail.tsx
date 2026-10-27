@@ -25,11 +25,12 @@
 //
 // 分层：`FreePieceSections` / 两个整页态 = 纯展示（无 effect、无请求，导出供 SSR 走查——仓内无 jsdom，
 // 组件测试用 `react-dom/server`）；默认导出 = 容器（取数 + 保存 + 触发点评 / 出题）。
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import type { PracticePieceDetail } from "@whispering233/ai-editor-shared";
 import { MAX_PRACTICE_DRAFT_CHARS } from "@whispering233/ai-editor-shared";
 import { Button, Input, Skeleton } from "antd";
-import { ApiError, getPracticePiece } from "../lib/api";
+import { DeleteOutlined } from "@ant-design/icons";
+import { ApiError, deletePracticePiece, getPracticePiece } from "../lib/api";
 import {
   FREE_REVIEW_MESSAGE,
   FREE_TOPIC_MESSAGE,
@@ -47,6 +48,7 @@ import { cn } from "../lib/utils";
 import { PageHeader } from "@/components/ui/page-header";
 import { SectionCard } from "@/components/ui/section-card";
 import { EmptyState } from "@/components/ui/empty-state";
+import { ConfirmDialog } from "../components/outline/dialogs";
 import { FeedbackCardView } from "./PracticeDetail";
 import { navigate } from "../hooks/use-route";
 import {
@@ -228,14 +230,17 @@ export function FreeLoadFailure({ message, onRetry }: { message: string; onRetry
 export interface FreeHeaderProps {
   /** 篇详情（`null` = 未加载：页头挂「自由练习」标题） */
   detail: PracticePieceDetail | null;
+  /** 标题行右侧操作区（容器给删除入口；本层只透传，不持有状态） */
+  action?: ReactNode;
 }
 
 /** 自由练习页页头（纯展示，导出供 SSR 走查）：title = 题目（空题 → 「待出题」，`truncateTitle`） */
-export function FreeHeader({ detail }: FreeHeaderProps) {
+export function FreeHeader({ detail, action }: FreeHeaderProps) {
   return (
     <PageHeader
       title={detail === null ? "自由练习" : freePracticeTopicTitle(detail.topic)}
       truncateTitle
+      action={action}
     />
   );
 }
@@ -258,6 +263,8 @@ export default function FreeDetail({ pieceId }: { pieceId: string }) {
   const [saving, setSaving] = useState(false);
   const [savedAt, setSavedAt] = useState<Date | null>(null);
   const [saveError, setSaveError] = useState<string | null>(null);
+  /** 删除这篇自由练习（物理删，不可恢复）→ 确认框开关 */
+  const [deleteOpen, setDeleteOpen] = useState(false);
 
   /**
    * 载入详情并把稿件同步为本地副本（首拉 / 重试）。
@@ -361,6 +368,13 @@ export default function FreeDetail({ pieceId }: { pieceId: string }) {
     requestFocusInput();
   }
 
+  /** 删除这一篇（成功即回列表）：作废入口 ⇒ 走确认框，`ConfirmDialog` 成功后自己调 `onClose` */
+  async function removePiece(): Promise<void> {
+    await deletePracticePiece(pieceId);
+    showToast("已删除");
+    navigate("/free");
+  }
+
   const missing = loadError?.code === "PRACTICE_NOT_FOUND";
   if (missing) return <FreePieceMissing />;
   if (loadError !== null && detail === null) {
@@ -371,7 +385,22 @@ export default function FreeDetail({ pieceId }: { pieceId: string }) {
     /* 页头常驻模板（DESIGN.md §Layout「中栏页头结构」）：section 恰好等于中栏滚动容器内容区 ⇒
        外壳不滚，滚动只发生在内层容器里（页头与三段标题留在视口）。 */
     <section className="flex h-full min-h-0 flex-col">
-      <FreeHeader detail={detail} />
+      <FreeHeader
+        detail={detail}
+        action={
+          detail === null ? undefined : (
+            <Button
+              color="danger"
+              variant="text"
+              size="small"
+              title="删除这篇自由练习"
+              aria-label="删除这篇自由练习"
+              icon={<DeleteOutlined />}
+              onClick={() => setDeleteOpen(true)}
+            />
+          )
+        }
+      />
       <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">
         {detail === null ? (
           <Skeleton active title={false} paragraph={{ rows: 4 }} />
@@ -392,6 +421,16 @@ export default function FreeDetail({ pieceId }: { pieceId: string }) {
           />
         )}
       </div>
+      {deleteOpen && (
+        <ConfirmDialog
+          title="删除这篇自由练习？"
+          description="题目、我的稿与点评卡会一并删除，不可恢复。"
+          confirmLabel="删除"
+          danger
+          onConfirm={removePiece}
+          onClose={() => setDeleteOpen(false)}
+        />
+      )}
     </section>
   );
 }

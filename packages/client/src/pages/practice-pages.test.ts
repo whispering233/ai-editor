@@ -84,3 +84,27 @@ describe("练习详情容器的两条接线（帧刷新 / 保存阻断存档）"
     expect(practiceDetail).toContain("useSaveShortcut(() => saveDraft(), detail !== null)");
   });
 });
+
+// 删除入口（页头垃圾桶 + 确认框）：容器渲不出按钮点击，故用源码级咬合
+describe("练习详情页的删除入口（不可恢复 → 确认框必须写后果）", () => {
+  it("页头按钮 = `color=\"danger\" variant=\"text\"`（`danger` 糖与 `color` 同给会被忽略）+ 可读文案", () => {
+    expect(practiceDetail).toMatch(/color="danger"\s+variant="text"/);
+    expect(practiceDetail).toContain('title="删除这篇范文样本"');
+    expect(practiceDetail).toContain('aria-label="删除这篇范文样本"');
+    expect(practiceDetail).toContain("<DeleteOutlined />");
+  });
+
+  it("删除经 lib/api 封装 + 复用 ConfirmDialog（不新造浮层），成功回列表", () => {
+    expect(practiceDetail).toContain("await deletePracticeSample(sampleId)");
+    expect(practiceDetail).toContain('from "../components/outline/dialogs"');
+    // 绑定 toast → navigate 的相邻关系（本文件另有空态「返回列表」的 `navigate("/practice")`
+    // ⇒ 整句 `toContain` 会被那处永远满足，变异改成 /free 也报绿）
+    expect(practiceDetail).toMatch(/showToast\("已删除"\);\s*navigate\("\/practice"\);/);
+    expect(practiceDetail).not.toContain("fetch(");
+  });
+
+  it("确认框写明不可恢复（物理删，不进回收站）", () => {
+    expect(practiceDetail).toContain("范文、我的稿与点评卡会一并删除，不可恢复。");
+    expect(practiceDetail).toContain('confirmLabel="删除"');
+  });
+});

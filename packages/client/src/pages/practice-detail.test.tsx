@@ -124,6 +124,19 @@ describe("页头（片段说明 → 标题；作品名 + 作家名 → 说明行
     expect(html).toContain("练习");
     expect(html).not.toContain(JIANGNAN.name);
   });
+
+  it("`action` 透传到标题行右侧（删除入口由容器给；不传则无操作区）", () => {
+    const html = renderHtml(
+      <PracticeHeader
+        detail={DETAIL}
+        author={JIANGNAN}
+        action={<button type="button">探针</button>}
+      />,
+    );
+    expect(html).toContain("探针");
+    expect(html).toContain("ml-auto"); // 页头右侧操作区容器
+    expect(renderHtml(<PracticeHeader detail={DETAIL} author={JIANGNAN} />)).not.toContain("探针");
+  });
 });
 
 describe("练习页三段（范文 → 我的稿 → 点评卡）", () => {

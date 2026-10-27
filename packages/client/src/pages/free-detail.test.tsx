@@ -105,6 +105,15 @@ describe("页头（题目 → 标题；空题 → 「待出题」）", () => {
     expect(html).toContain("自由练习");
     expect(html).not.toContain("待出题");
   });
+
+  it("`action` 透传到标题行右侧（删除入口由容器给；不传则无操作区）", () => {
+    const html = renderHtml(
+      <FreeHeader detail={DETAIL} action={<button type="button">探针</button>} />,
+    );
+    expect(html).toContain("探针");
+    expect(html).toContain("ml-auto"); // 页头右侧操作区容器
+    expect(renderHtml(<FreeHeader detail={DETAIL} />)).not.toContain("探针");
+  });
 });
 
 describe("详情三段（题目卡 → 我的稿 → 点评卡）", () => {

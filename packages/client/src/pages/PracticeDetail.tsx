@@ -28,7 +28,8 @@ import type {
 } from "@whispering233/ai-editor-shared";
 import { MAX_PRACTICE_DRAFT_CHARS, resolveAuthor } from "@whispering233/ai-editor-shared";
 import { Button, Input, Skeleton, Typography } from "antd";
-import { ApiError, getPracticeSample } from "../lib/api";
+import { DeleteOutlined } from "@ant-design/icons";
+import { ApiError, deletePracticeSample, getPracticeSample } from "../lib/api";
 import {
   PRACTICE_REVIEW_MESSAGE,
   canRequestPracticeReview,
@@ -46,6 +47,7 @@ import { cn } from "../lib/utils";
 import { PageHeader } from "@/components/ui/page-header";
 import { SectionCard } from "@/components/ui/section-card";
 import { EmptyState } from "@/components/ui/empty-state";
+import { ConfirmDialog } from "../components/outline/dialogs";
 import { navigate } from "../hooks/use-route";
 import { useWritingPrefs, toWritingTypeCssVars, type WritingPrefs } from "../hooks/use-writing-prefs";
 import { useChatStore } from "../stores/chat";
@@ -278,17 +280,20 @@ export interface PracticeHeaderProps {
   detail: PracticeSampleDetail | null;
   /** 当前工作区的预置作家（`null` = 未解析：说明行只画作品名） */
   author: AuthorEntry | null;
+  /** 标题行右侧操作区（容器给删除入口；本层只透传，不持有状态） */
+  action?: ReactNode;
 }
 
 /** 练习页页头（纯展示，导出供 SSR 走查）：title = 片段说明（留空则回作品名，`truncateTitle`），
  * description = 作品名 + 作家名——作品名兜底走 `lib/practice.practiceWorkLabel`（不手抄「其他」） */
-export function PracticeHeader({ detail, author }: PracticeHeaderProps) {
+export function PracticeHeader({ detail, author, action }: PracticeHeaderProps) {
   const workName = detail === null ? "" : practiceWorkLabel(author, detail.workId);
   const excerptLabel = detail?.excerptLabel.trim() ?? "";
   return (
     <PageHeader
       title={detail === null ? "练习" : excerptLabel === "" ? workName : excerptLabel}
       truncateTitle
+      action={action}
       description={
         detail !== null && (
           <span className="text-xs text-muted-foreground">
@@ -321,6 +326,8 @@ export default function PracticeDetail({ sampleId }: { sampleId: string }) {
   const [saving, setSaving] = useState(false);
   const [savedAt, setSavedAt] = useState<Date | null>(null);
   const [saveError, setSaveError] = useState<string | null>(null);
+  /** 删除这篇范文样本（物理删，不可恢复）→ 确认框开关 */
+  const [deleteOpen, setDeleteOpen] = useState(false);
 
   /**
    * 载入详情并把稿件同步为本地副本（首拉 / 重试）。
@@ -420,6 +427,13 @@ export default function PracticeDetail({ sampleId }: { sampleId: string }) {
     requestFocusInput();
   }
 
+  /** 删除这篇样本（成功即回列表）：作废入口 ⇒ 走确认框，`ConfirmDialog` 成功后自己调 `onClose` */
+  async function removeSample(): Promise<void> {
+    await deletePracticeSample(sampleId);
+    showToast("已删除");
+    navigate("/practice");
+  }
+
   const missing = loadError?.code === "PRACTICE_NOT_FOUND";
   if (missing) return <PracticeSampleMissing />;
   if (loadError !== null && detail === null) {
@@ -431,7 +445,23 @@ export default function PracticeDetail({ sampleId }: { sampleId: string }) {
     /* 页头常驻模板（DESIGN.md §Layout「中栏页头结构」）：section 恰好等于中栏滚动容器内容区 ⇒
        外壳不滚，滚动只发生在内层容器里（页头与三段标题留在视口）。 */
     <section className="flex h-full min-h-0 flex-col">
-      <PracticeHeader detail={detail} author={author} />
+      <PracticeHeader
+        detail={detail}
+        author={author}
+        action={
+          detail === null ? undefined : (
+            <Button
+              color="danger"
+              variant="text"
+              size="small"
+              title="删除这篇范文样本"
+              aria-label="删除这篇范文样本"
+              icon={<DeleteOutlined />}
+              onClick={() => setDeleteOpen(true)}
+            />
+          )
+        }
+      />
       <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">
         {detail === null ? (
           <Skeleton active title={false} paragraph={{ rows: 4 }} />
@@ -451,6 +481,16 @@ export default function PracticeDetail({ sampleId }: { sampleId: string }) {
           />
         )}
       </div>
+      {deleteOpen && (
+        <ConfirmDialog
+          title="删除这篇范文样本？"
+          description="范文、我的稿与点评卡会一并删除，不可恢复。"
+          confirmLabel="删除"
+          danger
+          onConfirm={removeSample}
+          onClose={() => setDeleteOpen(false)}
+        />
+      )}
     </section>
   );
 }
