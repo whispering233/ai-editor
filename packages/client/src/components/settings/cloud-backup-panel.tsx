@@ -33,6 +33,7 @@ import {
   type CloudConfigForm,
 } from "../../lib/cloud-config";
 import { useUiStore } from "../../stores/ui";
+import { useProjectStore } from "../../stores/project";
 import { SectionCard } from "../ui/section-card";
 
 /** 三态文案（`state` → 一句人话；左栏按钮的提示与动作都据此派生） */
@@ -82,6 +83,8 @@ export function CloudBackupPanel() {
   /** 云端份列表（≤5 行 = 云端保留上限；时间倒序） */
   const remoteBackups = status?.remote?.backups.slice(0, 5) ?? [];
   const autoPush = status?.autoPush === true;
+  /** 自动推送随备份频率触发（DESIGN.md）：频率为「关闭」时开关开着也不会推 → 开关下给一行提示 */
+  const backupFrequencyOff = useProjectStore((s) => s.config?.backupFrequencyMinutes === null);
   /** 云端那份 vs 本机那份的新旧（行尾徽标；任一侧缺失 → null 不显示） */
   const freshness = compareBackupTime(remoteHead, localLatest);
   /** 自动推送最近一次失败（`status.local.lastAutoPushError`；成功即消失，只显示一行不弹窗） */
@@ -232,7 +235,7 @@ export function CloudBackupPanel() {
         <p className="mb-2 text-xs text-muted-foreground">
           每 2 小时且只在创作数据有变更时推送一次（创作数据 = 正文数据、大纲、参考资料、项目规则）；
           关闭项目与手动备份后各额外触发一次，且不受 2 小时节流限制（关闭项目那次若「有改动未进最新备份」则跳过）；
-          纯聊天不单独触发（聊天记录会随下一次创作变更一起上云）。自动备份频率关闭时按 2 小时排程，不会静默失效。
+          纯聊天不单独触发（聊天记录会随下一次创作变更一起上云）。随自动备份频率触发：备份频率关闭时不会自动推送。
           关闭时仍可在云端面板手动推送。
         </p>
         <div className="flex items-center gap-2">
@@ -246,6 +249,12 @@ export function CloudBackupPanel() {
           <span className="text-sm">{autoPush ? "已开启" : "已关闭"}</span>
           {!configured && <span className="text-xs text-muted-foreground">先完成账号配置</span>}
         </div>
+        {/* 条件提示（不弹窗、不禁用开关）：开着自动推送但备份频率为「关闭」→ 排程不成立 */}
+        {autoPush && backupFrequencyOff && (
+          <p className="mt-2 text-xs text-muted-foreground">
+            当前自动备份频率为「关闭」→ 自动推送不会触发（至少选一个备份频率）
+          </p>
+        )}
       </SectionCard>
 
       {/* ③ 同步状态（状态行 + 云端份列表 + 推送 / 拉取） */}

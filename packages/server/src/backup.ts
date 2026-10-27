@@ -10,8 +10,8 @@
 // - 自动定时器：跟随当前项目生命周期（middleware/project.ts setCurrentProject 挂载启停），
 // 有变更才备份（三文件 + data.db-wal 伴生文件 mtime 与 .backups/ 最新备份时间比较，
 // 无状态、服务重启不丢；F2：WAL 模式写只刷新 -wal，补查避免漏检 data.db 变更）；
-// 频率关闭时回落 `setProjectTick` 注入的兑底间隔（卡 7：自动推送挂在同一条 tick 链上，
-// 按 2h 排程——不新起第二个定时器）
+// 排程条件 = 自动备份频率开启（关闭 → 不排程：自动推送也挂在同一条 tick 链上（卡 7），
+// 但只推已存在的本地备份，频率关闭就没有新档可推）
 // - 备份包校验（restore 与 import 共用）：zip 解析/白名单/三文件齐全/顶层/
 // data.db user_version 三态分流（绝不静默重建）
 // - restore：fileName 白名单 → 覆盖前自动快照 → 校验 → 原子替换三文件
@@ -842,8 +842,6 @@ let backupTimer: ReturnType<typeof setTimeout> | null = null;
 export interface ProjectTickHooks {
   /** tick 内自动备份之后调用（同步函数；抛错只记日志，不中断定时链） */
   onTick?: (project: ProjectContext) => void;
-  /** **备份频率关闭**时的 tick 间隔（毫秒；null = 不排程）——自动推送的 2h 排程经此注入 */
-  fallbackIntervalMs?: () => number | null;
 }
 
 /** 已注册的 tick 钩子（缺省空 = 仅备份行为，与卡 7 之前一致） */
@@ -862,8 +860,7 @@ export function setProjectTick(hooks: ProjectTickHooks): void {
  * 启动/重启自动备份调度（open/切换项目时调用；restore 后频率可能变化也调用）：
  * 按当前项目频率 setTimeout 链——每 tick 检查「有变更才备份」后按最新间隔重新排程
  * （tick 内重读 config，restore 改变频率无需显式通知）。
- * 频率关闭（null/0/非枚举）→ 回落到 `tickHooks.fallbackIntervalMs()`（自动推送的 2h 兜底排程）；
- * 两者皆空 → 不排程（等价停止）。
+ * 频率关闭（null/0/非枚举）→ 不排程（等价停止）。
  */
 export function startAutoBackup(project: ProjectContext): void {
   stopAutoBackup();
@@ -880,12 +877,12 @@ export function stopAutoBackup(): void {
 
 /**
  * 按项目当前间隔排程下一次检查：
- * 备份频率开启 → `freq * 60_000`；关闭 → `tickHooks.fallbackIntervalMs()`（null = 不排程）。
+ * 备份频率开启 → `freq * 60_000`；关闭 → 不排程。
  */
 function scheduleNext(project: ProjectContext): void {
   const freq = resolveBackupFrequency(project.config.backup_frequency_minutes);
-  const intervalMs = freq === null ? (tickHooks.fallbackIntervalMs?.() ?? null) : freq * 60_000;
-  if (intervalMs === null) return;
+  if (freq === null) return;
+  const intervalMs = freq * 60_000;
   backupTimer = setTimeout(() => {
     backupTimer = null;
     try {

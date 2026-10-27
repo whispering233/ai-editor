@@ -35,7 +35,7 @@ import {
 import type { ProjectContext } from "../middleware/project.js";
 import { initCloudState, readBookState, writeBookState, writeCloudConfig } from "./state.js";
 import { pushBackup } from "./sync.js";
-import { AUTO_PUSH_THROTTLE_MS, autoPushAfterManualBackup, autoPushOnClose, maybeAutoPush } from "./auto-push.js";
+import { autoPushAfterManualBackup, autoPushOnClose, maybeAutoPush } from "./auto-push.js";
 
 const BASE = "https://dav.example.com/dav"; // 云盘根（配置值）；客户端会拼上工作根 `ai-editor`
 const USER = "u@example.com";
@@ -453,111 +453,47 @@ describe("hasAuthoringChangesSince：创作数据口径（排除 sessions/、含
 });
 
 describe("排程钩子：自动推送挂在自动备份的同一条 tick 链上（不新增定时器）", () => {
-  it("备份频率关闭 + 兜底间隔注入 → 仍排程（onTick 被调用）", async () => {
+  it("备份频率关闭 → 不排程（连定时器都不挂）", () => {
     const freqOff: ProjectContext = { ...project, config: { ...project.config, backup_frequency_minutes: null } };
     let ticks = 0;
     setProjectTick({
       onTick: () => {
         ticks += 1;
       },
-      fallbackIntervalMs: () => 20,
     });
 
+    vi.useFakeTimers();
     startAutoBackup(freqOff);
     try {
-      await new Promise((resolve) => setTimeout(resolve, 80));
+      // 断言"没排程"而不是"60ms 内没 tick"：后者挡不住"改回某个更长兜底间隔"的回归
+      expect(vi.getTimerCount()).toBe(0);
+      vi.advanceTimersByTime(24 * 60 * 60_000); // 假时钟推一天，仍然零 tick
+      expect(ticks).toBe(0);
     } finally {
       stopAutoBackup();
+      vi.useRealTimers();
     }
-
-    expect(ticks).toBeGreaterThanOrEqual(1);
   });
 
-  it("备份频率关闭 + 兜底为 null（autoPush 关）→ 不排程", async () => {
-    const freqOff: ProjectContext = { ...project, config: { ...project.config, backup_frequency_minutes: null } };
-    let ticks = 0;
-    setProjectTick({
-      onTick: () => {
-        ticks += 1;
-      },
-      fallbackIntervalMs: () => null,
-    });
-
-    startAutoBackup(freqOff);
-    try {
-      await new Promise((resolve) => setTimeout(resolve, 60));
-    } finally {
-      stopAutoBackup();
-    }
-
-    expect(ticks).toBe(0);
-  });
-
-  it("备份频率开启 → 按频率排程（兜底间隔不参与）", () => {
+  it("备份频率开启 → 按频率排程", () => {
     const freqOn: ProjectContext = { ...project, config: { ...project.config, backup_frequency_minutes: 5 } };
     let ticks = 0;
     setProjectTick({
       onTick: () => {
         ticks += 1;
       },
-      fallbackIntervalMs: () => 20, // 诱导项：必须以频率为准
     });
 
     vi.useFakeTimers();
     startAutoBackup(freqOn);
     try {
       vi.advanceTimersByTime(80);
-      expect(ticks).toBe(0); // 兜底的 20ms 不生效
+      expect(ticks).toBe(0);
       vi.advanceTimersByTime(5 * 60_000);
       expect(ticks).toBe(1); // 频率 5 分钟到点
     } finally {
       stopAutoBackup();
       vi.useRealTimers();
     }
-  });
-
-  it("生产装配（middleware 注册）：备份频率关闭 + autoPush 开启 + 改动已被最新备份涵盖 → 2h tick 真的推一次", async () => {
-    changeCoveredByBackup(AGENTS_FILE_NAME); // 卡 B：有未备份改动时 tick 会跳过，这里造「已涵盖」
-    const freqOff: ProjectContext = { ...project, config: { ...project.config, backup_frequency_minutes: null } };
-
-    // 本文件其余用例都是显式注入钩子（且 afterEach 会清空）——此处**首次**运行时加载该模块，
-    // 走的就是生产装配那条路径（本文件对它的其余引用都是 type-only，不进运行时）
-    await import("../middleware/project.js");
-
-    vi.useFakeTimers();
-    startAutoBackup(freqOff);
-    try {
-      await vi.advanceTimersByTimeAsync(AUTO_PUSH_THROTTLE_MS);
-    } finally {
-      stopAutoBackup();
-      vi.useRealTimers();
-    }
-
-    // tick 里的推送是 fire-and-forget（`void maybeAutoPush`）——给它一拍真实时间再断言
-    await new Promise((resolve) => setTimeout(resolve, 50));
-    expect(putCount()).toBe(1);
-  });
-
-  it("生产装配：备份频率关闭 + 有改动未进最新备份 → 2h tick 跳过（零 PUT、不写失败标记）", async () => {
-    makeBackupAndBaseline();
-    const backupAt = latestParseableBackupTime(project);
-    expect(backupAt).not.toBeNull();
-    changeOutlineAfter(backupAt!.getTime(), 1); // 三文件改动晚于最新备份（有改动未进备份）
-    const freqOff: ProjectContext = { ...project, config: { ...project.config, backup_frequency_minutes: null } };
-    await import("../middleware/project.js");
-
-    vi.useFakeTimers();
-    startAutoBackup(freqOff);
-    try {
-      await vi.advanceTimersByTimeAsync(AUTO_PUSH_THROTTLE_MS);
-    } finally {
-      stopAutoBackup();
-      vi.useRealTimers();
-    }
-    await new Promise((resolve) => setTimeout(resolve, 50));
-
-    expect(putCount()).toBe(0);
-    expect(readBookState(project.config.id)?.lastAutoPushError).toBeUndefined();
-    expect(readBookState(project.config.id)?.lastAutoPushAt).toBeUndefined();
   });
 });
