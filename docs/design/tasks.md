@@ -8,7 +8,24 @@
 
 ---
 
-## 当前无进行中任务卡
+## 当前进行中任务卡
+
+### 卡 B2：自动推送随备份频率生效
+
+**目标**：删掉「备份频率关闭时按 2 小时兜底排程自动推送」这条在任何有意义的时刻都不会真推的分支；设置页改正那句会误导的说明并新增条件提示。文档已在本卡开工前改完（`40-cloud-sync.md` §5、`100-api-cloud.md`、`DESIGN.md`、`backlog.md`、`CHANGELOG.md`）——**代码必须与文档一致，不得回改口径**。
+
+**改动范围**
+1. `packages/server/src/middleware/project.ts`：`setProjectTick({...})` 删掉 `fallbackIntervalMs` 字段与 `AUTO_PUSH_THROTTLE_MS` 导入；块注释改为「排程条件 = 自动备份频率开启」。
+2. `packages/server/src/backup.ts`：`ProjectTickHooks` 删掉 `fallbackIntervalMs` 字段；`scheduleNext` 改为 `freq === null → 不排程`（删除回落分支）；同步文件头注释（第 13 行附近「频率关闭时回落……2h 排程」）、`startAutoBackup` 与 `scheduleNext` 的注释。
+3. `packages/server/src/cloud/auto-push.ts`：只改头注释里的排程口径（删「不需要 2h 排程」之类的反述）；**`maybeAutoPush` 内部的 `hasUnbackedChanges` 守卫保留不动**（频率开启时仍要防「改在两次备份之间」）。
+4. `packages/client/src/components/settings/cloud-backup-panel.tsx`：说明行把「自动备份频率关闭时按 2 小时排程，不会静默失效」改成「随自动备份频率触发：备份频率关闭时不会自动推送」；在开关下新增条件提示行——条件 = `status.autoPush === true && useProjectStore config?.backupFrequencyMinutes === null`，文案 = 「当前自动备份频率为「关闭」→ 自动推送不会触发（至少选一个备份频率）」，样式 = `text-xs text-muted-foreground`，**不弹窗、不禁用开关**（`DESIGN.md` 已登记）。
+5. 测试：`packages/server/src/cloud/auto-push.test.ts` —— 删掉「备份频率关闭 + 兜底间隔注入 → 仍排程」「备份频率关闭 + 兜底为 null → 不排程」「生产装配……2h tick 真的推一次」三个用例；保留「备份频率开启 → 按频率排程」但去掉 `fallbackIntervalMs` 字段；补 1 个「备份频率关闭 → 不排程（`onTick` 零调用）」。客户端补 1 个条件提示的渲染断言（开/关两态；按现有组件测试的 mock 方式）。
+
+**硬完成判据**（无 commit 不许报 PASS）
+- `git log` 含一个新 commit，`git status` 干净。
+- `pnpm -r build` → `pnpm typecheck` → `pnpm lint` → `pnpm --filter @whispering233/ai-editor-server test` → `pnpm --filter @whispering233/ai-editor-client test` 全部绿。
+- `grep -rn "fallbackIntervalMs" packages/*/src` 必须零命中（`dist/` 不算）；`grep -rn "不会静默失效" packages docs` 必须零命中。
+- 汇报必附 commit hash + 上述每条命令的输出尾部。
 
 ---
 
