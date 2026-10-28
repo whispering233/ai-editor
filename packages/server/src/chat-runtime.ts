@@ -18,6 +18,7 @@ import {
 import type { Db } from "@whispering233/ai-editor-db";
 import type { WorkspaceKind } from "@whispering233/ai-editor-shared";
 import { applyActiveSettings, getModelRuntime, getSettingsManager } from "./model-runtime.js";
+import { createDeepSeekWebSearch } from "./web-search.js";
 
 /** 对话链路需要的最小项目上下文（不依赖 middleware，避免与 project.ts 形成运行时环） */
 export interface ChatProjectTarget {
@@ -38,7 +39,12 @@ export const defaultRuntimeFactory: RuntimeFactory = async ({ target, sessionFil
   const input: ProjectRuntimeInput = {
     projectRoot: target.root,
     kind: target.kind,
-    toolContext: { db: target.db, outlineDir: target.root, projectId: target.projectId },
+    toolContext: {
+      db: target.db,
+      outlineDir: target.root,
+      projectId: target.projectId,
+      webSearch: createDeepSeekWebSearch(), // 联网检索：凭据与 HTTP 都在 server（tools 只持 port）
+    },
     sessionManager: openProjectSessionManager(target.root, sessionFile),
     modelRuntime: await getModelRuntime(),
     settingsManager: getSettingsManager(),

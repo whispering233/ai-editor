@@ -21,6 +21,9 @@ import {
   submitFreeFeedbackArgsSchema,
   submitPracticeTopicArgsSchema,
   submitStyleFeedbackArgsSchema,
+  webSearchArgsSchema,
+  MAX_SEARCH_QUERY_CHARS,
+  MAX_SEARCH_RESULT_COUNT,
 } from "./index.js";
 
 /** 校验是否通过（校验器抛错即拒绝——与 executor 同一入口） */
@@ -150,5 +153,20 @@ describe("练习工具 schema 约束（作家文风练习，2026-10 改版）", 
     expect(accepts(submitStyleFeedbackArgsSchema, { sample_id: "ps-1", dimensions, extra: 1 })).toBe(false);
     expect(accepts(submitFreeFeedbackArgsSchema, { piece_id: "pf-1", dimensions })).toBe(true);
     expect(accepts(submitStyleFeedbackArgsSchema, { sample_id: "ps-1", dimensions: [{ name: "d" }] })).toBe(false);
+  });
+
+  it("web_search：query 必填且不超上限、count 为 1..上限整数、未知键拒绝", () => {
+    expect(accepts(webSearchArgsSchema, { query: "红楼梦 版本" })).toBe(true);
+    expect(accepts(webSearchArgsSchema, { query: "红楼梦", count: 1 })).toBe(true);
+    expect(accepts(webSearchArgsSchema, { query: "红楼梦", count: MAX_SEARCH_RESULT_COUNT })).toBe(true);
+    // 上限边界：恰好等于上限通过、多一字 / 多一条拒绝
+    expect(accepts(webSearchArgsSchema, { query: "字".repeat(MAX_SEARCH_QUERY_CHARS) })).toBe(true);
+    expect(accepts(webSearchArgsSchema, { query: "字".repeat(MAX_SEARCH_QUERY_CHARS + 1) })).toBe(false);
+    expect(accepts(webSearchArgsSchema, { query: "红楼梦", count: MAX_SEARCH_RESULT_COUNT + 1 })).toBe(false);
+    expect(accepts(webSearchArgsSchema, { query: "红楼梦", count: 0 })).toBe(false);
+    expect(accepts(webSearchArgsSchema, { query: "" })).toBe(false);
+    expect(accepts(webSearchArgsSchema, {})).toBe(false);
+    // 严格对象：不自造 recency / domain 一类结构化过滤字段（过滤语法写在 query 里）
+    expect(accepts(webSearchArgsSchema, { query: "红楼梦", recency: "week" })).toBe(false);
   });
 });

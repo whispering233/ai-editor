@@ -10,7 +10,8 @@
 //
 // scope（工作区作用域，2026-10）：本入口的 37 个小说语义工具（实体/大纲/伏笔/Delta/参考资料）
 // 一律 `scope: "novel"`——练习工作区不注册它们（含全部 propose_*）；七个练习工具
-// （四个只读 + 三个写 AI 产出）标 `scope: "practice"`（装配过滤见 agent `createCustomTools`）。
+// （四个只读 + 三个写 AI 产出）标 `scope: "practice"`；一个通用工具（web_search）标 `scope: "common"`
+// （装配过滤见 agent `createCustomTools`）。
 
 // 包标识常量（与 shared 包风格一致：SHARED_PKG_NAME；agent 冒烟依赖）
 export const TOOLS_PKG_NAME = "@whispering233/ai-editor-tools";
@@ -26,6 +27,7 @@ export * from "./query/deduction.js";
 export * from "./query/delta.js";
 export * from "./query/reference.js";
 export * from "./query/practice.js";
+export * from "./query/web-search.js";
 export * from "./analysis/utils.js";
 export * from "./analysis/consistency.js";
 export * from "./analysis/conflict.js";
@@ -771,3 +773,44 @@ const practiceToolDefs: ToolDefinition[] = [
 ];
 
 registerTools(practiceToolDefs);
+
+import {
+  DEFAULT_SEARCH_RESULT_COUNT,
+  MAX_SEARCH_QUERY_CHARS,
+  MAX_SEARCH_RESULT_COUNT,
+  webSearchArgsSchema,
+} from "./schemas/index.js";
+import { runWebSearch } from "./query/web-search.js";
+
+/**
+ * 通用工具定义（`scope: "common"`，**小说与练习工作区都注册**）：外部检索 `web_search`。
+ * 参数上限三个常量全部从 `schemas/web-search.ts` 插值（数值单源；描述与常量同值有回归断言）。
+ * 网络与凭据全在 server（`packages/server/src/web-search.ts` 实现 `WebSearchPort`）——
+ * 未注入 port 时工具直接报错，不静默返回空结果。
+ */
+const commonToolDefs: ToolDefinition[] = [
+  {
+    name: "web_search",
+    description:
+      "外部网页检索（联网搜索，检索语句发往 DeepSeek 搜索 API）：用于查证事实、找资料、了解本机数据之外的近期信息。" +
+      "query 为检索语句（不超过 " +
+      MAX_SEARCH_QUERY_CHARS +
+      " 字符；过滤语法直接写在语句里：site:example.com 限定站点、-site: 排除站点、after:<日期> 限定时间、" +
+      "lang:zh 限定语言、\"精确短语\" 要求逐字命中），不要另造 recency / domain 之类参数。" +
+      "count 为期望条数（缺省 " +
+      DEFAULT_SEARCH_RESULT_COUNT +
+      "，上限 " +
+      MAX_SEARCH_RESULT_COUNT +
+      "）。" +
+      "返回 [{title,url,summary,date,authority}]（按相关性顺序，空字段省略）；" +
+      "**只回摘要不返回正文**（need_content 恒为 false——正文是否打开由用户决定）。" +
+      "引用检索结论时给出 url；摘要可能过期或不准确，只作线索不作定论。" +
+      "注意：查询词会发往 DeepSeek（隐私面，无开关）；未配置 DeepSeek API Key（设置 → 模型 → DeepSeek）时本工具直接报错，无其他供应商兜底。",
+    parameters: webSearchArgsSchema,
+    permission: TOOL_PERMISSION.AUTO,
+    scope: "common",
+    run: runWebSearch,
+  },
+];
+
+registerTools(commonToolDefs);

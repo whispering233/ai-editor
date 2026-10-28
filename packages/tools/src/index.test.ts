@@ -1,10 +1,10 @@
 // 冒烟测试：验证 @whispering233/ai-editor-tools 入口可正常导入（T0.3 语义）
 // 冒烟断言为新入口形态：注册表 API + 工具副作用注册（查询 11 + 分析 5 +
 // S6.5 伏笔 5 + S6.6 提案 16 + S6.7 卡 12.9（get_chapter_text）1 + D4（get_deduction_marks）1
-// + 练习 7（四读三写，scope = practice）= 44 个；执行 13 个不暴露）；
+// + 练习 7（四读三写，scope = practice）+ 通用 1（web_search，scope = common）= 45 个；执行 13 个不暴露）；
 // workspace 依赖 @whispering233/ai-editor-db / @whispering233/ai-editor-shared 解析由 import 在编译/运行期验证
 import { describe, expect, it } from "vitest";
-import { AUTO_TOOLS, CHARACTER_PRIORITIES, CHARACTER_PRIORITY_LABELS, DEFAULT_HALF_LIFE, MAX_FEEDBACK_DIMENSIONS, MAX_PRACTICE_BRIEF_CHARS, MAX_PRACTICE_TOPIC_CHARS, PRACTICE_TOOLS, PROPOSAL_TOOLS, TOOL_SCOPES } from "@whispering233/ai-editor-shared";
+import { AUTO_TOOLS, CHARACTER_PRIORITIES, CHARACTER_PRIORITY_LABELS, COMMON_TOOLS, DEFAULT_HALF_LIFE, MAX_FEEDBACK_DIMENSIONS, MAX_PRACTICE_BRIEF_CHARS, MAX_PRACTICE_TOPIC_CHARS, PRACTICE_TOOLS, PROPOSAL_TOOLS, TOOL_SCOPES } from "@whispering233/ai-editor-shared";
 import * as m from "./index";
 
 describe("@whispering233/ai-editor-tools 入口冒烟", () => {
@@ -27,8 +27,8 @@ describe("@whispering233/ai-editor-tools 入口冒烟", () => {
     expect(typeof m.runProposeCreateEntity).toBe("function");
     expect(typeof m.runProposeAddDelta).toBe("function");
     expect(typeof m.runProposeAdvanceHook).toBe("function");
- // 入口副作用注册：查询 11 + 分析 5 + 伏笔 5 + 提案 16 + 练习 7 = 44 个（含 get_chapter_text 正文只读 + get_deduction_marks 推演标记）
-    expect(m.toolCount()).toBe(44);
+ // 入口副作用注册：查询 11 + 分析 5 + 伏笔 5 + 提案 16 + 练习 7 + 通用 1 = 45 个（含 get_chapter_text 正文只读 + get_deduction_marks 推演标记）
+    expect(m.toolCount()).toBe(45);
     expect(m.getTool("get_entity")).toBeDefined();
     expect(m.getTool("get_chapter_text")!.permission).toBe("auto"); // 正文只读：自动权限
  // 分页数值防漂移：description 由 query/manuscript.ts 的常量插值生成
@@ -46,6 +46,23 @@ describe("@whispering233/ai-editor-tools 入口冒烟", () => {
         new Set([String(m.DEFAULT_TEXT_PAGE_CHARS), String(m.MAX_TEXT_PAGE_CHARS)]),
       );
     }
+ // 检索上限防漂移：web_search 的 description 与 schema 共用 schemas/web-search.ts 的三个常量——
+ // 描述里出现的**任何**数字必须恰好 ⊆ {query 上限, 缺省条数, 条数上限}（手写数值 / 值改了没同步即报红）
+    const webSearchDescription = m.getTool("web_search")!.description;
+    expect(new Set(webSearchDescription.match(/\d+/g) ?? [])).toEqual(
+      new Set([
+        String(m.MAX_SEARCH_QUERY_CHARS),
+        String(m.DEFAULT_SEARCH_RESULT_COUNT),
+        String(m.MAX_SEARCH_RESULT_COUNT),
+      ]),
+    );
+    // 模型得知这些信息的唯一渠道是描述本身：过滤语法 / 不返正文 / 隐私面 / 未配备 key 报错
+    for (const hint of ["site:", "-site:", "after:", "lang:", "need_content", "DeepSeek"]) {
+      expect(webSearchDescription).toContain(hint);
+    }
+    expect(m.getTool("web_search")!.scope).toBe("common"); // 两种工作区都注册
+    expect(m.getTool("web_search")!.permission).toBe("auto");
+    expect(typeof m.runWebSearch).toBe("function");
  // 维度上限防漂移：两个提交点评卡的 description 由 shared MAX_FEEDBACK_DIMENSIONS 插值生成
     for (const name of ["submit_style_feedback", "submit_free_feedback"]) {
       expect(m.getTool(name)!.description).toContain(`dimensions 最多 ${MAX_FEEDBACK_DIMENSIONS} 个维度`);
@@ -85,13 +102,13 @@ describe("@whispering233/ai-editor-tools 入口冒烟", () => {
     }
   });
 
- // 跨包单源守卫：shared 的工具目录常量（AUTO_TOOLS + PRACTICE_TOOLS + PROPOSAL_TOOLS）与 registry 事实源必须**同集**——
+ // 跨包单源守卫：shared 的工具目录常量（AUTO_TOOLS + COMMON_TOOLS + PRACTICE_TOOLS + PROPOSAL_TOOLS）与 registry 事实源必须**同集**——
  // 新增工具只改 registry 不改 shared 常量（或反之）时，此处报红（此前两者无同步守卫，目录常量曾静默漂移）。
  // EXECUTOR_TOOLS 不参与：执行类工具**不注册 registry**（LLM 不可见，见 ./index.js 头注释）。
  // 断言放本文件而非 registry.test.ts：后者会注册 4 个测试辅助工具，listTools 并非纯目录。
   it("shared 工具目录常量与 registry 注册表同集（无遗漏 / 无多余）", () => {
     const registered = new Set(m.listTools().map((tool) => tool.name));
-    expect(registered).toEqual(new Set([...AUTO_TOOLS, ...PRACTICE_TOOLS, ...PROPOSAL_TOOLS]));
+    expect(registered).toEqual(new Set([...AUTO_TOOLS, ...COMMON_TOOLS, ...PRACTICE_TOOLS, ...PROPOSAL_TOOLS]));
   });
 
  // 工具 scope（工作区作用域，2026-10）：既有 37 个工具全为 novel（逐名对账，不用「长度相等」代替）
@@ -142,6 +159,7 @@ describe("@whispering233/ai-editor-tools 入口冒烟", () => {
     }
     expect(tools.filter((tool) => tool.scope === "novel").map((tool) => tool.name)).toEqual(legacyToolNames);
     expect(tools.filter((tool) => tool.scope === "practice").map((tool) => tool.name)).toEqual([...PRACTICE_TOOLS].sort());
-    expect(tools).toHaveLength(legacyToolNames.length + PRACTICE_TOOLS.length);
+    expect(tools.filter((tool) => tool.scope === "common").map((tool) => tool.name)).toEqual([...COMMON_TOOLS].sort());
+    expect(tools).toHaveLength(legacyToolNames.length + PRACTICE_TOOLS.length + COMMON_TOOLS.length);
   });
 });

@@ -130,6 +130,14 @@ export const EXECUTOR_TOOLS = [
 export const AUTO_TOOLS = [...QUERY_TOOLS, ...ANALYSIS_TOOLS, ...HOOK_ANALYSIS_TOOLS] as const;
 
 /**
+ * 通用工具（自动级，`scope = "common"`，共 1 个）：**两种工作区都注册**——
+ * 外部检索 `web_search`（联网搜索，与工作区语义无关，见 docs/api/tool-calling.md「外部检索（自动）」）。
+ */
+export const COMMON_TOOLS = [
+  "web_search", // DeepSeek 联网检索（只读、无提案；凭据由 server 注入）
+] as const;
+
+/**
  * 练习工具（自动级，「作家文风练习」，共 7 个 = 四只读 + 三写 AI 自己的产出）——
  * **仅 `kind = "practice"` 工作区注册**（`scope = "practice"`，见 docs/api/tool-calling.md「按工作区类型收窄」）：
  * 四个只读分页工具（范文 / 仿写稿 / 自由稿 / 风格说明）与三个提交工具（仿写点评卡 / 自由练习点评卡 / 出题）。
@@ -145,8 +153,14 @@ export const PRACTICE_TOOLS = [
   "submit_practice_topic", // AI 出题（只写 practice_free_pieces.topic / brief）
 ] as const;
 
-/** 全部工具名（自动 21 + 练习 7 + 提案 16 + 执行 13 = 57 个） */
-export const TOOL_NAMES = [...AUTO_TOOLS, ...PRACTICE_TOOLS, ...PROPOSAL_TOOLS, ...EXECUTOR_TOOLS] as const;
+/** 全部工具名（自动 21 + 通用 1 + 练习 7 + 提案 16 + 执行 13 = 58 个） */
+export const TOOL_NAMES = [
+  ...AUTO_TOOLS,
+  ...COMMON_TOOLS,
+  ...PRACTICE_TOOLS,
+  ...PROPOSAL_TOOLS,
+  ...EXECUTOR_TOOLS,
+] as const;
 
 /** 工具名（从 TOOL_NAMES 派生） */
 export type ToolName = (typeof TOOL_NAMES)[number];

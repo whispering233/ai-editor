@@ -22,7 +22,7 @@ import {
   type Model,
 } from "@earendil-works/pi-ai";
 import { ModelRuntime, SessionManager, SettingsManager } from "@earendil-works/pi-coding-agent";
-import { PRACTICE_TOOLS, type WorkspaceKind } from "@whispering233/ai-editor-shared";
+import { COMMON_TOOLS, PRACTICE_TOOLS, type WorkspaceKind } from "@whispering233/ai-editor-shared";
 import { type ToolContext } from "@whispering233/ai-editor-tools";
 import { projectSessionsDir } from "./paths.js";
 import {
@@ -277,7 +277,7 @@ const NOVEL_TOOLS = [
 ];
 
 describe("领域工具装配", () => {
-  it("小说工作区：37 个工具全部可用（逐名相等）、builtin 全关，faux 的工具调用真正执行", async () => {
+  it("小说工作区：37 个小说工具 + 1 个通用工具（web_search）全部可用（逐名相等）、builtin 全关，faux 的工具调用真正执行", async () => {
     const env = await createFauxEnv();
     const projectRoot = mkTempDir("ai-editor-k2-tools-");
     const agentDir = mkTempDir("ai-editor-k2-agentdir4-");
@@ -301,8 +301,8 @@ describe("领域工具装配", () => {
       });
 
       const activeNames = runtime.session.getActiveToolNames();
-      expect([...activeNames].sort()).toEqual(NOVEL_TOOLS);
-      expect(activeNames).toHaveLength(37);
+      expect([...activeNames].sort()).toEqual([...NOVEL_TOOLS, ...COMMON_TOOLS].sort());
+      expect(activeNames).toHaveLength(NOVEL_TOOLS.length + COMMON_TOOLS.length);
       for (const builtin of ["read", "bash", "edit", "write"]) {
         expect(activeNames).not.toContain(builtin);
       }
@@ -333,8 +333,8 @@ describe("练习工作区装配", () => {
     const runtime = await setupRuntime({ projectRoot, env, agentDir, kind: "practice" });
     try {
       const activeNames = runtime.session.getActiveToolNames();
-      // 恰好四个只读 + 三个写 AI 产出（shared PRACTICE_TOOLS = 同一份清单）
-      expect([...activeNames].sort()).toEqual([...PRACTICE_TOOLS].sort());
+      // 恰好四个只读 + 三个写 AI 产出（shared PRACTICE_TOOLS = 同一份清单）+ 通用工具（web_search）
+      expect([...activeNames].sort()).toEqual([...PRACTICE_TOOLS, ...COMMON_TOOLS].sort());
       expect(activeNames.some((name) => name.startsWith("propose_"))).toBe(false);
       // 点名否定：小说侧最常见的读写工具在练习工具面根本不存在
       expect(activeNames).not.toContain("get_outline");
