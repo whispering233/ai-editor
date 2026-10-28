@@ -838,14 +838,16 @@ export function SettingTreeView({ reloadKey }: { reloadKey: number }) {
               />
             </span>
           </div>
-          {/* 描述摘要行：弱化样式，空描述不渲染；title 查看完整摘要 */}
+          {/* 描述摘要行：弱化样式，空描述不渲染；title 查看完整摘要。
+              缩进用**同一条箭头占位链**（`-ml-1 w-6` + gap）而不是手写 `pl-*` 数字——
+              标题列位由箭头几何决定，硬编码会随箭头盒变化再次漂移（DESIGN.md「缩进列对齐」） */}
           {rowDescription !== null && (
-            <span
-              className="min-w-0 truncate pl-5 text-xs text-muted-foreground"
-              title={rowDescription}
-            >
-              {rowDescription}
-            </span>
+            <div className="flex min-w-0 gap-1.5">
+              <span className="-ml-1 w-6 shrink-0" aria-hidden="true" />
+              <span className="min-w-0 truncate text-xs text-muted-foreground" title={rowDescription}>
+                {rowDescription}
+              </span>
+            </div>
           )}
         </>
       );
