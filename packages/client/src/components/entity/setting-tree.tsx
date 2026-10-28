@@ -722,8 +722,9 @@ export function SettingTreeView({ reloadKey }: { reloadKey: number }) {
           {isDragBefore && <DropIndicator position="top" />}
           {isDragAfter && <DropIndicator position="bottom" />}
           <div className="flex min-w-0 items-center gap-1.5">
-            {/* 折叠箭头（叶子占位保缩进对齐）；点击切展开态，不选中/不跳转
-                （图标按钮统一走 antd text 变体——DESIGN.md §Components `icon-button`） */}
+            {/* 折叠箭头（叶子占位保缩进对齐）；点击切展开态，不选中/不跳转。
+                方向 = 折叠横指 / 展开下指（DESIGN.md §数据展示「缩进列对齐」）。
+                图标按钮统一走 antd text 变体——DESIGN.md §Components `icon-button` */}
             <Button
               color="default" variant="text"
               size="small"
@@ -733,7 +734,7 @@ export function SettingTreeView({ reloadKey }: { reloadKey: number }) {
               disabled={!hasChildren}
               icon={
                 <RightOutlined
-                  className={cn("text-sm transition-transform", isCollapsed && "-rotate-90")}
+                  className={cn("text-sm transition-transform", !isCollapsed && "rotate-90")}
                 />
               }
             />
