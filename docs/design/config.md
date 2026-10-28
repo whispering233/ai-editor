@@ -19,7 +19,7 @@
 **读写边界**：
 
 - pi agent dir 的唯一读写在服务端（设置页 key 写入经 pi credential store；模型/压缩参数经 pi settings）。
-- 联网检索（`web_search` 工具）**复用 pi 的 `deepseek` provider 凭据**（`ModelRuntime.getAuth("deepseek")`）：不新增配置文件、不新增设置项、不直读 `auth.json`。搜索按次计费，不进会话 token 账目；查询词会发往 DeepSeek。未配置凭据时工具调用抛可读错误（不静默失败）。
+- 联网检索与抓取（`web_search` / `fetch_content`）**复用 pi 的 `deepseek` provider 凭据**（`ModelRuntime.getAuth("deepseek")`）：不新增配置文件、不新增设置项、不直读 `auth.json`。两者都按次计费，不进会话 token 账目；查询词 / URL 会发往 DeepSeek。未配置凭据时工具调用抛可读错误（不静默失败）。
 - 项目目录内的 `.pi/`（项目级 settings/extensions/skills）**一律不参与配置**：资源加载显式关闭扩展/技能/提示词模板，且项目信任为 false——项目目录可能来自他人（备份包/共享目录），不接受其中携带的可执行资源或配置。
 - 用户级旧文件 `~/.ai-editor/config.json` **已废弃**（key/模型/预算全部迁往 pi agent dir）：代码不再读取，文件保留在磁盘不影响行为。
 - 项目文件（project.json/outline.json/AGENTS.md）走原子写；`sessions/` 由 pi `SessionManager` 追加写（整文件重写仅限迁移）。

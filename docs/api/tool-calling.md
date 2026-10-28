@@ -177,7 +177,7 @@ search_references(query, type?, tags?)
 
 ### 外部检索（自动）
 
-唯一的出站工具：检索语句发往 DeepSeek 搜索 API。**只做检索，不做正文抓取、不落盘缓存**；参数刻意收窄——过滤语法直接写在 `query` 里（DeepSeek 支持 `site:` / `-site:` / `after:` / `lang:` / `"精确短语"`），不自造 `recency` / `domain` 一类结构化字段。
+出站工具两个：检索与抓取都发往 DeepSeek 的搜索 / 抓取 API，**都不落盘缓存**；检索参数刻意收窄——过滤语法直接写在 `query` 里（DeepSeek 支持 `site:` / `-site:` / `after:` / `lang:` / `"精确短语"`），不自造 `recency` / `domain` 一类结构化字段。
 
 ```typescript
 web_search(query, count?)
