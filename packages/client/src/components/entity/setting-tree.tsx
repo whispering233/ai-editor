@@ -725,19 +725,24 @@ export function SettingTreeView({ reloadKey }: { reloadKey: number }) {
             {/* 折叠箭头（叶子占位保缩进对齐）；点击切展开态，不选中/不跳转。
                 方向 = 折叠横指 / 展开下指（DESIGN.md §数据展示「缩进列对齐」）。
                 图标按钮统一走 antd text 变体——DESIGN.md §Components `icon-button` */}
-            <Button
-              color="default" variant="text"
-              size="small"
-              className="-ml-1"
-              aria-label={hasChildren ? (isCollapsed ? "展开" : "折叠") : undefined}
-              onClick={() => toggleCollapse(node.id)}
-              disabled={!hasChildren}
-              icon={
-                <RightOutlined
-                  className={cn("text-sm transition-transform", !isCollapsed && "rotate-90")}
-                />
-              }
-            />
+            {hasChildren ? (
+              <Button
+                color="default" variant="text"
+                size="small"
+                className="-ml-1"
+                aria-label={isCollapsed ? "展开" : "折叠"}
+                onClick={() => toggleCollapse(node.id)}
+                icon={
+                  <RightOutlined
+                    className={cn("text-sm transition-transform", !isCollapsed && "rotate-90")}
+                  />
+                }
+              />
+            ) : (
+              /* 叶子行不渲染 disabled 箭头（灰箭头看着可点却没反应）——空占位同箭头几何：
+                 `-ml-1` + 24px 按钮盒 = 20px 有效宽（DESIGN.md「缩进列对齐」） */
+              <span className="-ml-1 w-6 shrink-0" aria-hidden="true" />
+            )}
             {/* 名称：点击行内编辑（Enter 确认 / Esc 取消 / 失焦保存）；stopPropagation 隔离——
               单击标题 = 编辑而非选中（冲突设计） */}
             {editing ? (
@@ -871,7 +876,8 @@ export function SettingTreeView({ reloadKey }: { reloadKey: number }) {
               className="flex items-center gap-1.5 py-1"
               style={{ paddingLeft: `${(depth + 1) * 16 + 8}px` }}
             >
-              <span className="w-4 shrink-0" />
+              {/* 占位同箭头几何（输入框对齐上方子行名称） */}
+              <span className="-ml-1 w-6 shrink-0" />
               {inlineInput(
                 createValue,
                 setCreateValue,
@@ -993,8 +999,9 @@ export function SettingTreeView({ reloadKey }: { reloadKey: number }) {
 
       {/* root 级就地新建输入行（工具栏「+ 新建」触发；无父设定） */}
       {creatingAt?.parentId === null && (
-        <div className="mb-2 flex items-center gap-1.5 rounded-md border border-border bg-card px-2 py-1">
-          <span className="w-4 shrink-0" />
+        <div className="mb-2 flex items-center gap-1.5 rounded-md border border-border bg-card py-1 pl-4 pr-2">
+          {/* 占位同箭头几何，且补上树容器的 p-2（本行在容器外）——输入框对齐顶层名称 */}
+          <span className="-ml-1 w-6 shrink-0" />
           {inlineInput(
             createValue,
             setCreateValue,
