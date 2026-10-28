@@ -5,7 +5,7 @@
 格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，
 版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
-版本头可带一行主题后缀（`## [vX.Y.Z] - <日期> — <主题>`）。正文只写条目：标准节（`### Added` / `### Changed` / `### Fixed` …）加少量说明节（`### Note`、`### 过渡注意`、`### Breaking`），**不写引用块摘要段**——它只会重述条目，并夹带回归证据（测试计数 / 取证过程）这类不进本文件的内容。本文件同时是 `release.yml` 建 GitHub Release 的正文来源，升级 / 迁移提醒要写进条目或说明节，别只出现在摘要里。
+版本头只写 `## [vX.Y.Z] - <日期>`（不带主题后缀或子标题）；正文只写条目：标准节（`### Added` / `### Changed` / `### Fixed` / `### Removed` / `### Security`）加说明节（`### Note` / `### Breaking`），**不写摘要段**——它只会重述条目，并夹带测试计数、取证过程这类不进本文件的内容。本文件同时是 `release.yml` 建 GitHub Release 的正文来源，升级 / 迁移提醒要写进条目或说明节。
 
 ## [Unreleased]
 
@@ -25,7 +25,7 @@
 
 - **单条工具结果上限 `8000` → `20000` tokens**：`fetch_content` 要尽量完整地吃下一篇文章（估算每字按 1 token 保守计）。代价是任何单条工具结果（如 `get_outline` / `query_relationships`）的最坏上下文占用与费用同步放大——上限是失控保护，不是目标，工具仍应只取必要数据。
 
-## [v0.0.61] - 2026-10-24 — pi 内核升级至 1.4.0
+## [v0.0.61] - 2026-10-24
 
 ### Changed
 
@@ -38,19 +38,21 @@
   - **本仓接口面零改动**：只使用包根导出（pi 1.2.0 移除的 `./client` / `./experimental/plugin` 与本仓从未使用的扩展系统无关）；provider 目录的家集合无删除 / 改名，`PROVIDER_ICONS` 无需调整。
   - **升级注意**：pi 1.3.0 把 `kimi-coding` 家改用官方 Kimi Code 的 Chat Completions 端点——在 `models.json` 覆盖过该家 base URL 的用户必须补 `/v1`（未覆盖者不受影响）。另有可见行为变化：切换模型时旧模型的思考块不再作为正文回灌；工具调用参数 JSON 尾部损坏时改为校验失败并回显原始参数，而不是静默丢弃已解析字段。
 
-## [v0.0.60] - 2026-10-16 — 安装态修复（pin 落在安装根包 `server`）
+## [v0.0.60] - 2026-10-16
 
 ### Fixed
 
 - **`pi-codemode` 的解析锁必须落在消费者直接安装的包（`server`）**：v0.0.59 把 pin 只写在中间层 `agent`，实测 npm 会把 `pi-coding-agent` 的范围最大值（1.3.0）挂到安装根、把我们的精确版本嵌回 `agent/node_modules` ⇒ `pi-coding-agent` 仍拿到不兼容版本，server 启动照旧 `SyntaxError`。现 `server` 与 `agent` 都声明 `@earendil-works/pi-codemode: "1.0.4"`（前者决定无锁安装的解析形状，后者保证单独消费 `agent` 时同理安全）；本地 `pnpm pack:test` + 启动冒烟通过。**v0.0.58 / v0.0.59 的 5 个 npm 包均不可用**（都已 `npm deprecate` 指向本版；两个版本的 Windows 安装包不受影响——桌面打包走 `pnpm deploy`，用的是锁文件里的 1.0.4）。
 
-## [v0.0.59] - 2026-10-16 — 安装态修复（pi 传递依赖解析锁 + 发布冒烟脚本竞态）
+## [v0.0.59] - 2026-10-16
 
 ### Fixed
 
 - **安装态无法启动：pin 住 pi 的传递依赖 `pi-codemode`**（`packages/agent` 新增直接依赖 `@earendil-works/pi-codemode: "1.0.4"`）。上游在 `pi-codemode@1.2.0` 移除了 `MCP_TYPESCRIPT_PREAMBLE` 导出，而 `pi-coding-agent@1.0.4` 对它的声明是 `^1.0.4` ⇒ **无锁的 `npm install` 会解到 1.3.0，server 一启动即 `SyntaxError: ... does not provide an export named 'MCP_TYPESCRIPT_PREAMBLE'`**。本仓因 `pnpm-lock.yaml` 锁在 1.0.4 而本地全绿——这类破坏只在「消费者全新安装」里显现，故验收只能靠无锁安装冒烟（`pnpm pack:test` + `pnpm start:test` / CI `verify-installed`）。**v0.0.58 的 5 个 npm 包因此不可用**（已 `npm deprecate` 指向本版；同时发布的 Windows 安装包不受影响——桌面打包走 `pnpm deploy`，用的是锁文件里的 1.0.4）。
 - **`scripts/verify-installed.mjs` 的退出竞态把整条 Publish 判成失败**：等待子进程退出用的是裸 `await new Promise((r) => child.once("exit", r))`——若子进程在注册监听前就已退出，事件被错过 ⇒ top-level await 永不 settle，Node 以退出码 13 结束（v0.0.58 实录：五包已成功发布、安装态已验，却因这一步红）。现改为「先判 `exitCode` / `signalCode` 已退出则直接放行 + SIGTERM 后 `SMOKE_KILL_TIMEOUT_MS` 内未退则 SIGKILL 兜底」；`readServerVersion()` 的 `readFile` / `JSON.parse` 也补了带路径的可读错误。
 
+- **会话标题不再被工具结果 JSON 污染**：会话列表的 `lastMessage`（客户端在会话未命名时的标题回落值）改为「最后一条**非工具**可见文本」——此前工具结果也算「有内容的可见文本」，凡以工具调用收尾的一轮（练习点评 / 出题、小说侧提案类工具同样）都会把工具输出 JSON 当作会话标题显示。
+- **Linux 桌面身份三处对齐**：桌面包 `package.json` 新增 `desktopName`（`com.whispering233.ai-editor`，与 `appId` 同值）+ `linux.syncDesktopName: true`。此前 `.desktop` 文件名取 `executableName`（`ai-editor`）、`StartupWMClass` 回退 `productName`（`AI Editor`）、Electron 的 `app_id` / `WM_CLASS` 取应用名 slug——三处各自取值；现包内 `.desktop` 文件名、`StartupWMClass` 与真实窗口 WM_CLASS 同为 `com.whispering233.ai-editor`，并满足 `xdg-desktop-portal` 1.21+ 对 app 身份须可解析到 `.desktop` 文件的要求。（Linux 未发布，无用户影响；Windows 包未变。）
 
 ### Added
 
@@ -81,12 +83,7 @@
   - **pi 目录数据变更**：`opencode-go` 下架 `qwen3.7-max`（现有 `qwen3.7-plus` / `qwen3.8-max`）；模型下拉与激活模型解析随目录自动跟随，无代码改动。
   - **设置页测试的「撞名模型」fixture 改为现算**：不再写死某个模型 id，而是从 pi 目录现场挑「属 opencode-go / 跨家撞名 / 不在 deepseek」的模型；同类漂移已两次让测试变红（0.85.1→0.87.1 的 `deepseek-v4-flash` 改名、本次的 `qwen3.7-max` 下架），前提消失时 helper 直接抛错而不是静默换一个模型。
 
-### Fixed
-
-- **会话标题不再被工具结果 JSON 污染**：会话列表的 `lastMessage`（客户端在会话未命名时的标题回落值）改为「最后一条**非工具**可见文本」——此前工具结果也算「有内容的可见文本」，凡以工具调用收尾的一轮（练习点评 / 出题、小说侧提案类工具同样）都会把工具输出 JSON 当作会话标题显示。
-- **Linux 桌面身份三处对齐**：桌面包 `package.json` 新增 `desktopName`（`com.whispering233.ai-editor`，与 `appId` 同值）+ `linux.syncDesktopName: true`。此前 `.desktop` 文件名取 `executableName`（`ai-editor`）、`StartupWMClass` 回退 `productName`（`AI Editor`）、Electron 的 `app_id` / `WM_CLASS` 取应用名 slug——三处各自取值；现包内 `.desktop` 文件名、`StartupWMClass` 与真实窗口 WM_CLASS 同为 `com.whispering233.ai-editor`，并满足 `xdg-desktop-portal` 1.21+ 对 app 身份须可解析到 `.desktop` 文件的要求。（Linux 未发布，无用户影响；Windows 包未变。）
-
-## [v0.0.57] - 2026-09-26 — 品牌标记 + 小说文档导出
+## [v0.0.57] - 2026-09-26
 
 ### Added
 
@@ -108,7 +105,7 @@
 
 - **pi `ToolCall.arguments` 收紧适配**：0.86 起该字段为 `JsonObject`（工具参数与结果 details 限 JSON 可序列化值），工具参数校验入参断言同步收窄。
 
-## [v0.0.56] - 2026-09-24 — 角色优先级 + 剧情推演
+## [v0.0.56] - 2026-09-24
 
 ### Added
 
@@ -135,7 +132,7 @@
 - **工具行展开态丢失参数**：`asToolCall` 只认 LLM wire 形状 `{type:"function",function:{…}}`（全仓无生产者），真实形状是服务端投影的 `{id,name,arguments}`（SSE `message_end` 帧与历史接口的**同一份**投影）⇒ 展开只显示动词短语、看不到查询对象（历史回看一直如此）；补真实形状分支后运行态与历史回看都恢复，同一批内重复 id 也去重
 - **工具行状态点把「进行中」显示成成功**：`ToolCallRow` 的 `ok = status === "ok" || result !== undefined` 会让已挂 result 的行盖掉显式 `running`；改为显式 `status` 优先
 
-## [v0.0.55] - 2026-09-23 — 会话状态栏 + 移除「小说拆解」
+## [v0.0.55] - 2026-09-23
 
 ### Added
 
@@ -161,7 +158,7 @@
 - **压缩后占用段凭空消失**：`contextUsage` 的 `tokens` / `percent` 为 `null`（压缩后到下一次模型响应之间占用未知）时改为**帧照发**、UI 渲染 `? · 窗口`——「未知」与「空」不再混为一谈（旧实现把未知当非法值丢帧，占用段静默消失）。
 - **订阅制成本误标**：`cost` 的「订阅 · 估算」判定从 `isUsingOAuth` 收窄为 `ModelRuntime.isUsingSubscription()`（= OAuth 且该家 `auth.oauth.isSubscription`）+ API-key 认证的订阅家 `kimi-coding`——openrouter / radius 等「OAuth 但按量计费」的家不再被误标为估算（实证：pi-ai 目录里 `isSubscription: true` 的家仅 anthropic / github-copilot / openai-codex / xai / kimi-coding）。
 
-## [v0.0.54] - 2026-09-21 — 书架管理 / 删书 / 会话移出备份 / 云端恢复
+## [v0.0.54] - 2026-09-21
 
 ### Added
 
@@ -181,7 +178,7 @@
 - **`danger` 图标按钮渲染不出危险色**：antd 6 的 `Button` 在 `color` + `variant` 同时给出时忽略 `danger` 糖（实测渲染为常规墨色）；6 处不可恢复操作改为 `color="danger" variant="text"`（含 1 处软删误用），并新增源码守卫 `danger-color-variant` 防复发。
 - **删书确认框的按钮色与文案口径**、**云端导入请求体 snake_case**（对齐 `api-public.md`）、**导入后立刻查状态偶发 `local-ahead`**（`lastSyncAt` 基准改为 `max(now, 三文件 mtime 向上取整)`）等一致性修复。
 
-## [v0.0.53] - 2026-09-21 — 拆解会话与续拆
+## [v0.0.53] - 2026-09-21
 
 ### Added
 
@@ -201,7 +198,7 @@
 - **拆解小说在 opencode 系 provider 上必失败（400 MissingSessionID）**：拆解管线早期直连 `ModelRuntime.completeSimple`，绕过了 pi 的 Agent 包装层 ⇒ 缺 `x-opencode-session` 头，首次批调用即 400。现**一律走 pi 的 Agent 路径**（`createAgentSessionServices` + `createAgentSessionFromServices` + 每 job 一枚落盘会话，无工具）：provider 特化头、重试/超时设置、思考档位全部自动继承，不再自己维护一份适配。
 - **会话 id 适配**：拆解 job id（`job-<nanoid>`）可能以 `-` 结尾，而 pi 的会话 id 要求首尾为字母数字（直接当 id 会抛错）；现先按 pi 的约束清洗，清不出时交给 pi 自生成。
 
-## [v0.0.52] - 2026-09-20 — 快捷键
+## [v0.0.52] - 2026-09-20
 
 ### Added
 
@@ -216,7 +213,7 @@
 
 - **`cloud/sync.test.ts` 三例 flake（实测约半数概率红）**：用例拿 `new Date()` 当 `lastSyncAt` 基准，而文件 mtime 与毫秒截断基准之间有亚毫秒抖动 ⇒ beforeEach 刚写完的 `sessions/`（严格比较、无容差）被读成「本机有改动」，`synced` 用例偶发变 `local-ahead`（`remote-ahead` 用例同源风险）。基准改为**未来 10s** 的确定性构造（与同组 0.5s 用例同款口径；竞态解释与生产侧窄窗口登记在 `backlog.md`）。
 
-## [v0.0.51] - 2026-09-20 — 文档与一致性（无功能变更）
+## [v0.0.51] - 2026-09-20
 
 ### Changed
 
@@ -228,17 +225,15 @@
 - **macOS 安装包资产名去空格**：`electron-builder.yml` 的 mac `artifactName` 改为 `AI-Editor-…`（与 win/linux 同规则）。当前不出 macOS 包，但配置不得留空格——恢复出包时不会再踩「磁盘名/资产名/`latest.yml` 的 url 不一致 ⇒ 更新 404」；README 安装包表同步。
 - **发布链路补 gh 账号检查**：`build.md` 发布步骤新增第 0 步 `gh auth status`（多账号环境先 `gh auth switch` 到仓库 owner）。
 
+- **日期口径统一**：仓库内误标的 `2026-10` 全部修正为真实月份 `2026-09`（文档与代码注释）。
+- **发布自检命令修正**：`build.md` 的 `gh api … head_sha=` 补 `^{commit}`——annotated tag 的 `git rev-parse` 返回的是 tag 对象 SHA，不带 `^{commit}` 查得 0，会把「已触发」误判成「事件被吞」。
+- **`backlog.md` 审计登记刷新**：清掉本轮已修三项（macOS 资产名 / client limit 上限 / auto-push 测试诚实性），新增两项有意保留（api 文档的校验范围镜像、代码注释里的历史阶段编号）。
+
 ### Fixed
 
 - **过时计数**：`tools` 执行器门面与测试注释里的「15 个提案类型」（实际 16）、测试注释里的「33 个 LLM 可见工具」（实际 36）——改为引用常量或去掉数字，防再次漂移。
 - **`auto-push.test.ts` 的测试诚实性**：8 处用已退役的 `references/` 目录造「有变更」的写法改为 `AGENTS.md` / `sessions/`（真正参与变更判定的文件）；「有改动未进最新备份」用例不再用未来 mtime，改为「备份时间戳 +1ms」的真实序；补上「无备份时 `pushBackup` 回 404 → 跳过而非失败」这条分支的唯一可达用例。
 - **客户端注释里的退役目录**：`lib/api.ts` 的 restore / 云端拉取说明仍写「三文件 + `references/` + `sessions/`」——改为现行口径（三文件 + `sessions/`，正文与参考资料随 `data.db`）。
-
-### Docs
-
-- **日期口径统一**：仓库内误标的 `2026-10` 全部修正为真实月份 `2026-09`（文档与代码注释）。
-- **发布自检命令修正**：`build.md` 的 `gh api … head_sha=` 补 `^{commit}`——annotated tag 的 `git rev-parse` 返回的是 tag 对象 SHA，不带 `^{commit}` 查得 0，会把「已触发」误判成「事件被吞」。
-- **`backlog.md` 审计登记刷新**：清掉本轮已修三项（macOS 资产名 / client limit 上限 / auto-push 测试诚实性），新增两项有意保留（api 文档的校验范围镜像、代码注释里的历史阶段编号）。
 
 ## [v0.0.50] - 2026-09-20
 
@@ -292,30 +287,30 @@
   - 存量坏配置（旧版本/手工编辑写入）读侧按「未配置」处理 → 设备名回退 hostname 派生值，立刻止漏（`GET /cloud/status` 的 `deviceConfigured` 随之 false，设置页不预填坏值）。
   - 已泄露到云端的旧文件名**不自动清理**（属用户备份数据）：用户侧处置 = 轮换云盘应用密码（旧值当场作废）+ 删除/改名那份文件。
 
-## [v0.0.48] - 2026-09-16 — 文档收敛（无功能变更）
+## [v0.0.48] - 2026-09-16
 
-### Docs
+### Changed
 
 - `50-desktop.md`：§5.1 的「过渡注意」改为历史（v0.0.45 起升级不再弹清除数据框，真机已验证）；§2 首次启动口径补齐「`desktop.json` JSON 不可读同样按首次启动处理并重写配置（自愈）」。
 - `tasks.md`：清掉已完成的卡（发布链路 / 主进程逻辑 / 两个真机缺陷修复）与已验证的待验证项（真机两版闭环、卸载提示框修复、info 行落盘、三资产首跑），剩下 9 条可执行的待验证清单。
 - `AGENTS.md`：桌面版硬约束新增「升级路径守卫不可回退」（`customUnInstall` 必须保留 `${isUpdated}`/`${Silent}` 早退）；验证行补「改主进程后必跑打包态启动冒烟」。
 - `backlog.md`：移除一条误判项（用户手工删数据导致的「首次启动」现象，非缺陷）；保留差分回退、Actions Node 20 告警、慢网两个框等待排期项。
 
-## [v0.0.47] - 2026-09-16 — 端到端升级验证（无功能变更，代码与 v0.0.46 一致）
+## [v0.0.47] - 2026-09-16
 
 ### Note
 
 - 唯一变化是版本号；功能与 v0.0.46 相同。
 - 真机升级路径：v0.0.46（含已修复卸载器）→ v0.0.47：全程**不应**出现「是否清除使用数据」框，完成后 菜单 → 帮助 应显示 v0.0.47。
 
-## [v0.0.46] - 2026-09-16 — 自动更新链路验证（无功能变更）
+## [v0.0.46] - 2026-09-16
 
 ### Note
 
 - 本版仅版本号推进，代码与 v0.0.45 完全一致（`27a02fe`）——用作真机升级验证的目标版本。
 - **v0.0.44 → v0.0.46 仍会弹一次「是否清除使用数据」**（那一次由安装在机器上的 v0.0.44 旧卸载器执行，无法远程修补）：**必须选「否」**。v0.0.46 起再升级不再弹框、不动用户数据。
 
-## [v0.0.45] - 2026-09-16 — 修 v0.0.44 真机暴露的两个缺陷
+## [v0.0.45] - 2026-09-16
 
 ### Fixed
 
@@ -323,11 +318,11 @@
 - **手动「检查更新…」会弹两个框，且「正在后台下载」在差分 0 字节时是假话**：`checkForUpdates()` 只**发起**下载就返回，而下载完成事件稍后才触发，于是手动路径与事件路径各弹一个框。现手动流程独占对话框（`manualCheckInFlight`）：下载秒完（缓存命中 / 差分 0 字节）只弹「新版本已下载」+ 安装按钮；确实耗时（>1.2s）才先给一句「正在后台下载…」；连点菜单时给「正在检查/下载更新」回应。
 - **消除上游告警**：`autoUpdater.disableWebInstaller = true`（本仓只发完整 nsis 包，不发 nsis-web 差分包）。
 
-### 过渡注意（一次性）
+### Note
 
-**v0.0.44 → v0.0.45 这次升级仍会弹出一次「是否清除使用数据」**——旧卸载器已经装在用户机器上，无法远程修补。届时**必须选「否」**（选「是」会删书库与应用数据，不可恢复）。v0.0.45 起的每次升级都不再弹框、也不动用户数据。
+- **v0.0.44 → v0.0.45 这次升级仍会弹出一次「是否清除使用数据」**——旧卸载器已经装在用户机器上，无法远程修补。届时**必须选「否」**（选「是」会删书库与应用数据，不可恢复）。v0.0.45 起的每次升级都不再弹框、也不动用户数据。
 
-## [v0.0.44] - 2026-09-16 — 桌面版 Windows 自动更新
+## [v0.0.44] - 2026-09-16
 
 ### Added
 
@@ -340,11 +335,11 @@
 - **`electron-updater` 具名导入在打包态直接崩**（打包态冒烟产出）：`import { autoUpdater } from "electron-updater"` 在 Electron 的 ESM loader 下报 `does not provide an export named 'autoUpdater'`（该包是 CJS），而 `typecheck`/`lint`/单测**全绿**、开发态看不出来。现改默认导入 + 解构；根 `AGENTS.md`/`build.md` 已登记“主进程改 import 后必跑打包态启动冒烟”。
 - **更新流程的 info 行不落盘**：`log.ts` 只接管 `console.log/warn/error`，而 electron-updater 默认 logger 的 `info` 走 `console.info`（实测 `console.info !== console.log`）⇒ 真机排障时日志里只剩 error。现显式接 `autoUpdater.logger`（箭头包装，不依赖调用顺序）。
 
-### Docs
+### Changed
 
 - `docs/design/50-desktop.md` 新增 §5.2（选型/时机/反馈/安装口径/信任锚与安全边界/发布侧前置）；`build.md` 补三资产纪律、打包态启动冒烟、真机两版闭环、win32 分支本地跑法；`backlog.md` 修正“签名是自动更新前置”的旧口径并登记 6 条新遗留项；`AGENTS.md` 新增桌面版自动更新硬约束。
 
-## [v0.0.43] - 2026-09-16 — 卸载体验收尾
+## [v0.0.43] - 2026-09-16
 
 ### Changed
 
@@ -353,7 +348,8 @@
 ### Fixed
 
 - **卸载残留的安装器缓存（约 130MB）**：`%LOCALAPPDATA%\<name>-updater\installer.exe` 是 electron-builder 的 NSIS 安装器安装时写出的自身副本（供差分更新 / `quitAndInstall`），而**默认卸载器不清理它**（上游 electron-builder#9505）。现 `installer.nsh` **无条件删除**（属程序文件而非用户数据，且本项目未启用自动更新），并兼容带 scope 的旧目录名。
-## [v0.0.42] - 2026-09-16 — 桌面版健壮性：书库位置回退 + 卸载清理
+
+## [v0.0.42] - 2026-09-16
 
 ### Added
 
@@ -364,7 +360,7 @@
 - **书库位置解析加 3 级回退**：`<文档>/AI Editor`（文档目录被 OneDrive 重定向时**跳过**——书库内有 SQLite 与备份 zip，不放实时同步盘）→ `<主目录>/AI Editor` → `<userData>/AI Editor`；已保存位置不可用时同样走回退并改写配置，**全部不可用才报错退出**（弹原生错误框）。此前 `mkdirSync` 失败会让首次启动直接崩：Windows 的「文档」是已知文件夹，可能被重定向到并不存在的路径（OneDrive 卸载后的注册表残留）。实测：把 `desktop.json` 指向无权限路径 → 日志出现 `[warn] 书库位置不可用…（EACCES）` + `原书库位置…不可用 → 改用 …`，配置被改写为可用路径且服务正常起来。
 - **卸载删除的签名门禁**（安全性）：书库目录名 `AI Editor` 是通用名，**按名 `RMDir` 会误删用户早先自己建好的同名目录（不可恢复）**。现每次启动幂等写 `<书库>/.ai-editor/library.json`（`writeLibraryMarker`），卸载器**只删带该签名文件的目录**；`<userData>` 的存在性检查用 `desktop.json`（同样是本应用写的）。同名但无签名的目录一律跳过，提示文案里写明判断依据。
 
-## [v0.0.41] - 2026-09-16 — 导入书名修正 + 桌面打包口径收敛
+## [v0.0.41] - 2026-09-16
 
 ### Changed
 
@@ -374,7 +370,7 @@
 
 - **导入备份后书名变成备份文件名**：client 选 zip 后会自动把「文件名去 `.zip`」预填为书名，而备份命名是 `<时间戳>-<自动|手动>-<设备>[-<标签>]-人物N-设定N-章N.zip` —— 整串元信息被当成书名写进目录名与 `project.json`。现改为 `POST /project/import` 的 `name` **可选**：留空即用备份内 `project.json` 的 name（备份是权威），显式填写才覆盖（非法仍 400）；备份内名字为空/含非法字符（手工改坏的包）→ 兑底「导入的书籍」。client 不再预填，输入框占位符改「留空 = 使用备份里的书名」。
 
-## [v0.0.40] - 2026-09-16 — 桌面版（Electron 外壳）落地
+## [v0.0.40] - 2026-09-16
 
 ### Added
 
@@ -420,12 +416,12 @@
 - **关联页端点类型徽标漏英文**：`relations-view.tsx` 的 `ENDPOINT_TYPE_LABEL` 原是手抄的四类表（character/setting/location/hook + outline_node），`timepoint`/`event`/`reference` 在源/目标列与端点类型过滤下拉直接显示原始串（「timepoint」「event」）。改为派生 shared `ENTITY_TYPE_LABELS` + 补 `outline_node`。
 - **用户可见文案不再暴露内部枚举键**（同型问题的其余两处）：时间轴事件详情的小节标题「关联节点（occurs_in）」→ 取 shared 关系类型中文名（「锚定于」）；伏笔页五个分区块标题去掉括号里的关系键（埋点节点/推进节点/回收节点/依赖/涉及）与生命周期预览里的 `+ advances 关系` / `+ resolves 关系`。全 client 重扫描「中文文案 + 内部枚举键混排」= clean。
 
-### 有意保留
+### Note
 
 - 就地新建行仍「失焦即取消」（全站既有语义，与行内编辑的「失焦保存」成对）；卷/章切换按钮删除后，行内已无可误触该路径的元素。
 - 大纲/设定/PanelTree 三处自绘缩进行**不迁移 antd `Tree`**：完整成本收益评估与触发条件见 `docs/design/backlog.md`「有意保留」。
 
-## [v0.0.38] - 2026-09-15 — 云端存档（WebDAV）落地
+## [v0.0.38] - 2026-09-15
 
 ### Added
 
@@ -497,6 +493,7 @@
 - **修：拉取/恢复后误报「有改动未进最新备份」**（用户真机）：覆盖前快照的时间戳早于覆盖写入的文件 ⇒ 只看 mtime 会永远为真。`local.backupStale` 现在与 `local.dirty` **合取**（`同步状态` 提示行只在「确有未同步改动且未进备份」时出现）；**自动推送的守卫仍用纯 `hasUnbackedChanges`**（更严格，避免把旧内容推上云），两者口径不同是有意的。
 - **地址语义改为「用户云盘根」，工作根 `<云盘根>/ai-editor/` 由应用自动拼接**（用户要求「把拼接收敛到云端对接侧」）：`cloud.json` 与设置页都只表达用户云盘根（如 `https://dav.jianguoyun.com/dav`），实际读写一律发生在 `<云盘根>/ai-editor/<书名>-<id>/…`。**没有「截断再拼回」的迁移分支**——无论前端传什么，客户端层统一追加一段 `ai-editor`（唯一实现点 `createWebdavClient`）。地址还不存在时由新增的 `ensureWorkingRoot()`（幂等建「云盘根 + 工作根」）自愈；`/cloud/test` 的 `baseUrl` 回显配置值、`created` 指工作根。面板文案与占位符同步（填云盘根即可，不再让用户填子目录）。
 - **「同步状态」区块按反馈重排（C 项）**：三行改成**同字段同顺序**（`时间 · 类型[ · 标签] · 设备 · 人物N · 设定N · 章N · 大小`，缺项不省略）——`云端最新份` / `本机最新份` / `上次同步`（时间 + 该次同步的备份名）可逐项对齐；**`云端最新份` 行尾新增相对判定徽标** `云端更新` / `本机更新` / `相同`（按 `createdAt` 比，任一侧缺失不显示），不用再自己比时间；原先「本机已推份」自成一套格式（只给文件名）的问题消失；本机份列表读取失败时显示「（读取失败——见下方提示）」而非「无可用备份」。
+
 ### Changed
 
 - **类型段由单字母 `m`/`a` 改为 `自动`/`手动`**（`20260813-101530123-m-定稿.zip` → `20260813-101530123-手动-苹果本-定稿-人物32-设定58-章120.zip`）；当时旧文件名仍可列出/恢复/参与保留策略（不迁移、不改名），重命名旧备份保持其旧形态（**该兼容层已在下方「备份命名唯一化」中砍掉**）。
@@ -504,11 +501,9 @@
 - 备份列表与备份响应新增 `device` / `stats` 可选字段（旧格式文件名无这两项，读侧缺省）。
 - **备份命名唯一化（写入 = 解析）**：命名只有一种形态——`<时间戳>-<自动|手动>-<设备>[-<标签>]-人物N-设定N-章N.zip`；早期三类旧命名（秒级 `<YYYYMMDD-HHmmss>.zip`、带名称无类型段 `<YYYYMMDD-HHmmssSSS>-<名称>.zip`、单字母 `-m`/`-a` 段）**不再解析**——文件留在磁盘但不识别（不出现在列表、不可恢复、不参与保留策略），也不做重命名迁移（旧份没有设备/统计信息，硬补会谎报）。**打开项目时若 `.backups/` 有文件但无一可解析 → 立即生成一份新格式备份**（升级兜底，best-effort，不重复备份、不重命名旧份）；自动备份频率开启时下一次 tick 也会补一份。API 契约收敛：`device` / `stats` 由可选变**必填**（本地 `BackupEntry` 与云端 `CloudBackupEntry` 同步），client 删除「旧格式未记录 / 整行省略」死分支。
 
-### Docs
-
 - `docs/design/40-cloud-sync.md`（§3 新增「客户端接入」小节：单一状态源、查状态触发点、角标语义、一键状态机分派表）、`docs/ui/DESIGN.md`（§538 角标两色口径与跨页意图、§544/§548 对话框单点宿主与本机无备份的禁用口径）、`docs/api/20-api-backup.md`（命名格式 + 「设备与统计」口径 + 变更检测 + 与云端的关系 + 重命名旧格式的形态规则）、`docs/db/schema.md`（`.backups/` 命名）、`docs/design/10-data-model.md` §11、`docs/ui/DESIGN.md`（§备份与云端存档）。
 
-## [v0.0.37] - 2026-09-14 — UI 收口 + 发布前扫尘
+## [v0.0.37] - 2026-09-14
 
 ### Added
 
@@ -527,6 +522,13 @@
 - 大纲行尾「阅读进度」徽标改排在删除按钮**左侧**：删除按钮恒贴行尾，不再被徽标往左推（跨行操作列对齐）。
 - **客户端伏笔标记类型不再手抄**：`lib/outline-hooks.ts` 的 `HOOK_MARK_TYPES` / `HOOK_MARK_TYPE_ORDER` 改为派生自 shared `HOOK_RELATION_TYPES`（原先两遍手写字面量 `["plants","advances","resolves"]`，违反「关系类型清单单一来源」规则）。
 
+- `docs/ui/DESIGN.md`：§Colors 重写「标签色」（tint 三色 + 色相分布事实 + 深色叠色策略与实测对比度 + `type-badge-border` 两态同值 + `Character Role` 两态值）；§Components 把 `tag` / `type-badge` 拆成两个规格并登记**准入规则**（tint 只给 `data.tags`），`type-badge` 定稿为**描边式**并记录「彩色边框压在灰底上要 ≥3:1、浅色系只能做面积不能做线、边框色与 error 同色相的已知代价」；`status-badge` 去掉「或 tint 底色」授权（状态属枚举）；`character-rail` 行描述同步；Do's 增「不给枚举类型上彩色」。
+- `docs/ui/DESIGN.md`：新增 `relations-view` 列对齐口径；`data-row` 登记「行尾状态徽标排在操作按钮左侧」；`character-workbench` 进度节点选择器登记搜索口径；删 `relation-star-graph` 整段并同步 `character-relations` 段。
+- `docs/design/backlog.md`：删「星形图叶子 `· N` = 列表行数」登记项（星形图已不存在）。
+- `AGENTS.md`：人物页条目去掉星形图描述。
+- `docs/design/backlog.md`：新登「参考资料分类徽标形态不统一」与「关联页端点类型徽标缺 `timepoint`/`event` 中文标签」（后者 = 关联总览显示原始英文类型串）。
+- **发布前文档扫尘（2026-09-14）**：`docs/ui/DESIGN.md` 标签 tint 口径 6 档 → 3 档（与代码 `tag-tint.ts` 对齐）、`status-badge` 附近笔误修正；`docs/api/` 四处与代码不符——`50-api-delta.md` 变更目标白名单方向（是 `ENTITY_TYPES` 去掉 `event`，不是「含 event」）、`10-api-project.md` 备份频率补 `1` 分钟档且 key 载体改 pi agent dir、`30-api-entity.md` 详情类型补 `reference` / setting 字段删已废弃键 / 补 `GET /reference/scan/status`（连 `00-api-index.md` 索引行）、`error-code.md` 删不存在的 SSE `error` 帧并登记服务端扩展码、`tool-calling.md` 执行类补 `reorder_timepoints`；`docs/db/schema.md` 迁移目标 v6 → v7、`hook` 字段补 `expected_resolve_node_id`、画布坐标残留删除；`docs/design/` 删画布 localStorage 残留（`10-data-model.md` / `config.md`）、`build.md` debug 类别四类（删 `stream`）、`architecture.md` 凭据优先序改「存量优先」、`00-master-design.md` 删除不存在的「全量回溯」（实际深度上限 3）、`10-data-model.md` 状态计算改章序前缀口径、`backlog.md` 两条登记刷新；`README.md` 版本与能力叙述同步（v0.0.37 / 星形图已移除 / 文案与计数修正）；根 `AGENTS.md` 新增两条硬约束（路由形态 gate 的 effect 依赖；pi 依赖声明位置）并简化 `tasks.md`（开发流程叙事不留在仓库文档）；shared/tools/agent 三处注释计数漂移修正（工具 19+16+13=48、备份频率含 1）。
+
 ### Removed
 
 - **人物关系星形图（`relation-star-graph` 组件 + `lib/relation-star` 几何/判据模块及其单测）整体删除**：关系网 tab 只保留按 `relationType` 分组的关系列表；`CharacterRelationsView` 的 `selfName` prop 随之移除。
@@ -536,16 +538,7 @@
 - **`server` 的 pi 依赖声明错位**：`@earendil-works/pi-ai` / `pi-coding-agent` 是 `server/src` 的**运行时 import**（`model-runtime.ts`、`routes/settings.ts`）却声明在 `devDependencies`——靠 `agent` 包的传递依赖 hoist 才跑得起来（pnpm 严格布局下安装态会 `ERR_MODULE_NOT_FOUND`）。修法：两包移入 `dependencies`（版本不变）。
 - **概览页「阅读进度」长期停在原始 entity id**（连带「大纲概览」永远骨架、「创作要素」永远 `–`）：`Dashboard` 的两个概览态 effect（大纲补拉 / 要素统计）依赖数组**漏了 `mode`**，而 `#/` → `#/overview`（`useEnterLastBook` 自动进书）是**同实例改 prop、不重挂载** ⇒ 依赖值全没变，effect 不再执行，`loadOutline()` 永不调用；进度节点只剩 `findOutlineNodeTitle` 回退的 id 原文，要等用户点「刷新数据」或进大纲/人物/时间轴等别处加载 outline 才恢复可读标题。修法：两处依赖补 `mode`（`:206` / `:236`；会话 effect `:246` 本就带 `mode`，故只有这两个区块卡住）。
 
-### Docs
-
-- `docs/ui/DESIGN.md`：§Colors 重写「标签色」（tint 三色 + 色相分布事实 + 深色叠色策略与实测对比度 + `type-badge-border` 两态同值 + `Character Role` 两态值）；§Components 把 `tag` / `type-badge` 拆成两个规格并登记**准入规则**（tint 只给 `data.tags`），`type-badge` 定稿为**描边式**并记录「彩色边框压在灰底上要 ≥3:1、浅色系只能做面积不能做线、边框色与 error 同色相的已知代价」；`status-badge` 去掉「或 tint 底色」授权（状态属枚举）；`character-rail` 行描述同步；Do's 增「不给枚举类型上彩色」。
-- `docs/ui/DESIGN.md`：新增 `relations-view` 列对齐口径；`data-row` 登记「行尾状态徽标排在操作按钮左侧」；`character-workbench` 进度节点选择器登记搜索口径；删 `relation-star-graph` 整段并同步 `character-relations` 段。
-- `docs/design/backlog.md`：删「星形图叶子 `· N` = 列表行数」登记项（星形图已不存在）。
-- `AGENTS.md`：人物页条目去掉星形图描述。
-- `docs/design/backlog.md`：新登「参考资料分类徽标形态不统一」与「关联页端点类型徽标缺 `timepoint`/`event` 中文标签」（后者 = 关联总览显示原始英文类型串）。
-- **发布前文档扫尘（2026-09-14）**：`docs/ui/DESIGN.md` 标签 tint 口径 6 档 → 3 档（与代码 `tag-tint.ts` 对齐）、`status-badge` 附近笔误修正；`docs/api/` 四处与代码不符——`50-api-delta.md` 变更目标白名单方向（是 `ENTITY_TYPES` 去掉 `event`，不是「含 event」）、`10-api-project.md` 备份频率补 `1` 分钟档且 key 载体改 pi agent dir、`30-api-entity.md` 详情类型补 `reference` / setting 字段删已废弃键 / 补 `GET /reference/scan/status`（连 `00-api-index.md` 索引行）、`error-code.md` 删不存在的 SSE `error` 帧并登记服务端扩展码、`tool-calling.md` 执行类补 `reorder_timepoints`；`docs/db/schema.md` 迁移目标 v6 → v7、`hook` 字段补 `expected_resolve_node_id`、画布坐标残留删除；`docs/design/` 删画布 localStorage 残留（`10-data-model.md` / `config.md`）、`build.md` debug 类别四类（删 `stream`）、`architecture.md` 凭据优先序改「存量优先」、`00-master-design.md` 删除不存在的「全量回溯」（实际深度上限 3）、`10-data-model.md` 状态计算改章序前缀口径、`backlog.md` 两条登记刷新；`README.md` 版本与能力叙述同步（v0.0.37 / 星形图已移除 / 文案与计数修正）；根 `AGENTS.md` 新增两条硬约束（路由形态 gate 的 effect 依赖；pi 依赖声明位置）并简化 `tasks.md`（开发流程叙事不留在仓库文档）；shared/tools/agent 三处注释计数漂移修正（工具 19+16+13=48、备份频率含 1）。
-
-## [v0.0.36] - 2026-09-13 — 关系类型收口 + 人物页关系区
+## [v0.0.36] - 2026-09-13
 
 ### Added
 
@@ -562,14 +555,6 @@
 - **`relation_type` 契约放宽**：REST schema 由 `z.enum(RELATION_TYPES)` 改自由字符串 + 语法校验；db 守卫同源；`relation_type` 的 `trim` 归一位于 REST 边界。预定义专属校验（伏笔锚点仅章 / `belongs_to` 防环 / `occurs_at` 挂载）按类型名判断，自定义类型天然不触发。**AI 侧保持枚举**（有意分层，见 `tool-calling.md`）。
 - 星形图半径预算从 `min(宽, 高)/2` 改为 `min(宽度预算, 480/2)` 且**画布高度随半径长高**（原先约 10 叶起半径饱和、叶子挤成一圈）；标签横向余量不足时锚点翻向内（原先长名字被 SVG 视口裁掉字尾）。
 
-### Fixed
-
-- 关系类型控件在中文界面显示内部 key（如 `ally`）——combobox 输入框显示 option 的 `value`，原实现 value = 原始 key；现改为展示值/落库值分离（三层反解）。
-- 自由输入下拉「打开只看到当前项」（当前值被当作搜索词）——改为打开即清搜索词，关闭时提交已输入文本（自由输入不被「点别处」丢掉）。
-- server 一条「枚举拒绝」断言随契约放宽变假（`relation_type: "friend"` 由 400 变 201）——同源修订为「语法非法 → 400 / 自定义类型 → 201 原样落库」。
-
-### Docs
-
 - `docs/db/schema.md`：关系类型 = 预定义词表 ∪ 自定义；对称关系口径（含自定义一律有向）；新增/自定义类型**不需要迁移**（修正原先「新增类型走迁移」的错误说法）。
 - `docs/design/10-data-model.md` §3：关系类型分层（属性注册表单一定义 / 自定义类型轻量口径 / AI 侧有意收窄）。
 - `docs/api/40-api-relation.md`：`relation_type` 自由字符串与语法规则；`docs/api/tool-calling.md`：AI 仍限预定义 17 类。
@@ -577,7 +562,13 @@
 - `docs/design/backlog.md`：删已解决两条（人物字段清单断言、关系星形图）；新增复核留存量（R2 互斥对字面量、db 守卫只校验不归一、非字符串文案、dist 新鲜度假绿窗口、对话框其余下拉浮层宽度、对话框全量拉取性能边界、自定义类型改名/合并）；登记「星形图 `· N` = 列表行数」有意口径。
 - `AGENTS.md`：`RELATION_TYPE_META` 单一定义、编译期断言只能放 src 模块、改上游 `src` 后先 `pnpm -r build`（假绿窗口）、并行派工必须 fresh context + 硬完成判据。
 
-## [v0.0.35] - 2026-09-13 — 人物页信息架构与文案
+### Fixed
+
+- 关系类型控件在中文界面显示内部 key（如 `ally`）——combobox 输入框显示 option 的 `value`，原实现 value = 原始 key；现改为展示值/落库值分离（三层反解）。
+- 自由输入下拉「打开只看到当前项」（当前值被当作搜索词）——改为打开即清搜索词，关闭时提交已输入文本（自由输入不被「点别处」丢掉）。
+- server 一条「枚举拒绝」断言随契约放宽变假（`relation_type: "friend"` 由 400 变 201）——同源修订为「语法非法 → 400 / 自定义类型 → 201 原样落库」。
+
+## [v0.0.35] - 2026-09-13
 
 ### Changed
 
@@ -588,14 +579,12 @@
 - **三个选章选择器收窄为仅章**：人物页「进度节点」、通用 compute 探针（设定/地点/伏笔/时间点详情页）、`#/hooks/:id` 的「预计回收节点」——状态按**章序前缀**累积，非章节点只是某章的**别名**（场景→所属章、卷→该卷末章、root→初始值），列出只会造成"粒度更细"的错觉；`chapterNodeOptions` / `chapterNodeExists` 归位到 `lib/outline-tree.ts`（原在 `lib/hook-panel.ts`）。**API/工具层不变**：`POST /delta/compute` 与工具 `compute_state` 的 `at_node_id` 仍不限层级（AI 可用场景语言提问）；`Timeline` / `create-relation-dialog` 的节点选择是自由引用，有意保持全层级。
 - **人物页新增失效口径**：存量指向场景/卷的 `current_position` 在人物页判为「阅读进度已失效」并给「去大纲重设」入口（服务端读侧仍按父链宽松推导，不受影响）。
 
-### Docs
-
 - 新建 `docs/design/backlog.md`：遗留项与「有意保留口径」从 `tasks.md` 拆出，按「数据与契约 / 前端 UI / AI 产品 / MVP 明确不做 / 有意保留」分类，每条给现状 → 影响 → 触发条件 → 最小修法或升级路径；`tasks.md` 只留当前任务卡。
 - `docs/ui/DESIGN.md`：`character-workbench`（四 tab / 档案网格 / 只读纯文本 / 进度节点只列章）、`character-relations` 与「其他关联（tab）」（pane 制、无区标题、无折叠）、`panel-tree`（空值无占位符、只读形态）改写。
 - `docs/db/schema.md`、`docs/design/10-data-model.md`、`docs/api/10-api-project.md`：登记「UI 文案 = 阅读进度 / 字段名 = `current_position`」、「compute 探针的非章入口只存 API/工具层」、「`hook.data.expected_resolve_node_id` 三层口径（UI 只列章 / 数据层任意节点 / 分析层容忍非章——与伏笔关系源端硬校验章不是同一层）」。
 - `README.md`：版本说明与 §当前能力 增补本条。
 
-## [v0.0.34] - 2026-09-13 — 章级锚点收窄 + 人物页工作台
+## [v0.0.34] - 2026-09-13
 
 ### Breaking
 
@@ -631,7 +620,7 @@
 - 关系行端点链接缺 `#` 导致点击触发整页导航丢路由。
 - 面板拖拽的误报 toast（被拒时仍提示"值已清除"）与非法落点仍有高亮/插入线。
 
-## [v0.0.33] - 2026-09-12 — 导航与上手体验
+## [v0.0.33] - 2026-09-12
 
 ### Added
 
@@ -650,7 +639,7 @@
 
 - **凭据优先级文案错误（K5 换核后遗留）**：旧文案「环境变量优先于此处的配置」已过期。按 pi 0.85.1 实际语义修正（`pi-ai` `dist/auth/resolve.js`：*stored credential owns the provider, ambient/env is consulted only when nothing is stored*；`auth/helpers.js` 先取 `credential.key`；`coding-agent` `auth-storage.js` 的 `key` 值过 `resolveConfigValue`）——**auth.json 存量凭据优先，环境变量只在该家无条目时兜底**；需要引环境变量就写在 auth.json 的值里（`$VAR` / `!命令`）。同一处过期表述同时修正 `docs/design/config.md`、`docs/api/90-api-settings.md`、`docs/db/schema.md` 与 `routes/settings.ts` 注释
 
-## [v0.0.32] - 2026-09-12 — AI 内核换成 pi
+## [v0.0.32] - 2026-09-12
 
 ### Breaking
 
@@ -685,7 +674,7 @@
 - 错误码 `AGENT_MAX_ITERATIONS` / `AGENT_TIMEOUT` / `AGENT_TOKEN_BUDGET` / `AGENT_DISPATCH_ERROR` / `AGENT_INTERNAL_ERROR`（内核对失控的兜底随自建循环一并退场）
 - `ChatMessage` / `ChatMessageRow` 共享类型与 `RUNTIME_ID_PREFIX.session`（会话 id 由 pi 生成）
 
-## [v0.0.31] - 2026-09-12 — 对话历史迁出数据库 + 上下文预算
+## [v0.0.31] - 2026-09-12
 
 ### Added
 
@@ -717,7 +706,7 @@
 - **删除会话的微任务窗口**：在途登记注销提前到 `runAgent` 返回后（此前「客户端读到 `done` 立刻删」会偶发 409 `SESSION_BUSY`）
 - **构建产物残留**：清理 `dist` 中被删模块的陈旧编译产物（`db/queries/{atomic,outline,project}`、`tools/{executor,proposal}/reorder-events`）——`files: ["dist"]` 会随包发布
 
-## [v0.0.30] - 2026-09-11 — 右栏交互优化 + antd 选中面静默失效根因
+## [v0.0.30] - 2026-09-11
 
 ### Fixed
 
@@ -740,9 +729,9 @@
 
 - **antd 派生 token 守卫**（`components/antd-tokens.test.ts`，5 条）：用 antd 自己的 `theme.getDesignToken` 算出**派生后**的 token，断言选中面家族（`controlItemBgActive` / `…ActiveHover` / `controlItemBgHover`——组件级选中面全由其派生：`select` 的 `optionSelectedBg`、`menu` 的 `itemSelectedBg`、`tree` 的 `nodeSelectedBg`、`table` 的 `rowSelectedBg` / `rowSelectedHoverBg`）与 `colorText` 的对比度 ≥ 4.5:1（浅 / 深各一条；半透明面按该模式面板底色合成，否则深色态必得 1:1 假值）、选中面 ≠ 派生 `colorPrimaryBg`、`fontWeightStrong ≥ 600`，外加「裸深墨 seed 时确实 < 4.5」的自检。守卫有效性实测：临时去掉覆盖后浅色报 `controlItemBgActive=#787771 → 2.73:1`、深色同样变红（4 条失败），还原即绿
 
-## [v0.0.29] - 2026-09-11 — 用户反馈九项 + 链式新建断链
+## [v0.0.29] - 2026-09-11
 
-### Fixed（两条静默失效根因——都是「测试全绿但像素全错」）
+### Fixed
 
 - **语义色层整体失效（P0）**：antd v6 的 `cssVar` **从不把 `--ant-*` 注入 `:root`**，而是挂在组件级 class 作用域（`.css-var-<useId>`）；`index.css` 的 `:root { --primary: var(--ant-color-primary) }` 等映射因此全部解析为空——全站 Tailwind 语义色（`bg-card` / `border-border` / `text-muted-foreground` / `bg-primary` / hover 面 / chip 底色 / 拖拽指示线）静默透明（v0.0.26 引入，本次才被发现）。修复 = `cssVar: { key: CSS_VAR_KEY }` 与 `index.html` 的 `<html class>` 同值，并在 `design-discipline.test.ts` 加 `cssvar-scope` 守卫锁死两处字面量
 - **antd Button `variant` 静默回落**：v6 只在 `color` 与 `variant` **同时**给出时才走 color/variant 分支（`Button.js:91`），仓库 22 处 `variant="text"` 实际渲染成**带边框的 outlined 按钮**，与遗留 `type="text"` 的真 text 按钮混用（“图标按钮颜色不统一”的根因）；全仓统一为 `color="default" variant="text"` + 新增 `button-variant-color` 守卫
@@ -752,7 +741,7 @@
 - **页面标题缺失**：人物/设定/地点/关联四页在去二级 tab 时连标题一并删掉——补回（关联页标题原先还会错显“人物”）
 - **链式新建断链**：设定树/大纲的就地新建提交后，新条目只拿到焦点与临时高亮、**没有进入选中态**，而「Enter 新建子级」的守卫要求「该行处于选中态」→ 第二次 Enter 静默无响应（用户反馈「新建→回车→再回车建子级」做不到；toast 不抢焦点，只是同时出现造成「被提示打断」的错觉）。修法：新条目进入「选中 + 聚焦」双态；设定树的选中态必须放在「新行已渲染并聚焦成功」的效应里（`reload()` 异步，提前设会被「选中失效清理」效应按旧树误判清零——实测踩坑）
 
-### Added（标签 tint 系统 + 中栏页面头部统一）
+### Added
 
 - **标签 tint 系统**（兑现 DESIGN.md 已登记但未实现的 tint 契约）：`index.css` 定义 `--tag-*` 六色（浅实色 + 深 20% 叠色，唯一色值定义处）→ `lib/tag-tint.ts`（FNV-1a hash → 色档，**同名恒同色**；类名走静态查表，因为 Tailwind 不生成拼接类名）→ `components/ui/tag-chip.tsx`（全站唯一标签 chip 实现）；替换 9 处标签/类型徽标（人物/地点/设定/关联/伏笔/时间轴/参考资料/大纲/回收站）
 - **中栏页面头部统一结构**（`layout.md §3`）：第一行 = 页面标题单独一行；第二行 = 控件行（左：搜索框→分类→标签→排序，右：操作按钮）；搜索框全站统一规格（`SearchOutlined` 前缀 + 192px 宽 + `allowClear`）；重排 7 个页面（人物/设定/地点/关联/大纲/伏笔/时间轴/参考资料；概览/回收站/详情页不变）；关联页新增右上「+ 建立关联」入口
@@ -766,7 +755,7 @@
 
 ## [v0.0.28] - 2026-09-11
 
-### Changed（视觉语言统一——Notion 工作区暖灰 × antd 单一组件语言）
+### Changed
 
 - **视觉契约单点化**：新增 `docs/ui/DESIGN.md`（Google design.md 格式，`designmd lint` 0 error）——颜色/字体/四档字号/圆角/间距/组件外观 + antd seed 映射表 + 组件 token 覆盖表；`layout.md §7` 与 `architecture.md` 指向它，改色唯一入口 = `AntdProvider.tsx`
 - **主题 token 落地**：antd 默认蓝退役，改 Notion **工作区**暖灰（`colorPrimary`/`colorText` `#37352f` 暖炭墨、`colorBgLayout` `#f6f5f4`、描边三层 `#c8c4be`/`#e5e3df`/`#ede9e4`、`colorLink` `#0075de`）；浅/深各一套 seed（`theme.token` 显式值在算法派生后覆盖，必须分模式写）；组件 token 仅覆盖 Button/Menu/Table/Input/Select/Tag/Typography/Card 少数项；`controlOutlineWidth: 0` 关掉 selector 组件聚焦环（聚焦 = 1px 描边）
@@ -783,7 +772,7 @@
 
 ## [v0.0.27] - 2026-09-10
 
-### Added（用户反馈七项修复与优化——中栏悬浮入口 / 快捷键 / 新建聚焦）
+### Added
 
 - **`Ctrl/Cmd + S` 保存快捷键**：`lib/save-shortcut.ts` 注册栈（后注册者优先，行内编辑优先于页面保存）——
   详情页表单（实体/大纲节点/时间轴事件/参考资料）注册页面级保存；伏笔编辑对话框与 5 处行内编辑
@@ -818,7 +807,7 @@
 
 ## [v0.0.26] - 2026-09-06
 
-### Changed（antd 全站迁移 + 布局重构 + 会话渲染重做）
+### Changed
 
 - **前端组件基座换 antd v6**：ConfigProvider（zhCN + 默认色板浅/深双算法 + cssVar）为根接线；
   `@ant-design/x` 会话组件族（Bubble/Sender）+ `@ant-design/x-markdown` 流式正文接入；
@@ -836,6 +825,7 @@
   （修展开 `{}` 显示）
 - 存量页面逐页换壳（实体列表 Segmented/Pagination、参考资料/回收站/设置/备份区块/关联总览、
   详情页等视觉件 antd 化）；页面组织与后端 API 解耦原则入 architecture.md
+
 ## [v0.0.25] - 2026-09-05
 
 ### Changed
@@ -1167,8 +1157,6 @@
 - 发布包名由 `@ai-editor/*` 改为 `@whispering233/ai-editor-*`（`@ai-editor` scope 在 npm 已被其他用户占用，无法发布）
 
 ## [v0.0.1] - 2026-08-04
-
-首个正式发布（MVP 完整交付）。
 
 ### Added
 
