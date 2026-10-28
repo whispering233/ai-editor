@@ -175,6 +175,24 @@ search_references(query, type?, tags?)
     过滤为结果层原始值比对（summary.type === type）
 ```
 
+### 外部检索（自动）
+
+唯一的出站工具：检索语句发往 DeepSeek 搜索 API。**只做检索，不做正文抓取、不落盘缓存**；参数刻意收窄——过滤语法直接写在 `query` 里（DeepSeek 支持 `site:` / `-site:` / `after:` / `lang:` / `"精确短语"`），不自造 `recency` / `domain` 一类结构化字段。
+
+```typescript
+web_search(query, count?)
+  → [{ title, url, summary, date, authority }]（保持 API 返回顺序，空字段省略）
+  query: 检索语句，长度上限 = `MAX_SEARCH_QUERY_CHARS`（schema 与工具描述同源）
+  count: 期望条数，缺省 `DEFAULT_SEARCH_RESULT_COUNT`，上限 `MAX_SEARCH_RESULT_COUNT`
+  口径：
+    - `need_content` 恒 false——只回摘要（summary 为空时回落到 snippet），正文是否打开由用户决定
+    - 每次成功请求按 DeepSeek 计费；**这笔费用不进会话状态栏的 token 账目**（那里只有模型用量）
+    - 查询词会发往 DeepSeek（隐私面，设置页不提供开关）
+  凭据：复用 pi 的 `deepseek` provider（`ModelRuntime.getAuth("deepseek")`，`auth.json` 存量优先、`DEEPSEEK_API_KEY` 兜底）；未配置时抛可读错误
+  失败：401（未配置 / key 无效）、402（余额不足）、429（限流）、5xx 直接抛错，不做重试链——是否重试由模型决定
+  作用域：**common**（小说与练习工作区都注册）；无提案、无写入
+```
+
 ### 分析类（自动）
 
 AI 的核心价值——**分析**而非操作。这些工具不是简单查数据，而是做一定程度的结构化分析。
