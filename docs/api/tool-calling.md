@@ -191,7 +191,21 @@ web_search(query, count?)
   凭据：复用 pi 的 `deepseek` provider（`ModelRuntime.getAuth("deepseek")`，`auth.json` 存量优先、`DEEPSEEK_API_KEY` 兜底）；未配置时抛可读错误
   失败：401（未配置 / key 无效）、402（余额不足）、429（限流）、5xx 直接抛错，不做重试链——是否重试由模型决定
   作用域：**common**（小说与练习工作区都注册）；无提案、无写入
+
+fetch_content(url) —— **只在摘要不够时打开原文**（先 `web_search`，再决定抓哪一条）
+  → { title, url, content }（`content` = 上游提取的 Markdown 正文）
+  url: 1..`MAX_FETCH_URL_CHARS` 字符，仅 http/https，不得含账号密码
+  口径：
+    - **无缓存、无续读工具**：一次调用 = 一次上游请求（按次计费）；模型拿到的就是完整正文，
+      或超单条工具结果上限时被运行时截断的前段（截断处显式告知，模型看到的数据不完整）
+    - 正文不落盘、不进项目文件、不进备份 / 云端；与正文 / 参考资料没有任何写入关系（只读）
+    - 与 web_search 同源：复用 DeepSeek 凭据、费用不进会话 token 账目、url 会发往 DeepSeek
+  失败：403（上游安全策略拒绝）、404（取不到可提取正文）、408 / 413 / 429 / 5xx → 可读文案，不重试
+  流速：上游按账号限速（Search 与 Fetch 各自独立，百万级 QPS 远高于单用户需要）——不在本地另加限流
+  作用域：**common**；无提案、无写入
 ```
+
+两者都属**只读外部检索**：没有提案工具、不写库。**UI 来源卡片直接读工具结果 `content` JSON**（`web_search` = 命中数组，`fetch_content` 取 `title` / `url` / 正文字数）——AUTO 工具的 `details` 不下发，卡片不依赖它；历史重载后卡片照旧可见（`content` 本来就在历史消息里）。
 
 ### 分析类（自动）
 
