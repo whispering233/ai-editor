@@ -1,7 +1,7 @@
 // 冒烟测试：验证 @whispering233/ai-editor-tools 入口可正常导入（T0.3 语义）
 // 冒烟断言为新入口形态：注册表 API + 工具副作用注册（查询 11 + 分析 5 +
 // S6.5 伏笔 5 + S6.6 提案 16 + S6.7 卡 12.9（get_chapter_text）1 + D4（get_deduction_marks）1
-// + 练习 7（四读三写，scope = practice）+ 通用 1（web_search，scope = common）= 45 个；执行 13 个不暴露）；
+// + 练习 7（四读三写，scope = practice）+ 通用 2（web_search / fetch_content，scope = common）= 46 个；执行 13 个不暴露）；
 // workspace 依赖 @whispering233/ai-editor-db / @whispering233/ai-editor-shared 解析由 import 在编译/运行期验证
 import { describe, expect, it } from "vitest";
 import { AUTO_TOOLS, CHARACTER_PRIORITIES, CHARACTER_PRIORITY_LABELS, COMMON_TOOLS, DEFAULT_HALF_LIFE, MAX_FEEDBACK_DIMENSIONS, MAX_PRACTICE_BRIEF_CHARS, MAX_PRACTICE_TOPIC_CHARS, PRACTICE_TOOLS, PROPOSAL_TOOLS, TOOL_SCOPES } from "@whispering233/ai-editor-shared";
@@ -27,8 +27,8 @@ describe("@whispering233/ai-editor-tools 入口冒烟", () => {
     expect(typeof m.runProposeCreateEntity).toBe("function");
     expect(typeof m.runProposeAddDelta).toBe("function");
     expect(typeof m.runProposeAdvanceHook).toBe("function");
- // 入口副作用注册：查询 11 + 分析 5 + 伏笔 5 + 提案 16 + 练习 7 + 通用 1 = 45 个（含 get_chapter_text 正文只读 + get_deduction_marks 推演标记）
-    expect(m.toolCount()).toBe(45);
+ // 入口副作用注册：查询 11 + 分析 5 + 伏笔 5 + 提案 16 + 练习 7 + 通用 2 = 46 个（含 get_chapter_text 正文只读 + get_deduction_marks 推演标记）
+    expect(m.toolCount()).toBe(46);
     expect(m.getTool("get_entity")).toBeDefined();
     expect(m.getTool("get_chapter_text")!.permission).toBe("auto"); // 正文只读：自动权限
  // 分页数值防漂移：description 由 query/manuscript.ts 的常量插值生成
@@ -63,6 +63,17 @@ describe("@whispering233/ai-editor-tools 入口冒烟", () => {
     expect(m.getTool("web_search")!.scope).toBe("common"); // 两种工作区都注册
     expect(m.getTool("web_search")!.permission).toBe("auto");
     expect(typeof m.runWebSearch).toBe("function");
+ // 抓取上限防漂移：fetch_content 的 description 由 schemas/fetch.ts 的 MAX_FETCH_URL_CHARS 插值——
+ // 描述里出现的**任何**数字必须恰好 ⊆ {URL 上限}（手写数值 / 值改了没同步即报红）
+    const fetchDescription = m.getTool("fetch_content")!.description;
+    expect(new Set(fetchDescription.match(/\d+/g) ?? [])).toEqual(new Set([String(m.MAX_FETCH_URL_CHARS)]));
+    // 「先搜索再抓」与「只读无缓存」必须写在描述里（模型得知它们的唯一渠道）
+    for (const hint of ["web_search", "http/https", "截断", "只读", "无缓存", "DeepSeek"]) {
+      expect(fetchDescription).toContain(hint);
+    }
+    expect(m.getTool("fetch_content")!.scope).toBe("common");
+    expect(m.getTool("fetch_content")!.permission).toBe("auto");
+    expect(typeof m.runFetchContent).toBe("function");
  // 维度上限防漂移：两个提交点评卡的 description 由 shared MAX_FEEDBACK_DIMENSIONS 插值生成
     for (const name of ["submit_style_feedback", "submit_free_feedback"]) {
       expect(m.getTool(name)!.description).toContain(`dimensions 最多 ${MAX_FEEDBACK_DIMENSIONS} 个维度`);

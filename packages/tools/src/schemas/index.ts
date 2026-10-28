@@ -19,5 +19,6 @@ export * from "./reference.js";
 export * from "./manuscript.js";
 export * from "./practice.js";
 export * from "./web-search.js";
+export * from "./fetch.js";
 export * from "./analysis.js";
 export * from "./proposal.js";

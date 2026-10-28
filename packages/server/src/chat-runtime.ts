@@ -19,6 +19,7 @@ import type { Db } from "@whispering233/ai-editor-db";
 import type { WorkspaceKind } from "@whispering233/ai-editor-shared";
 import { applyActiveSettings, getModelRuntime, getSettingsManager } from "./model-runtime.js";
 import { createDeepSeekWebSearch } from "./web-search.js";
+import { createDeepSeekFetch } from "./fetch.js";
 
 /** 对话链路需要的最小项目上下文（不依赖 middleware，避免与 project.ts 形成运行时环） */
 export interface ChatProjectTarget {
@@ -44,6 +45,7 @@ export const defaultRuntimeFactory: RuntimeFactory = async ({ target, sessionFil
       outlineDir: target.root,
       projectId: target.projectId,
       webSearch: createDeepSeekWebSearch(), // 联网检索：凭据与 HTTP 都在 server（tools 只持 port）
+      fetchPage: createDeepSeekFetch(), // 网页抓取：同一份 DeepSeek 凭据，只读、无缓存
     },
     sessionManager: openProjectSessionManager(target.root, sessionFile),
     modelRuntime: await getModelRuntime(),

@@ -21,20 +21,17 @@ import type { GetChapterTextArgs } from "../schemas/index.js";
  * 缺省单次返回字符数（≈ 一段中等篇幅；长文分段读完，不炸上下文）。
  * **文本分页预算单源**：章正文（get_chapter_text）与练习**四只读工具**（get_practice_sample /
  * get_practice_draft / get_free_draft / get_style_notes）共用这一对常量（语义提升，见 docs/api/tool-calling.md）。
- * 实测（真实截断函数走一遍工具结果，纯 CJK）：缺省页 + 续读提示 = 6055 tokens，余量 24.3%。
  */
 export const DEFAULT_TEXT_PAGE_CHARS = 6000;
 
 /**
  * 单次返回字符数上限（clamp 上限）——必须连 JSON 信封与续读提示一起压进单条工具结果预算：
- * agent 侧 `TOOL_RESULT_MAX_TOKENS = 8000`（packages/agent/src/runtime/tool-result.ts，
+ * agent 侧 `TOOL_RESULT_MAX_TOKENS`（packages/agent/src/runtime/tool-result.ts，
  * 单条结果超限即截断 + 显式告知，docs/design/20-context.md §2）；`estimateTokens` 对非 ASCII
  * 一律按 1 字 = 1 token 计（CJK ≈1 token/字，故意高估）。
  *
- * **实测**（`truncateToolResultText(stringifyToolResult(工具结果))`，纯 CJK 章、正文 = 上限 + 1）：
- * 上限页 + 续读提示 = **7055 tokens**（信封开销 ≈55 tokens：JSON 键 + 提示文案），余量 945 tokens
- * = **11.8%**（≥10% 留白，给标题/章号更长与提示文案变动）。取 8000 字时同法实测 8055 tokens
- * > 8000 ⇒ 外层截断会连「可用 offset=N 继续读取」与 `truncated` 一起切掉，「截断必须显式告知」失效。
+ * 上限页 + 续读提示 + JSON 信封必须留在预算内并留白（≥10%，给标题/章号更长与提示文案变动）；
+ * 一旦溢出，外层截断会连「可用 offset=N 继续读取」与 `truncated` 一起切掉，「截断必须显式告知」即失效。
  *
  * 改这个值前先按同一条实测路径（工具 → stringifyToolResult → truncateToolResultText）重量一遍；
  * 练习工具的同一对常量实测另见 packages/tools/src/query/practice.ts。

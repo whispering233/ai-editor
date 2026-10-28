@@ -25,7 +25,7 @@ function findTool(name: string) {
 }
 
 describe("createCustomTools", () => {
-  it("只装配属于该工作区的工具（novel + common；注册表 45 个中 37 个是 novel，7 个是 practice，1 个是 common）", () => {
+  it("只装配属于该工作区的工具（novel + common；注册表 46 个中 37 个是 novel，7 个是 practice，2 个是 common）", () => {
     const defs = listTools().filter((def) => def.scope === "novel" || def.scope === "common");
     const tools = createCustomTools({ toolContext: stubContext(), kind: "novel" });
     expect(tools.map((tool) => tool.name)).toEqual(defs.map((def) => def.name));
@@ -40,7 +40,7 @@ describe("createCustomTools", () => {
     const tools = createCustomTools({ toolContext: stubContext(), kind: "practice" });
     const practiceScoped = listTools().filter((def) => def.scope === "practice" || def.scope === "common");
     expect(tools.map((tool) => tool.name)).toEqual(practiceScoped.map((def) => def.name));
-    // 恰好四个只读 + 三个写 AI 产出（shared PRACTICE_TOOLS 是同一份清单）+ 通用工具（web_search）
+    // 恰好四个只读 + 三个写 AI 产出（shared PRACTICE_TOOLS 是同一份清单）+ 两个通用工具（web_search / fetch_content）
     expect(tools.map((tool) => tool.name)).toEqual([...PRACTICE_TOOLS, ...COMMON_TOOLS].sort());
     expect(tools.some((tool) => tool.name.startsWith("propose_"))).toBe(false);
     expect(practiceScoped.every((def) => def.permission === "auto")).toBe(true); // 七个练习工具均为自动级（无提案工具）

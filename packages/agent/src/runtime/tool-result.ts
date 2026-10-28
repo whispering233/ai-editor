@@ -4,8 +4,12 @@
 // 否则 `get_outline` 整树 / `query_relationships` depth=3 会撑爆上下文。
 // 契约（docs/design/20-context.md §2）：超上限即截断 + **显式告知**（模型必须知道数据不完整）。
 
-/** 单条工具结果 token 上限（不可配——失控保护常量，见 docs/design/config.md） */
-export const TOOL_RESULT_MAX_TOKENS = 8000;
+/**
+ * 单条工具结果 token 上限（不可配——失控保护常量，见 docs/design/config.md）。
+ * 取在「外部网页正文」这一档：`fetch_content` 抓回来的正文要能整篇进上下文，
+ * 偏小会让模型永远只看到长页前段；其余工具靠自身分页常量留在预算内（它们引用本常量名，不复述数值）。
+ */
+export const TOOL_RESULT_MAX_TOKENS = 20000;
 
 /**
  * 保守 token 估算：ASCII 按 4 字符 ≈ 1 token，非 ASCII（CJK 等）按 1 字符 ≈ 1 token。

@@ -10,7 +10,7 @@
 //
 // scope（工作区作用域，2026-10）：本入口的 37 个小说语义工具（实体/大纲/伏笔/Delta/参考资料）
 // 一律 `scope: "novel"`——练习工作区不注册它们（含全部 propose_*）；七个练习工具
-// （四个只读 + 三个写 AI 产出）标 `scope: "practice"`；一个通用工具（web_search）标 `scope: "common"`
+// （四个只读 + 三个写 AI 产出）标 `scope: "practice"`；两个通用工具（web_search / fetch_content）标 `scope: "common"`
 // （装配过滤见 agent `createCustomTools`）。
 
 // 包标识常量（与 shared 包风格一致：SHARED_PKG_NAME；agent 冒烟依赖）
@@ -28,6 +28,7 @@ export * from "./query/delta.js";
 export * from "./query/reference.js";
 export * from "./query/practice.js";
 export * from "./query/web-search.js";
+export * from "./query/fetch-content.js";
 export * from "./analysis/utils.js";
 export * from "./analysis/consistency.js";
 export * from "./analysis/conflict.js";
@@ -780,12 +781,15 @@ import {
   MAX_SEARCH_RESULT_COUNT,
   webSearchArgsSchema,
 } from "./schemas/index.js";
+import { MAX_FETCH_URL_CHARS, fetchContentArgsSchema } from "./schemas/index.js";
 import { runWebSearch } from "./query/web-search.js";
+import { runFetchContent } from "./query/fetch-content.js";
 
 /**
- * 通用工具定义（`scope: "common"`，**小说与练习工作区都注册**）：外部检索 `web_search`。
- * 参数上限三个常量全部从 `schemas/web-search.ts` 插值（数值单源；描述与常量同值有回归断言）。
- * 网络与凭据全在 server（`packages/server/src/web-search.ts` 实现 `WebSearchPort`）——
+ * 通用工具定义（`scope: "common"`，**小说与练习工作区都注册**）：外部检索 `web_search`
+ * 与网页抓取 `fetch_content`。
+ * 参数上限常量全部从 `schemas/web-search.ts` / `schemas/fetch.ts` 插值（数值单源；描述与常量同值有回归断言）。
+ * 网络与凭据全在 server（`packages/server/src/web-search.ts`、`fetch.ts` 实现端口）——
  * 未注入 port 时工具直接报错，不静默返回空结果。
  */
 const commonToolDefs: ToolDefinition[] = [
@@ -810,6 +814,22 @@ const commonToolDefs: ToolDefinition[] = [
     permission: TOOL_PERMISSION.AUTO,
     scope: "common",
     run: runWebSearch,
+  },
+  {
+    name: "fetch_content",
+    description:
+      "打开一个网页并取回正文（Markdown，抓取请求发往 DeepSeek Fetch API）：" +
+      "**先用 web_search 看摘要，摘要不够再抓具体那一条**，不要一上来就抓。" +
+      "url 为完整地址（不超过 " +
+      MAX_FETCH_URL_CHARS +
+      " 字符，仅 http/https，不得含账号密码）。" +
+      "返回 {title,url,content}；长页正文可能被运行时截断（截断处会显式告知），需要更长内容时换更具体的页面，" +
+      "没有分段续读参数。只读、无缓存：每次调用都是一次上游请求（按次计费），同一 url 重复调用不会命中缓存。" +
+      "注意：url 会发往 DeepSeek（隐私面，无开关）；未配置 DeepSeek API Key（设置 → 模型 → DeepSeek）时本工具直接报错。",
+    parameters: fetchContentArgsSchema,
+    permission: TOOL_PERMISSION.AUTO,
+    scope: "common",
+    run: runFetchContent,
   },
 ];
 

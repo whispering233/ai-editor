@@ -130,11 +130,13 @@ export const EXECUTOR_TOOLS = [
 export const AUTO_TOOLS = [...QUERY_TOOLS, ...ANALYSIS_TOOLS, ...HOOK_ANALYSIS_TOOLS] as const;
 
 /**
- * 通用工具（自动级，`scope = "common"`，共 1 个）：**两种工作区都注册**——
- * 外部检索 `web_search`（联网搜索，与工作区语义无关，见 docs/api/tool-calling.md「外部检索（自动）」）。
+ * 通用工具（自动级，`scope = "common"`，共 2 个）：**两种工作区都注册**——
+ * 外部检索 `web_search` 与网页抓取 `fetch_content`（联网能力，与工作区语义无关，
+ * 见 docs/api/tool-calling.md「外部检索（自动）」）。
  */
 export const COMMON_TOOLS = [
   "web_search", // DeepSeek 联网检索（只读、无提案；凭据由 server 注入）
+  "fetch_content", // DeepSeek 网页抓取（只读、无缓存；先搜索后抓取）
 ] as const;
 
 /**
@@ -153,7 +155,7 @@ export const PRACTICE_TOOLS = [
   "submit_practice_topic", // AI 出题（只写 practice_free_pieces.topic / brief）
 ] as const;
 
-/** 全部工具名（自动 21 + 通用 1 + 练习 7 + 提案 16 + 执行 13 = 58 个） */
+/** 全部工具名（自动 21 + 通用 2 + 练习 7 + 提案 16 + 执行 13 = 59 个） */
 export const TOOL_NAMES = [
   ...AUTO_TOOLS,
   ...COMMON_TOOLS,

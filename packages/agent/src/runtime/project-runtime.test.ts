@@ -277,7 +277,7 @@ const NOVEL_TOOLS = [
 ];
 
 describe("领域工具装配", () => {
-  it("小说工作区：37 个小说工具 + 1 个通用工具（web_search）全部可用（逐名相等）、builtin 全关，faux 的工具调用真正执行", async () => {
+  it("小说工作区：37 个小说工具 + 2 个通用工具（web_search / fetch_content）全部可用（逐名相等）、builtin 全关，faux 的工具调用真正执行", async () => {
     const env = await createFauxEnv();
     const projectRoot = mkTempDir("ai-editor-k2-tools-");
     const agentDir = mkTempDir("ai-editor-k2-agentdir4-");
@@ -333,7 +333,7 @@ describe("练习工作区装配", () => {
     const runtime = await setupRuntime({ projectRoot, env, agentDir, kind: "practice" });
     try {
       const activeNames = runtime.session.getActiveToolNames();
-      // 恰好四个只读 + 三个写 AI 产出（shared PRACTICE_TOOLS = 同一份清单）+ 通用工具（web_search）
+      // 恰好四个只读 + 三个写 AI 产出（shared PRACTICE_TOOLS = 同一份清单）+ 两个通用工具（web_search / fetch_content）
       expect([...activeNames].sort()).toEqual([...PRACTICE_TOOLS, ...COMMON_TOOLS].sort());
       expect(activeNames.some((name) => name.startsWith("propose_"))).toBe(false);
       // 点名否定：小说侧最常见的读写工具在练习工具面根本不存在

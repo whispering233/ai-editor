@@ -1733,7 +1733,7 @@ describe("[chat]/[llm] 调试日志", () => {
 describe("工具结果截断可观测性", () => {
   it("超上限的工具结果：截断 + 提示 + [usage] TOOL_RESULT_TOO_LARGE 日志", async () => {
     const project = openProject();
-    // 大 outline（严格三层）：让 get_outline 的结果远超 8000 token 上限
+    // 大 outline（严格三层）：让 get_outline 的结果远超单条工具结果上限（TOOL_RESULT_MAX_TOKENS）
     const bigTree = {
       id: "root",
       type: "root",

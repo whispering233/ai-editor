@@ -24,6 +24,8 @@ import {
   webSearchArgsSchema,
   MAX_SEARCH_QUERY_CHARS,
   MAX_SEARCH_RESULT_COUNT,
+  fetchContentArgsSchema,
+  MAX_FETCH_URL_CHARS,
 } from "./index.js";
 
 /** 校验是否通过（校验器抛错即拒绝——与 executor 同一入口） */
@@ -168,5 +170,15 @@ describe("练习工具 schema 约束（作家文风练习，2026-10 改版）", 
     expect(accepts(webSearchArgsSchema, {})).toBe(false);
     // 严格对象：不自造 recency / domain 一类结构化过滤字段（过滤语法写在 query 里）
     expect(accepts(webSearchArgsSchema, { query: "红楼梦", recency: "week" })).toBe(false);
+  });
+
+  it("fetch_content：url 必填且不超上限、未知键拒绝", () => {
+    expect(accepts(fetchContentArgsSchema, { url: "https://example.com/a" })).toBe(true);
+    // 上限边界：恰好等于上限通过、多一字拒绝
+    expect(accepts(fetchContentArgsSchema, { url: "h".repeat(MAX_FETCH_URL_CHARS) })).toBe(true);
+    expect(accepts(fetchContentArgsSchema, { url: "h".repeat(MAX_FETCH_URL_CHARS + 1) })).toBe(false);
+    expect(accepts(fetchContentArgsSchema, { url: "" })).toBe(false);
+    expect(accepts(fetchContentArgsSchema, {})).toBe(false);
+    expect(accepts(fetchContentArgsSchema, { url: "https://example.com/a", max_chars: 100 })).toBe(false);
   });
 });

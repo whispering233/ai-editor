@@ -9,6 +9,7 @@
 // - projectId：当前打开项目的 id（会话归属项目；提案绑定 project_id）
 
 import type { Db } from "@whispering233/ai-editor-db";
+import type { FetchPagePort } from "./schemas/fetch.js";
 import type { WebSearchPort } from "./schemas/web-search.js";
 
 export interface ToolContext {
@@ -23,4 +24,9 @@ export interface ToolContext {
    * tools 不自己做网络与凭据）。未注入时 `web_search` 抛可读错误——不静默返回空结果。
    */
   webSearch?: WebSearchPort;
+  /**
+   * 网页抓取通道（`fetch_content` 用；**可选**）：由 server 注入（`packages/server/src/fetch.ts`）。
+   * 未注入时 `fetch_content` 抛可读错误——不静默返回空结果。
+   */
+  fetchPage?: FetchPagePort;
 }
