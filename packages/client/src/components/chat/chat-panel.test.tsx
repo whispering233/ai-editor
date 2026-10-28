@@ -669,6 +669,29 @@ describe("新会话路径叶子组件富数据渲染走查（问题 3：任务�
     expect(running2).toContain("ant-badge-status-processing"); // 进行中
   });
 
+  it("ToolCallRow：联网来源卡片在折叠头之后、无需展开即可见（非来源工具零影响）", () => {
+    // 数据源 = 工具结果文本（`stringifyToolResult` 产物）
+    const result = JSON.stringify([
+      { title: "第一条命中", url: "https://www.example.com/a", summary: "摘要" },
+      { title: "第二条命中", url: "https://example.org/b" },
+    ]);
+    const html = renderToString(
+      <ToolCallRow toolName="web_search" args={{ query: "测试" }} result={result} status="ok" />,
+    );
+    const header = html.indexOf("调用了"); // SSR 在文本与表达式间插 <!-- -->，断言分片
+    const card = html.indexOf("第一条命中");
+    expect(header).toBeGreaterThan(-1);
+    expect(html).toContain("web_search");
+    expect(card).toBeGreaterThan(header); // 折叠头之下
+    // 折叠态 children（原始 JSON 区）不渲染 ⇒ 卡片出现即“无需展开”
+    expect(html).not.toContain("max-h-40");
+    expect(html).toContain(">example.com</span>"); // 域名（本条无 date → meta 只有域名）
+    const other = renderToString(
+      <ToolCallRow toolName="get_entity" args={{ id: "char-1" }} result={result} status="ok" />,
+    );
+    expect(other).not.toContain("第一条命中");
+  });
+
   it("ProposalCardView：pending / confirmed / stale 三态 + preview 存在/缺失渲染不抛异常", () => {
     const pending = renderToString(
       <ProposalCardView

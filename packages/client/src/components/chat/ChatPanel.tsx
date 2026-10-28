@@ -51,6 +51,7 @@ import {
   type StreamToolRecord,
 } from "../../stores/chat";
 import { SessionStatusBar } from "./session-status-bar";
+import { SourceCards } from "./source-cards";
 import type { ChatSessionSummary } from "@whispering233/ai-editor-shared";
 
 import { buildDeductionMarks, formatRelativeTime } from "@whispering233/ai-editor-shared";
@@ -489,7 +490,8 @@ function ErrorBar() {
 
 /** 工具调用行：折叠态「调用了 {tool}」，展开显示 args 摘要与结果状态（「工具调用折叠记录」；导出供渲染走查测试）
  * 展开态摘要渲染——id 参数经 names/resolve 解析为名称（不显示裸 id）；
- * 解析失败/未知工具 → 回退原始 JSON（不丢信息） */
+ * 解析失败/未知工具 → 回退原始 JSON（不丢信息）。
+ * 折叠头之下另有联网来源卡片（`chat-source-cards`，无需展开；仅 `web_search` / `fetch_content`）。 */
 export function ToolCallRow({
   toolName,
   args,
@@ -548,44 +550,48 @@ export function ToolCallRow({
   );
 
   return (
-    <Collapse
-      ghost
-      size="small"
-      activeKey={open ? ["args"] : []}
-      onChange={(keys) => setOpen(keys.includes("args"))}
-      items={[
-        {
-          key: "args",
-          label: (
-            <span className="flex min-w-0 items-center gap-1.5 text-xs text-muted-foreground">
-              <ToolOutlined className="shrink-0" />
-              <span className="min-w-0 flex-1 truncate">调用了 {toolName}</span>
-              {err ? (
-                <Badge status="error" title="调用失败" />
-              ) : ok ? (
-                <Badge status="success" title="调用成功" />
-              ) : (
-                <Badge status="processing" title="调用中" />
-              )}
-            </span>
-          ),
-          children: (
-            <div className="max-h-40 overflow-auto text-xs whitespace-pre-wrap text-muted-foreground">
-              {/* 摘要渲染优先；未知工具 / 解析请求失败 → 原始 JSON 兜底 */}
-              {resolveFailed || summary === null ? (
-                <pre>{typeof args === "string" ? args : JSON.stringify(args ?? {}, null, 2)}</pre>
-              ) : (
-                <ul className="space-y-0.5">
-                  {summary.map((line) => (
-                    <li key={line}>{line}</li>
-                  ))}
-                </ul>
-              )}
-            </div>
-          ),
-        },
-      ]}
-    />
+    // 折叠头 + 其下的来源卡片（`web_search` / `fetch_content`；无需展开即可见，原始 JSON 上移一层）
+    <>
+      <Collapse
+        ghost
+        size="small"
+        activeKey={open ? ["args"] : []}
+        onChange={(keys) => setOpen(keys.includes("args"))}
+        items={[
+          {
+            key: "args",
+            label: (
+              <span className="flex min-w-0 items-center gap-1.5 text-xs text-muted-foreground">
+                <ToolOutlined className="shrink-0" />
+                <span className="min-w-0 flex-1 truncate">调用了 {toolName}</span>
+                {err ? (
+                  <Badge status="error" title="调用失败" />
+                ) : ok ? (
+                  <Badge status="success" title="调用成功" />
+                ) : (
+                  <Badge status="processing" title="调用中" />
+                )}
+              </span>
+            ),
+            children: (
+              <div className="max-h-40 overflow-auto text-xs whitespace-pre-wrap text-muted-foreground">
+                {/* 摘要渲染优先；未知工具 / 解析请求失败 → 原始 JSON 兜底 */}
+                {resolveFailed || summary === null ? (
+                  <pre>{typeof args === "string" ? args : JSON.stringify(args ?? {}, null, 2)}</pre>
+                ) : (
+                  <ul className="space-y-0.5">
+                    {summary.map((line) => (
+                      <li key={line}>{line}</li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            ),
+          },
+        ]}
+      />
+      <SourceCards toolName={toolName} result={result} />
+    </>
   );
 }
 
