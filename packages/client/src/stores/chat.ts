@@ -104,7 +104,7 @@ export interface ToolDetailsFrame {
   seq: number;
 }
 
-/** 运行时提案卡片（SSE tool_execution_end 的 result.details，瞬态；历史消息中不保留） */
+/** 运行时提案卡片（SSE tool_execution_end 的 result.details，live 瞬态；历史只读卡由消息 toolCalls 重建，不保留状态） */
 export interface ProposalCard {
   proposalId: string; // prop_ 前缀
   type: string; // 提案工具名（propose_create_entity 等）

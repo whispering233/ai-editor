@@ -22,12 +22,12 @@
 
 **为什么不自建轮次上限/单轮超时**：压缩、重试、取消都是 pi 的职责；再加一层本地计时器只会与服务端心跳、pi 自身超时互相打架（重试与轮次互相消耗）。失控由用户显式 `abort()`/steering 干预。
 
-## 2. 提案生命周期 —— 仅内存
+## 2. 提案生命周期 —— live 仅内存
 
 提案（AI 写操作的确认对象）**仅存服务端内存**，随 SSE 事件推送，不落盘：
 
 - **来源**：`propose_*` 工具返回的 `details`（`{ proposal_id, type, preview }`）；事件流里提案随该工具的 `tool_execution_end` 帧到达前端（不再有独立 `proposal` 事件）。
-- **TTL = `PROPOSAL_TTL_MS` + 条数上限**，超期/超限自动清除；live 提案无跨会话恢复（提案是瞬态交互对象）。
+- **TTL = `PROPOSAL_TTL_MS` + 条数上限**，超期/超限自动清除；live 提案无跨会话恢复（提案是瞬态交互对象；历史回看见下条）。
 - **历史回看（2026-11）**：已确认/拒绝/过期的提案不落盘；客户端从当前会话消息的 `toolCalls`（`propose_*`）重建**只读历史卡**——只有类型与参数摘要，无状态、无操作、不做名称解析。不新增表/API；live 组卡按 `toolCallId` 去重，避免与历史卡重复。
 - **确认时服务端重新校验**：引用对象仍存在且未软删；常规引用还要求快照一致——实体/关系/Delta 用自身 `updated_at`，大纲节点用节点级 `updated_at`。**大纲父容器引用只校验存在**（`propose_outline_node` 的父节点、`propose_move_node` 的目标父节点）：父节点版本戳包含 children 变更，而成批新增/移入本身就会推进它，按版本比对会把同父下第二个合法提案误判为过期。校验失败返回 409 `PROPOSAL_STALE`；`proposal_id` 不存在返回 404 `PROPOSAL_NOT_FOUND`。
 - **提案绑定项目**：confirm/reject 校验与当前项目一致，不匹配返回 409 `PROPOSAL_PROJECT_MISMATCH`；切换项目时清空全部内存提案并强制结束在途 SSE/agent 循环。

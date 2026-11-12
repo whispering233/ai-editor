@@ -1433,7 +1433,7 @@ function MessageList({ disabled }: { disabled: boolean }) {
           )}
           {/* 运行时工具行**不在此处**：已并入尾条 assistant 消息的 toolCalls（渲染位置 = 消息内
               思考之后、正文之前，与重载后同序，见 DESIGN.md `chat-message-stream`） */}
-          {/* 提案组卡（tool_execution_end 的 result.details 填充；一轮合并一张，瞬态） */}
+          {/* live 提案组卡（tool_execution_end 的 result.details 填充；一轮合并一张，瞬态；历史回看由消息内只读卡承载） */}
           {proposals.length > 0 && <ProposalCardView proposals={proposals} />}
         </div>
       )}

@@ -217,7 +217,7 @@ id: string;                  // 会话 ID
 
 ## 提案确认
 
-提案**仅存服务端内存**（TTL = `PROPOSAL_TTL_MS` + 条数上限），随 `tool_execution_end` 帧的 `result.details` 到达前端：`details = { proposal_id, type, preview }`（`propose_*` 工具产出）；`preview` **恒含 `summary`**（一句话摘要），结构化预览字段平铺其上。生命周期与校验规则见 [`../design/30-agent-loop.md`](../design/30-agent-loop.md) §2。
+提案**仅存服务端内存**（TTL = `PROPOSAL_TTL_MS` + 条数上限），随 `tool_execution_end` 帧的 `result.details` 到达前端：`details = { proposal_id, type, preview }`（`propose_*` 工具产出）；`preview` **恒含 `summary`**（一句话摘要），结构化预览字段平铺其上。生命周期与校验规则见 [`../design/30-agent-loop.md`](../design/30-agent-loop.md) §2。确认/拒绝后 live 提案从内存移除；历史回看由客户端从会话 `toolCalls` 重建只读卡，不是服务端接口。
 
 ### POST /api/v1/proposal/:proposalId/confirm
 
