@@ -779,6 +779,7 @@ import {
   DEFAULT_SEARCH_RESULT_COUNT,
   MAX_SEARCH_QUERY_CHARS,
   MAX_SEARCH_RESULT_COUNT,
+  MAX_SEARCH_SUMMARY_CHARS,
   webSearchArgsSchema,
 } from "./schemas/index.js";
 import { MAX_FETCH_URL_CHARS, fetchContentArgsSchema } from "./schemas/index.js";
@@ -803,10 +804,13 @@ const commonToolDefs: ToolDefinition[] = [
       "lang:zh 限定语言、\"精确短语\" 要求逐字命中），不要另造 recency / domain 之类参数。" +
       "count 为期望条数（缺省 " +
       DEFAULT_SEARCH_RESULT_COUNT +
-      "，上限 " +
+      " 条，上限 " +
       MAX_SEARCH_RESULT_COUNT +
-      "）。" +
-      "返回 [{title,url,summary,date,authority}]（按相关性顺序，空字段省略）；" +
+      " 条）。" +
+      "返回 [{title,url,summary,truncated?,date,authority}]（按相关性顺序，空字段省略）；" +
+      "单条 summary 只做异常上限：超过 " +
+      MAX_SEARCH_SUMMARY_CHARS +
+      " 字符才截断并带 truncated: true（正常摘要原样），要更多内容用 fetch_content 打开原文。" +
       "**只回摘要不返回正文**（need_content 恒为 false——正文是否打开由用户决定）。" +
       "引用检索结论时给出 url；摘要可能过期或不准确，只作线索不作定论。" +
       "注意：查询词会发往 DeepSeek（隐私面，无开关）；未配置 DeepSeek API Key（设置 → 模型 → DeepSeek）时本工具直接报错，无其他供应商兜底。",

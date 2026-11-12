@@ -3,13 +3,14 @@
 // 口径（docs/api/tool-calling.md「外部检索（自动）」）：
 // - **只做检索**：`need_content` 恒 false（只回摘要，正文是否打开由用户决定），不落盘缓存
 // - 工具层职责只有三件：注入检查（port 未注入即抛错，不静默返回空）、query 空白校验、
-//   结果投影（**空字段省略** + `summary` 为空回落 `snippet`，**不改顺序**——顺序是上游相关性序）
+//   结果投影（**空字段省略** + `summary` 为空回落 `snippet` + 摘要仅做异常上限截断，**不改顺序**——顺序是上游相关性序）
 // - 网络与凭据**都不在这里**：`WebSearchPort` 由 server 注入（`packages/server/src/web-search.ts`）
 // - 每次成功请求按次计费，但这笔费用**不进会话 token 账目**（那里只有模型用量）
 
 import type { ToolContext } from "../context.js";
 import {
   DEFAULT_SEARCH_RESULT_COUNT,
+  MAX_SEARCH_SUMMARY_CHARS,
   type WebSearchArgs,
   type WebSearchHit,
 } from "../schemas/index.js";
@@ -19,11 +20,24 @@ function nonEmpty(value: string | undefined): string | undefined {
   return value !== undefined && value.trim() !== "" ? value : undefined;
 }
 
-/** 单条命中投影：title/url 必留；summary 回落 snippet；其余字段为空即省略 */
+/** 摘要异常保护：超上限才截断，结果长度（含省略号）不超过上限；正常摘要原样返回 */
+function capSummary(summary: string): { summary: string; truncated?: true } {
+  if (summary.length <= MAX_SEARCH_SUMMARY_CHARS) return { summary };
+  return { summary: summary.slice(0, MAX_SEARCH_SUMMARY_CHARS - 1) + "…", truncated: true };
+}
+
+/**
+ * 单条命中投影：title/url 必留；summary 回落 snippet；其余字段为空即省略。
+ * `content` 回落已由 server 的 `toHit` 折进 `summary`（tools 不发网络请求）。
+ */
 function projectHit(hit: WebSearchHit): WebSearchHit {
   const projected: WebSearchHit = { title: hit.title, url: hit.url };
-  const summary = nonEmpty(hit.summary) ?? nonEmpty(hit.snippet);
-  if (summary !== undefined) projected.summary = summary;
+  const rawSummary = nonEmpty(hit.summary) ?? nonEmpty(hit.snippet);
+  if (rawSummary !== undefined) {
+    const capped = capSummary(rawSummary);
+    projected.summary = capped.summary;
+    if (capped.truncated === true) projected.truncated = true;
+  }
   const date = nonEmpty(hit.date);
   if (date !== undefined) projected.date = date;
   const authority = nonEmpty(hit.authority);

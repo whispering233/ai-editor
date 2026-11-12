@@ -181,11 +181,12 @@ search_references(query, type?, tags?)
 
 ```typescript
 web_search(query, count?)
-  → [{ title, url, summary, date, authority }]（保持 API 返回顺序，空字段省略）
+  → [{ title, url, summary, truncated?, date, authority }]（保持 API 返回顺序，空字段省略）
   query: 检索语句，长度上限 = `MAX_SEARCH_QUERY_CHARS`（schema 与工具描述同源）
-  count: 期望条数，缺省 `DEFAULT_SEARCH_RESULT_COUNT`，上限 `MAX_SEARCH_RESULT_COUNT`
+  count: 期望条数，缺省 `DEFAULT_SEARCH_RESULT_COUNT`，上限 `MAX_SEARCH_RESULT_COUNT`（条数是上下文成本的主闸门）
   口径：
-    - `need_content` 恒 false——只回摘要（summary 为空时回落到 snippet），正文是否打开由用户决定
+    - `need_content` 恒 false——只回摘要（summary 为空时回落到 snippet / content，content 回落由 server 完成），正文是否打开由用户决定
+    - 单条摘要只做**异常上限**：超过 `MAX_SEARCH_SUMMARY_CHARS` 才截断（结果含省略号、长度不超过上限）并带 `truncated: true`；正常摘要原样返回、不带该字段。需要更多正文走 `fetch_content`
     - 每次成功请求按 DeepSeek 计费；**这笔费用不进会话状态栏的 token 账目**（那里只有模型用量）
     - 查询词会发往 DeepSeek（隐私面，设置页不提供开关）
   凭据：复用 pi 的 `deepseek` provider（`ModelRuntime.getAuth("deepseek")`，`auth.json` 存量优先、`DEEPSEEK_API_KEY` 兜底）；未配置时抛可读错误

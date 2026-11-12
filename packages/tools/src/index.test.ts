@@ -46,18 +46,19 @@ describe("@whispering233/ai-editor-tools 入口冒烟", () => {
         new Set([String(m.DEFAULT_TEXT_PAGE_CHARS), String(m.MAX_TEXT_PAGE_CHARS)]),
       );
     }
- // 检索上限防漂移：web_search 的 description 与 schema 共用 schemas/web-search.ts 的三个常量——
- // 描述里出现的**任何**数字必须恰好 ⊆ {query 上限, 缺省条数, 条数上限}（手写数值 / 值改了没同步即报红）
+ // 检索上限防漂移：web_search 的 description 与 schema 共用 schemas/web-search.ts 的常量——
+ // 描述里出现的**任何**数字必须恰好 ⊆ {query 上限, 缺省条数, 条数上限, 摘要异常上限}（手写数值 / 值改了没同步即报红）
     const webSearchDescription = m.getTool("web_search")!.description;
     expect(new Set(webSearchDescription.match(/\d+/g) ?? [])).toEqual(
       new Set([
         String(m.MAX_SEARCH_QUERY_CHARS),
         String(m.DEFAULT_SEARCH_RESULT_COUNT),
         String(m.MAX_SEARCH_RESULT_COUNT),
+        String(m.MAX_SEARCH_SUMMARY_CHARS),
       ]),
     );
-    // 模型得知这些信息的唯一渠道是描述本身：过滤语法 / 不返正文 / 隐私面 / 未配备 key 报错
-    for (const hint of ["site:", "-site:", "after:", "lang:", "need_content", "DeepSeek"]) {
+    // 模型得知这些信息的唯一渠道是描述本身：过滤语法 / 不返正文 / 摘要仅异常上限 / 全文走 fetch_content / 隐私面 / 未配备 key 报错
+    for (const hint of ["site:", "-site:", "after:", "lang:", "need_content", "truncated", "fetch_content", "DeepSeek"]) {
       expect(webSearchDescription).toContain(hint);
     }
     expect(m.getTool("web_search")!.scope).toBe("common"); // 两种工作区都注册
