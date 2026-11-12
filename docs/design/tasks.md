@@ -10,7 +10,30 @@
 
 ## 当前任务卡
 
-> 当前无进行中的任务卡。新任务先在此登记；未排期遗留项进 `backlog.md`。
+### 卡：提案历史只读卡（会话消息重建）
+
+**范围**
+
+- `packages/client/src/stores/chat.ts`：`ProposalCard` 增可选 `toolCallId?: string`；`tool_execution_end` 追加提案时写入同一帧的 `toolCallId`（仅客户端字段，不进 API）。
+- `packages/client/src/components/chat/ChatPanel.tsx`：新增并导出 `HistoricalProposalCard`（接收 `propose_*` 调用数组；头部「历史提案 · N 条（只读）」；行 = 类型中文名 + 摘要首行，点行展开完整参数摘要；无状态、无按钮、不发 `resolveNames`）；`MessageItem` 增可选 `liveProposalToolCallIds`，在正文之后渲染历史卡并过滤同 `toolCallId` 的 live 行；`MessageList` 从 `proposals` 派生该集合后传给每条消息。
+- 测试：`chat-panel.test.tsx` 直渲染历史卡（折叠/展开、多条、无按钮、非提案工具不渲染、live id 过滤、无 live 时全量）；`chat.test.ts` 断言 `tool_execution_end` 写入 `toolCallId`。
+- 文档已在 `docs/ui/DESIGN.md`（`proposal-card` 历史形态）与 `docs/design/30-agent-loop.md` §2（只读历史口径）登记。
+
+**验收**
+
+- 一条 assistant 消息含 2 个 `propose_*` 调用 → 一张历史卡、2 行；普通工具调用不产生历史卡。
+- 历史卡无「确认/拒绝」按钮、无状态文案；展开行显示 `summarizePreview` 的参数摘要（id 原样，不解析名称），无摘要时显示原始 JSON。
+- live 组卡存在时，按 `toolCallId` 隐藏对应历史行；不同消息/不同轮次不受「尾条」位置影响，不重复。
+- 刷新/切会话后 `proposals` 为空，历史卡仍从消息 `toolCalls` 渲染。
+- `pnpm typecheck`、`pnpm lint`、`pnpm --filter @whispering233/ai-editor-client test` 全绿；SSR 渲染测试覆盖折叠/展开。
+
+**不做**
+
+- 不新增表/API/服务端字段；不持久化确认/拒绝状态；不解析名称；不改 live 组卡、批量、YOLO；不做独立历史面板/分页。
+
+**硬完成判据**
+
+- `git log` 含本卡新 commit + `git status` 干净；无 commit 不许报 PASS；汇报必附 commit hash 与验证命令输出。
 
 ---
 
