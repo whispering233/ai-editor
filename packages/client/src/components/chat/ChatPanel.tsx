@@ -13,7 +13,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import type { ComponentRef } from "react";
 import { Bubble, Conversations, Sender } from "@ant-design/x";
 import type { ConversationItemType } from "@ant-design/x";
-import { Alert, Badge, Button, Collapse, Dropdown as AntDropdown, Select, Tag, theme } from "antd";
+import { Alert, Badge, Button, Collapse, Dropdown as AntDropdown, Select, Switch, Tag, theme } from "antd";
 import type { MenuProps } from "antd";
 import {
   BulbOutlined,
@@ -27,6 +27,7 @@ import {
 } from "@ant-design/icons";
 import Markdown from "@ant-design/x-markdown";
 import { useMediaQuery } from "../../hooks/use-media-query";
+import { useYoloPreference } from "../../hooks/use-yolo";
 import { CHAT_MIN_WIDTH } from "../../hooks/use-panels";
 import { useProjectStore } from "../../stores/project";
 import {
@@ -180,6 +181,7 @@ const THINKING_LEVEL_OPTIONS: ThinkingLevel[] = [
 
 function ComposerConfigRow() {
   const [settings, setSettings] = useState<SettingsLlmConfig | null>(null);
+  const [yolo, setYolo] = useYoloPreference();
 
   // 挂载后拉取 LLM 设置（激活 provider + 各家模型目录/key 状态 + 思考强度；失败静默——配置行降级隐藏）；
   // 无项目时本组件不渲染（父层 `!disabled`），故不需要 disabled 透传
@@ -265,6 +267,13 @@ function ComposerConfigRow() {
           aria-label="思考强度"
           options={THINKING_LEVEL_OPTIONS.map((l) => ({ value: l, label: l }))}
         />
+        <span
+          className="flex shrink-0 items-center gap-1 text-xs text-muted-foreground"
+          title="回合正常结束后自动确认全部提案（含删除类），不再逐条审阅"
+        >
+          <Switch size="small" checked={yolo} onChange={setYolo} aria-label="自动确认提案" />
+          自动确认
+        </span>
       </div>
     </div>
   );

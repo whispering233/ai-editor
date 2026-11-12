@@ -26,6 +26,12 @@ vi.mock("../hooks/use-sse", () => ({
   fetchSSE: vi.fn(() => () => {}),
 }));
 
+// YOLO 开关由 localStorage 现读：测试用 mock 控制，不依赖 window
+vi.mock("../hooks/use-yolo", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../hooks/use-yolo")>();
+  return { ...actual, readYoloPreference: vi.fn(() => false) };
+});
+
 import {
   confirmProposal as apiConfirmProposal,
   deleteChatSession as apiDeleteChatSession,
@@ -34,6 +40,7 @@ import {
   rejectProposal as apiRejectProposal,
 } from "../lib/api";
 import { fetchSSE } from "../hooks/use-sse";
+import { readYoloPreference } from "../hooks/use-yolo";
 import {
   describeProposalActionError,
   describeStreamError,
@@ -53,6 +60,7 @@ const mocked = {
   confirmProposal: vi.mocked(apiConfirmProposal),
   rejectProposal: vi.mocked(apiRejectProposal),
   fetchSSE: vi.mocked(fetchSSE),
+  readYoloPreference: vi.mocked(readYoloPreference),
 };
 
 /** 最近一次 fetchSSE 调用的 options（sendMessage 用例驱动事件回调用）；store 必然传入全部回调，断言非空 */
@@ -114,6 +122,7 @@ beforeEach(() => {
  // 默认 mock：历史为空、fetchSSE 返回空 abort 函数（用例内按需覆盖）
   mocked.getSessionMessages.mockResolvedValue({ sessionId: "sess-x", messages: [] });
   mocked.fetchSSE.mockReturnValue(() => {});
+  mocked.readYoloPreference.mockReturnValue(false);
 });
 
 afterEach(() => {
@@ -1098,6 +1107,53 @@ describe("sendMessage（POST /chat + SSE 事件映射，契约 = docs/api/80-api
     const { onEvent } = sseOptions();
     onEvent("agent_end", { stopReason: "aborted" });
     expect(useChatStore.getState().streamError).toBeNull();
+  });
+
+  it("YOLO 开 + 正常结束（无 stopReason）→ 自动确认本轮全部 pending，只刷新一次", async () => {
+    mocked.readYoloPreference.mockReturnValue(true);
+    mocked.confirmProposal.mockResolvedValue({ confirmed: true, result: undefined });
+    useChatStore.setState({ currentSessionId: "sess-1" });
+    useChatStore.getState().sendMessage("你好");
+    useChatStore.setState({
+      proposals: ["p1", "p2"].map((proposalId) => makeProposal({ proposalId })),
+    });
+    sseOptions().onEvent("agent_end", {});
+    await vi.waitFor(() =>
+      expect(useChatStore.getState().proposals.map((p) => p.status)).toEqual([
+        "confirmed",
+        "confirmed",
+      ]),
+    );
+    expect(mocked.confirmProposal.mock.calls.map((c) => c[0])).toEqual(["p1", "p2"]);
+    expect(useUiStore.getState().dataVersion).toBe(1);
+    expect(useUiStore.getState().toast?.text).toBe("已确认 2 条提案");
+  });
+
+  it("YOLO 开但 stopReason=error → 不自动确认", () => {
+    mocked.readYoloPreference.mockReturnValue(true);
+    useChatStore.setState({ currentSessionId: "sess-1" });
+    useChatStore.getState().sendMessage("你好");
+    useChatStore.setState({ proposals: [makeProposal({ proposalId: "p1" })] });
+    sseOptions().onEvent("agent_end", { stopReason: "error", errorMessage: "429" });
+    expect(mocked.confirmProposal).not.toHaveBeenCalled();
+  });
+
+  it("YOLO 开但 stopReason=aborted → 不自动确认", () => {
+    mocked.readYoloPreference.mockReturnValue(true);
+    useChatStore.setState({ currentSessionId: "sess-1" });
+    useChatStore.getState().sendMessage("你好");
+    useChatStore.setState({ proposals: [makeProposal({ proposalId: "p1" })] });
+    sseOptions().onEvent("agent_end", { stopReason: "aborted" });
+    expect(mocked.confirmProposal).not.toHaveBeenCalled();
+  });
+
+  it("YOLO 关 + 正常结束 → 不自动确认", () => {
+    mocked.readYoloPreference.mockReturnValue(false);
+    useChatStore.setState({ currentSessionId: "sess-1" });
+    useChatStore.getState().sendMessage("你好");
+    useChatStore.setState({ proposals: [makeProposal({ proposalId: "p1" })] });
+    sseOptions().onEvent("agent_end", {});
+    expect(mocked.confirmProposal).not.toHaveBeenCalled();
   });
 
   it("compaction / auto_retry 事件 → statusNote 轻量提示（agent_end 清空）", () => {

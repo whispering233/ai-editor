@@ -47,6 +47,7 @@ import { fetchSSE } from "../hooks/use-sse";
 import type { FocusContext } from "../lib/focus";
 import { useProjectStore } from "./project";
 import { useUiStore } from "./ui";
+import { readYoloPreference } from "../hooks/use-yolo";
 
 /** focus context（跨页注入「问 AI」；POST /chat 请求体 context 字段）
  * 定义提移至 lib/focus.ts（ui store currentFocus 共用，避免 store 循环依赖） */
@@ -988,6 +989,14 @@ export const useChatStore = create<ChatState>((set, get) => {
                   : {}),
               });
               void get().loadSessions(); // 本轮已落库：刷新列表（摘要/条数/最近活动）
+ // YOLO：仅正常结束（无 stopReason）自动确认；error/aborted 留给用户
+              if (
+                stopReason === undefined &&
+                readYoloPreference() &&
+                get().proposals.some(isProposalActionable)
+              ) {
+                void get().confirmAllProposals();
+              }
               break;
             }
 
