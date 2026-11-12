@@ -448,6 +448,12 @@ components:
   - **尚未统一**：概览 / 大纲 / 实体列表 / 设置 / 回收站等仍走外壳滚动（页头随内容离开）——列入 `backlog.md`，逐页改造时按上面同一条实现口径。
 - **实现唯一入口 = `components/ui/page-header.tsx`**（标题行 / tab 行 / 控件行 / 分割线一次给全）：页面不自画页头分割线（表格行、分组头等区块内部的 `border-b border-border` 不属此列）。
 
+### 详情页布局（2026-11）
+
+- **单列上下，不左右分栏**：设定/地点详情（`EntityDetail`）、大纲节点详情（`OutlineDetail`）、时间轴事件详情（`TimelineDetail`）一律 `flex flex-col`：信息/表单在上，关联/层级在下。
+- **为什么**：左右两栏共享一行高度（grid 默认 stretch），一侧展开会把另一侧拉出大片空白；窄中栏下两栏都显示不全。单列让每块拿到完整宽度，长度交给页面滚动。
+- **不适用**：人物页是 master-detail 工作台（左栏列表 + 右栏详情），不是同一页内的左右分栏；参考资料详情本来就是单列。
+
 ## Elevation & Depth
 
 **默认零阴影。** 层级关系由「底色档 + 1px 描边」表达：`surface`（外壳）→ `canvas`（面板）→ `surface-muted`（选中/次级面）。
@@ -560,7 +566,7 @@ components:
 
 ### 数据展示
 
-**`data-row`** / **`data-row-hover`** — 列表/树/大纲行：无底色 + 底部 1px `{colors.hairline-soft}`；hover = `{colors.surface-soft}`。行级交互：双击进详情、单击标题行内编辑；**链式新建（Enter 建同级/子级）后新条目 = 选中 + 聚焦**（只聚焦不选中会让下一次 Enter 被「无选中」守卫静默吞掉；新建按钮同理）。**行尾状态徽标排在操作按钮左侧**（如大纲行的「阅读进度」徽标）：右侧 `icon-button` 恒贴行尾——徽标出现不得把它推离原位（否则同一列按钮在行间错位）。
+**`data-row`** / **`data-row-hover`** — 列表/树/大纲行：无底色 + 底部 1px `{colors.hairline-soft}`；hover = `{colors.surface-soft}`。**设定树描述摘要（2026-11）**：设定树行的描述摘要（`summary.description`）受控件行「描述」开关控制（`Switch size="small"`，默认开，`localStorage` `ai-editor:setting-desc`）；关闭时只隐藏摘要行，不隐藏标题/标签/操作，也不影响详情页的描述字段。行级交互：双击进详情、单击标题行内编辑；**链式新建（Enter 建同级/子级）后新条目 = 选中 + 聚焦**（只聚焦不选中会让下一次 Enter 被「无选中」守卫静默吞掉；新建按钮同理）。**行尾状态徽标排在操作按钮左侧**（如大纲行的「阅读进度」徽标）：右侧 `icon-button` 恒贴行尾——徽标出现不得把它推离原位（否则同一列按钮在行间错位）。
 **行级「新建子级」按钮（2026-09）**：大纲页与设定页的树行在行尾补一个 `icon-button`（`PlusOutlined`）新建子级入口，**位置 = 删除按钮左侧**（删除恒贴行尾；它左侧依次是「阅读进度」徽标 / 标签 chip / 手动排序 ↑↓）；`title` / `aria-label` 写全语义（新建章 / 新建场 / 新建子设定）。**无合法子层级的行不渲染该按钮**（大纲的场是叶子）。点击 = 在该行子级末尾打开就地输入行（与 Enter 建子级同一路径，成功后新条目选中 + 聚焦）。
 **缩进列对齐（2026-09 修正与再扩写）**：缩进行的折叠箭头（`size="small"` icon-only，宽 24px）与**无子节点占位必须同几何**——占位写成 28px 会让「有子节点 / 无子节点」两类行的类型徽标、标题、摘要第二行、就地新建行各差 12px（大纲页曾是此状态）。**同一行块内的三处占位（折叠箭头 / 类型徽标 / 就地新建行）必须与该行自身的徽标同宽**：卷/章行是编号徽标 `min-w-14`、场行是 28px——任一处漏改即错位，改动行结构时三处一起看。**叶子行渲染同几何的空占位**（`<span aria-hidden>`，不画 `disabled` 折叠箭头：看着可点、点了却没反应）；**摘要第二行与就地新建行同样复用这条占位链，不写 `pl-*` 像素**——设定页曾用 `pl-5`，比标题列左偏 6px，因为列位是「24px 箭头盒 − `-ml-1` + 行内 gap」算出来的，抄数字必漂。
 **折叠箭头方向（全站一条惯例）**：**折叠 = 横指（`▸`）、展开 = 下指（`▾`）**——实现恒为 `RightOutlined` + `!collapsed && "rotate-90"`（同上 `transition-transform`），四处自绘缩进行（大纲 / 设定 / 能力面板 / 时间轴分组）同一种写法；反向写（`collapsed && "-rotate-90"`）会得到「折叠指上、展开指右」（设定页曾是此状态，并与其文件头部注释的 `▾/▸` 自相矛盾）。
@@ -621,7 +627,7 @@ components:
 - **数据源 = 工具结果 `content`**（AUTO 工具的 `details` 不下发）：解析失败（被截断成非法 JSON / 形状不符）→ 卡片不渲染、回退普通工具行；**卡片不新增状态、不新增请求**，随消息历史自然保留。
 **`focus-strip`** — 「正在讨论：{类型} {名称}」小条：`{colors.surface-soft}` 底 + 1px 描边 + caption。**推演形态（2026-09）**：注入的是标记**集合**而非单条对象（无名称可解析）⇒ 文案 = 「正在讨论：推演节点 · N 个」（N = 当前项目的**可见推演节点数**——软删 / 失效标记不计，与徽标、服务端注入同口径）。
 **`chat-session-item-menu`** — 会话列表项操作菜单（antd x `Conversations` 的 `menu`）：仅一项「删除会话」——**危险操作走 danger 样式 + `ConfirmDialog` 二次确认**（文案含「删除后无法恢复」），与回收站 purge 同款交互；流式生成中该项禁用（服务端以 409 `SESSION_BUSY` 兜底）。菜单浮层面复用 `dropdown-panel` 契约（canvas 面 + 1px hairline + 阴影）。**已知边界**：操作入口（ellipsis）由 x `Conversations` 内部渲染且**恒显不随 hover**——改它需覆盖 x 内部样式，代价大于收益（窄右栏多占 ~20px，已接受）。
-**`session-status-bar`** — 会话状态栏（输入区最底另起一行：`Sender` → 配置行 → 状态行；**配置行回归纯配置**，只留模型与思考强度两个下拉）。**只读观测层**：数字全部由服务端算好下发（占用 = pi `getContextUsage()`；累计用量 / 缓存 / 成本 = `sessionUsage()` 产出的 `usage` 字段；速度 = `createSpeedMeter()` 产出的 `speed` 字段），UI **不自己累加、不自己测时序**（口径见 `docs/design/20-context.md` §2.1）。行内顺序 = 占用段 → 费用 → 速度 → 缓存 → 累计 tokens；某段无数据即隐藏，**整行无任何数据 → 整行不渲染**（不常态白占消息区高度）。
+**`session-status-bar`** — 会话状态栏（输入区最底另起一行：`Sender` → 配置行 → 状态行；**配置行回归纯配置**，留模型、思考强度两个下拉 + 自动确认开关）。**自动确认开关（YOLO，2026-11）**：配置行最右端 `Switch size="small"` +「自动确认」；开启后本轮正常结束（`agent_end` 且无 `stopReason`）自动确认全部 pending 提案（含删除类），错误/中止不触发；默认关闭，状态记 `localStorage` `ai-editor:yolo`，`title` 明示风险。**只读观测层**：数字全部由服务端算好下发（占用 = pi `getContextUsage()`；累计用量 / 缓存 / 成本 = `sessionUsage()` 产出的 `usage` 字段；速度 = `createSpeedMeter()` 产出的 `speed` 字段），UI **不自己累加、不自己测时序**（口径见 `docs/design/20-context.md` §2.1）。行内顺序 = 占用段 → 费用 → 速度 → 缓存 → 累计 tokens；某段无数据即隐藏，**整行无任何数据 → 整行不渲染**（不常态白占消息区高度）。
 
 - **占用段三态**：① `percent` + `tokens` 有值 → 2px 圆角条 + `42% · 1M`；② 只有 `contextWindow`（压缩后 / 历史会话，`tokens` 为 `null`）→ `? · 1M` 且**不画条**；③ 连窗口都没有（无模型 / 设置未加载 / 服务端省略该键）→ 整段隐藏。条填充色按占比经 antd token 取色（`CONTEXT_ERROR_PERCENT` 以上 `colorError`、`CONTEXT_WARN_PERCENT` 以上 `colorWarning`、其余 `colorPrimary`），**禁硬编码色值**。
 - **视觉**：一行 `caption-text` 字号 + `tabular-nums`，无底色 / 无描边 / 无图标，**不新增视觉语言**；compact 数值格式（k / M / 美元 / tok·s⁻¹）由 `lib/session-status.ts` 单一实现，**行内只放 compact 值**，精确账目走 hover。
@@ -630,7 +636,7 @@ components:
 - **速度只对进行中的会话有效**：历史会话加载后无速度样本（时序不落盘）→ 该项隐藏。
 - **生命周期**：切会话 / 新会话 / 切项目清零（与占用条同一清零点）；新一轮流开始**不清零**（旧值留到新值到达，避免闪烁）。
 **`thinking-block`** — 思维链（assistant 消息内的 thinking 内容）：**默认折叠为一行摘要**（`思考过程 · N 字` + 左侧 chevron，`{colors.tertiary}` 字色、无底色、无描边）；展开后 `{colors.surface-soft}` 底 + 左侧 2px `{colors.hairline-strong}` 竖线 + caption 字号 + `{colors.secondary}` 字色 + `pre-wrap`（长文可滚动，限高约 200px；展开态正文字色以 `colorText` 80% 实现——Tailwind 主题未暴露 `colorTextSecondary` utility，属近似 secondary 的登记值，非新色）。**流式期间（本轮首次 `thinking_start` 起，至 `agent_end` / 中断帧）自动展开，本轮结束后折叠为摘要行**——中途的工具调用与后续 LLM 调用**不触发折叠**（每次调用折/展 = 消息上方高度反复跳变，2026-09 用户报「工具调用把思考块往上推 + 抖动」），且**用户手动折叠在流式期间不被覆盖**（流式标记是轮级的布尔量，不是「每次调用」的脉冲）。历史回看：消息接口只回 `THINKING_PREVIEW_MAX_CHARS` 字预览（`docs/api/80-api-chat.md`），点「展开全文」按需拉取全文（带 loading 态）。同一消息同时持有本轮累积全量与服务端预览时**只渲染一个块**（渲染优先级：有流式累积文本则不渲染预览块）。实现优先用 `@ant-design/x` 的 `Thought` 组件；其外观不满足本契约时自绘，但**不得引入新色或新字号**。
-**`proposal-card`** — 提案卡：1px 描边卡片 + 确认/拒绝按钮（确认按钮用 `button-primary`，禁用态由 antd 派发）。
+**`proposal-card`（提案组卡，2026-11）** — 一轮的全部提案合并为一张组卡（单条也同形态）：头部 = 灯泡图标 + `本轮提案 · N 条（M 待处理）` + 右侧「全部确认 / 全部拒绝」（仅有 pending 时可用）；行 = 图标 + 类型中文名 + 摘要首行（truncate）+ 状态 + 行尾逐条「确认 / 拒绝」；点行展开该提案的完整预览。组卡沿用现有 1px `{colors.primary}` 25% 描边 + primary 5% 淡底；确认按钮 `button-primary`，拒绝 `button-default`。批量执行 = 客户端串行调用现有 confirm/reject 端点（无服务端批量端点），逐条记账、失败继续、成功只刷新一次数据、结束一条汇总 toast。YOLO 自动确认走同一条批量路径。
 **`toast`** — 全局提示走 antd `message`（`App.useApp()`），顶部居中；`success/error/info` 对应 store 的 `ToastKind`，时长由 store 的 3s 定时器决定（`duration: 3` 对齐）。**命令式反馈的上下文入口**：`AntdProvider` 在 `ConfigProvider` 内部包 `<App component={false}>`（`component={false}` 不渲染包裹 div，不插进三栏 flex 链）——`message`/`notification`/`modal` 需经 `App.useApp()` 取实例才能继承本 Provider 的主题与 locale，不要用静态方法。
 
 ### 设置页「通用」区（桌面版专属）
