@@ -3,7 +3,7 @@
 // 见 DESIGN.md §Layout），<1024px 折叠为抽屉（fixed + 遮罩，开关在信息条右侧）
 // 结构（自上而下）：会话标题行（下拉切换同项目会话 + 新会话）→ 断连横幅 → 错误条 →
 // 消息流（user 气泡 / assistant 无气泡宋体排版 / 历史工具折叠记录与运行时工具行同位置——
-// 消息内 思考 → 工具行 → 正文，见 DESIGN.md `chat-message-stream` / 提案卡）→
+// 消息内 思考 → 工具行 → 正文 → 历史提案卡，见 DESIGN.md `chat-message-stream` / 提案卡）→
 // focus 小条 → 输入区（Enter 发送 / Shift+Enter 换行）
 // 无项目打开时整体禁用（灰显 + 「打开项目后可用」，不请求会话数据，「位置与形态」）
 // S7 数据源已接入（S8.1 联调完成）：proposals（提案卡）/ streamTools（运行态工具结果与状态）
@@ -56,7 +56,11 @@ import { SessionStatusBar } from "./session-status-bar";
 import { SourceCards } from "./source-cards";
 import type { ChatSessionSummary } from "@whispering233/ai-editor-shared";
 
-import { buildDeductionMarks, formatRelativeTime } from "@whispering233/ai-editor-shared";
+import {
+  buildDeductionMarks,
+  formatRelativeTime,
+  PROPOSAL_TOOLS,
+} from "@whispering233/ai-editor-shared";
 import { cn } from "../../lib/utils";
 import { skeletonClass } from "../../lib/styles";
 import { ConfirmDialog } from "../outline/dialogs";
@@ -696,6 +700,156 @@ export function ThinkingBlock({
   );
 }
 
+// ============ 历史提案卡（会话消息重建，只读） ============
+// 已确认/拒绝/过期的提案不落盘；历史回看从 assistant.toolCalls 的 propose_* 重建只读行
+// （DESIGN.md `proposal-card` 历史形态 / 30-agent-loop §2）：只有类型与参数摘要，
+// 无状态、无按钮、不做名称解析（id 不换名称，也不额外拼名称）。live 组卡按 toolCallId 去重。
+
+/** 历史提案行数据（由 toolCalls 归一后的 propose_* 调用） */
+export interface HistoricalProposalCall {
+  /** 工具调用 id（与 live 组卡的 `ProposalCard.toolCallId` 同源，用于去重） */
+  id?: string;
+  /** 提案工具名（`propose_*`） */
+  tool: string;
+  args?: unknown;
+}
+
+/** 历史提案行（导出供 SSR 测试直出折叠/展开两态；无状态、无按钮、不发 resolveNames） */
+export function HistoricalProposalRow({
+  call,
+  expanded,
+  onToggle,
+}: {
+  call: HistoricalProposalCall;
+  expanded: boolean;
+  onToggle: () => void;
+}) {
+  const label = PROPOSAL_TYPE_LABELS[call.tool] ?? call.tool;
+  // names 恒传 null：历史卡不发 names/resolve（id 不做名称解析，见 DESIGN.md `proposal-card`）
+  const lines = useMemo(
+    () => summarizePreview(call.tool, { args: call.args }, null),
+    [call.tool, call.args],
+  );
+  // summarizePreview 的 lead 行可能与 label 相同（如「删除实体」）；重复行没有信息量，
+  // 去掉后若没有剩余行，展开态回退原始 JSON，保证 id 原样可见（DESIGN.md `proposal-card`）。
+  const summaryLines = useMemo(() => {
+    if (lines === null) return null;
+    // 有的工具 lead 与 label 不完全相同（如「重排时间点」vs「重排时间轴时间点」）；
+    // 单行且没有「：」分隔值时视为纯动词短语，回退原始 JSON。
+    const leadOnly = lines.length === 1 && !lines[0].includes("：");
+    if (leadOnly) return [];
+    return lines[0] === label ? lines.slice(1) : lines;
+  }, [lines, label]);
+  const summaryLine = summaryLines !== null && summaryLines.length > 0 ? summaryLines[0] : null;
+  const rawArgs = typeof call.args === "string" ? call.args : JSON.stringify(call.args ?? {}, null, 2);
+
+  return (
+    <div className="py-1">
+      <div
+        role="button"
+        tabIndex={0}
+        aria-expanded={expanded}
+        onClick={onToggle}
+        onKeyDown={(e) => {
+          if (e.target !== e.currentTarget) return;
+          if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            onToggle();
+          }
+        }}
+        className="flex cursor-pointer items-center gap-1.5 rounded px-1 py-1 hover:bg-primary/10"
+      >
+        <RightOutlined
+          className={cn(
+            "shrink-0 text-xs text-muted-foreground transition-transform",
+            expanded && "rotate-90",
+          )}
+        />
+        <span className="shrink-0 text-xs font-medium text-foreground">{label}</span>
+        <span className="min-w-0 flex-1 truncate text-xs text-muted-foreground">
+          {summaryLine ?? "（无摘要）"}
+        </span>
+      </div>
+      {expanded && (
+        <div className="mt-1 space-y-1 pl-5">
+          {summaryLines !== null && summaryLines.length > 0 ? (
+            <ul className="max-h-32 space-y-0.5 overflow-auto text-xs whitespace-pre-wrap text-muted-foreground">
+              {summaryLines.map((line) => (
+                <li key={line}>{line}</li>
+              ))}
+            </ul>
+          ) : (
+            <pre className="max-h-32 overflow-auto text-xs whitespace-pre-wrap text-muted-foreground">
+              {rawArgs}
+            </pre>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/**
+ * 历史提案卡：一条 assistant 消息内的全部 `propose_*` 调用合成一张只读卡（单条也同形态）。
+ * 头部 = 灯泡 + `历史提案 · N 条（只读）`；无确认/拒绝、无状态文案（DESIGN.md `proposal-card`）。
+ * 导出供 SSR 渲染测试直出折叠/展开两态（打开集合是 client state，SSR 只能看到折叠态）。
+ */
+export function HistoricalProposalCard({ calls }: { calls: HistoricalProposalCall[] }) {
+  const [expandedRows, setExpandedRows] = useState<ReadonlySet<string>>(() => new Set());
+  if (calls.length === 0) return null;
+  // 整串在 JS 里拼：SSR 相邻表达式之间会插注释节点，测试断言拼接文案会失败
+  const headerText = `历史提案 · ${calls.length} 条（只读）`;
+
+  const toggleRow = (key: string) => {
+    setExpandedRows((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  };
+
+  return (
+    <div className="rounded-lg border border-primary/25 bg-primary/5 p-2">
+      <div className="flex items-center gap-1.5">
+        <BulbOutlined className="shrink-0 text-primary" />
+        <span className="min-w-0 flex-1 truncate text-sm font-medium text-foreground">
+          {headerText}
+        </span>
+      </div>
+      <div className="mt-1 divide-y divide-border/70">
+        {calls.map((call, i) => {
+          // 用调用 id 作展开键：live 行被过滤后数组下标会位移，按 index 会让展开态串行
+          const rowKey = call.id ?? `hist-proposal-${i}`;
+          return (
+            <HistoricalProposalRow
+              key={rowKey}
+              call={call}
+              expanded={expandedRows.has(rowKey)}
+              onToggle={() => toggleRow(rowKey)}
+            />
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+/** 历史提案调用筛选：`propose_*` 且未被 live 组卡按 toolCallId 命中（不按消息位置猜测） */
+function historicalProposalCalls(
+  toolCalls: unknown[],
+  liveProposalToolCallIds?: ReadonlySet<string>,
+): HistoricalProposalCall[] {
+  return toolCalls
+    .map(asToolCall)
+    .filter(
+      (call): call is ToolCallShape & { tool: string } =>
+        typeof call.tool === "string" && (PROPOSAL_TOOLS as readonly string[]).includes(call.tool),
+    )
+    .filter((call) => call.id === undefined || liveProposalToolCallIds?.has(call.id) !== true)
+    .map((call) => ({ id: call.id, tool: call.tool, args: call.args }));
+}
+
 // ============ 消息条目：user 气泡 / assistant 无气泡排版 + 思维链 + 历史工具折叠记录 ============
 
 /** 历史 tool 消息按 toolCallId 挂到 assistant.toolCalls 行（成对；孤儿半对不渲染；导出供渲染走查测试）
@@ -703,15 +857,20 @@ export function ThinkingBlock({
  * 工具行的结果/状态有**两个来源**（同一条消息两种时期）：
  * - 运行态 `liveTools`（本轮 streamTools：`tool_execution_*` 事件，未落库）；
  * - 历史 `toolResults`（`role === "tool"` 消息成对重组，重载后才有）。
- * 运行态优先（本轮无 tool 消息，落库后 liveTools 已清空）。 */
+ * 运行态优先（本轮无 tool 消息，落库后 liveTools 已清空）。
+ *
+ * 消息内顺序 = 思考 → 工具行 → 正文 → 历史提案卡；历史卡从本消息 `propose_*` 调用重建，
+ * `liveProposalToolCallIds` 命中的调用已由 live 组卡承载，不再重复渲染。 */
 export function MessageItem({
   message,
   toolResults,
   liveTools,
+  liveProposalToolCallIds,
 }: {
   message: ChatMessageView;
   toolResults: Map<string, ChatMessageView>;
   liveTools?: Map<string, StreamToolRecord>;
+  liveProposalToolCallIds?: ReadonlySet<string>;
 }) {
   const { token } = theme.useToken();
   if (message.role === "user") {
@@ -736,6 +895,7 @@ export function MessageItem({
   // assistant：x-markdown 流式正文（增量渲染内建：已完成消息 content 引用稳定，React.memo 不重渲；
   // 流式尾部块由 x-markdown streaming 优化处理）
   const toolCalls = Array.isArray(message.toolCalls) ? message.toolCalls : [];
+  const proposalCalls = historicalProposalCalls(toolCalls, liveProposalToolCallIds);
   const content = message.content ?? "";
   const liveThinking = message.thinkingText;
   const historyThinking = message.thinking ?? [];
@@ -781,6 +941,8 @@ export function MessageItem({
         <Bubble content={<Markdown>{content}</Markdown>} />
       ) : // 空内容（流式占位 / 空消息）：不渲染（流式思考指示器由 MessageList 提供）
       null}
+      {/* 历史提案卡：正文之后（只读；live 组卡按 toolCallId 去重） */}
+      {proposalCalls.length > 0 && <HistoricalProposalCard calls={proposalCalls} />}
     </div>
   );
 }
@@ -1174,6 +1336,15 @@ function MessageList({ disabled }: { disabled: boolean }) {
   // 本轮运行态工具记录按 id 索引（结果/状态来源之一；渲染位置在消息内，见 MessageItem）
   const liveTools = useMemo(() => new Map(streamTools.map((t) => [t.id, t])), [streamTools]);
 
+  // live 提案对应的工具调用 id：历史卡按此去重（同一轮 live 行与历史行不重复；不按消息位置猜测）
+  const liveProposalToolCallIds = useMemo(() => {
+    const ids = new Set<string>();
+    for (const proposal of proposals) {
+      if (proposal.toolCallId !== undefined) ids.add(proposal.toolCallId);
+    }
+    return ids;
+  }, [proposals]);
+
   // 强制恢复跟随：新发一轮 / 历史加载开始（切会话）——上滚脱离的状态不延续到新语境
   // （注意声明顺序：必须在本组件下方的贴底 effect 之前，同一提交内先复位再滚动）
   useEffect(() => {
@@ -1251,6 +1422,8 @@ function MessageList({ disabled }: { disabled: boolean }) {
               // 运行态状态只对**尾条**消息生效：工具 id 全局唯一，但状态表是「本轮」的，
               // 下发给历史消息只会在 id 复用时错误改写旧行的 ✓/✗
               liveTools={m.id === messages[messages.length - 1]?.id ? liveTools : undefined}
+              // 去重集合与「尾条」无关：live 提案的 toolCallId 在任何消息里都不再渲历史行
+              liveProposalToolCallIds={liveProposalToolCallIds}
             />
           ))}
           {showThinking && <Bubble loading content="" />}

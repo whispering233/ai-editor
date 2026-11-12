@@ -52,6 +52,8 @@ import {
   ChatPanel,
   ComposerArea,
   focusLabel,
+  HistoricalProposalCard,
+  HistoricalProposalRow,
   isNearBottom,
   MessageItem,
   PROPOSAL_TYPE_LABELS,
@@ -886,6 +888,176 @@ describe("新会话路径叶子组件富数据渲染走查（问题 3）+ 提案
     // 不再 JSON dump（changes 字面量不出现）
     expect(html).toContain("调整位置");
     expect(html).not.toContain("changes");
+  });
+});
+
+describe("历史提案卡（DESIGN.md `proposal-card` 历史形态：会话消息重建的只读卡）", () => {
+  const proposalCalls = [
+    {
+      id: "call-1",
+      tool: "propose_create_entity",
+      args: { name: "张三", type: "character" },
+    },
+    {
+      id: "call-2",
+      tool: "propose_update_entity",
+      args: { entity_id: "char-1", patches: { name: "张三丰" } },
+    },
+  ];
+  const assistantMsg = (toolCalls: unknown[]): ChatMessageView => ({
+    id: "m1",
+    sessionId: "sess-1",
+    role: "assistant",
+    content: "好的，已给出提案",
+    toolCalls,
+    createdAt: "t0",
+  });
+
+  it("2 条提案调用 → 一张卡、2 行；无按钮、无状态文案（只读）", () => {
+    const html = renderToString(<HistoricalProposalCard calls={proposalCalls} />);
+    expect(html.split("历史提案 · 2 条（只读）").length - 1).toBe(1); // 一张卡
+    expect(html).toContain("新建实体"); // PROPOSAL_TYPE_LABELS 映射
+    expect(html).toContain("更新实体");
+    expect(html.split('aria-expanded="false"').length - 1).toBe(2); // 每条调用一行（均折叠）
+    expect(html).not.toContain("类型：character"); // 折叠态只给首行，不给完整摘要
+    // 只读：无确认/拒绝按钮、无状态文案
+    expect(html).not.toContain("确认");
+    expect(html).not.toContain("拒绝");
+    expect(html).not.toContain("待处理");
+    expect(html).not.toContain("已确认");
+    expect(html).not.toContain("已拒绝");
+    expect(html).not.toContain("已失效");
+    expect(html).not.toContain("全部确认");
+  });
+
+  it("折叠只给摘要首行（truncate）；展开给完整参数摘要（不调用 resolveNames，id 不解析）", () => {
+    const [first] = proposalCalls;
+    const collapsed = renderToString(<HistoricalProposalRow call={first} expanded={false} onToggle={() => {}} />);
+    expect(collapsed).toContain("新建实体");
+    expect(collapsed).toContain("truncate"); // 首行独占一行
+    expect(collapsed).not.toContain("类型：character"); // 后续摘要行不泄露到折叠态
+    expect(collapsed).toContain('aria-expanded="false"');
+    const expanded = renderToString(<HistoricalProposalRow call={first} expanded onToggle={() => {}} />);
+    expect(expanded).toContain('aria-expanded="true"');
+    expect(expanded).toContain("新建实体：名称：张三"); // summarizePreview 首行（动词短语：主参）
+    expect(expanded).toContain("类型：character"); // 完整摘要行
+    expect(expanded).not.toContain("确认");
+    // 摘要中 id 不做名称解析（names 恒 null，无法解析的 id 字段按 summarizePreview 口径省略）
+    const withId = renderToString(
+      <HistoricalProposalRow call={proposalCalls[1]} expanded onToggle={() => {}} />,
+    );
+    expect(withId).toContain("更新实体：变更字段：name");
+    expect(withId).not.toContain("char-1"); // 不泄露裸 id、不发解析请求
+  });
+
+  it("未知类型回退裸名；无摘要时展开显示原始 JSON", () => {
+    const call = { id: "call-x", tool: "propose_future_tool", args: { name: "张三" } };
+    const collapsed = renderToString(<HistoricalProposalRow call={call} expanded={false} onToggle={() => {}} />);
+    expect(collapsed).toContain("propose_future_tool"); // 未知回退裸工具名
+    expect(collapsed).not.toContain("张三"); // 无摘要 → 折叠态只有占位
+    const expanded = renderToString(<HistoricalProposalRow call={call} expanded onToggle={() => {}} />);
+    expect(expanded).toContain("张三"); // 原始 JSON 兜底（未知工具 summarizePreview = null）
+  });
+
+  it("id-only 提案：折叠不重复 label，展开原始 JSON 原样显示 id", () => {
+    const call = {
+      id: "call-del",
+      tool: "propose_delete_entity",
+      args: { entity_id: "char-1" },
+    };
+    const collapsed = renderToString(
+      <HistoricalProposalRow call={call} expanded={false} onToggle={() => {}} />,
+    );
+    expect(collapsed).toContain("删除实体");
+    expect(collapsed).toContain("（无摘要）");
+    expect(collapsed).not.toContain("char-1");
+    const expanded = renderToString(
+      <HistoricalProposalRow call={call} expanded onToggle={() => {}} />,
+    );
+    expect(expanded).toContain("char-1");
+    expect(expanded).toContain("entity_id");
+
+    const reorder = {
+      id: "call-reorder",
+      tool: "propose_reorder_timepoints",
+      args: { timepoint_ids: ["tp-1", "tp-2"] },
+    };
+    const reorderCollapsed = renderToString(
+      <HistoricalProposalRow call={reorder} expanded={false} onToggle={() => {}} />,
+    );
+    expect(reorderCollapsed).toContain("（无摘要）");
+    const reorderExpanded = renderToString(
+      <HistoricalProposalRow call={reorder} expanded onToggle={() => {}} />,
+    );
+    expect(reorderExpanded).toContain("tp-1");
+  });
+
+  it("生产形状 { id, name, arguments }：对象与 JSON 字符串均能归一出摘要", () => {
+    const objectCall = {
+      id: "call-prod-1",
+      name: "propose_create_entity",
+      arguments: { name: "张三", type: "character" },
+    };
+    const objectHtml = renderToString(
+      <MessageItem message={assistantMsg([objectCall])} toolResults={new Map()} />,
+    );
+    expect(objectHtml).toContain("新建实体");
+    expect(objectHtml).toContain("名称：张三");
+
+    const stringCall = {
+      id: "call-prod-2",
+      name: "propose_create_entity",
+      arguments: JSON.stringify({ name: "李四", type: "character" }),
+    };
+    const stringHtml = renderToString(
+      <MessageItem message={assistantMsg([stringCall])} toolResults={new Map()} />,
+    );
+    expect(stringHtml).toContain("新建实体");
+    expect(stringHtml).toContain("名称：李四");
+  });
+
+  it("MessageItem：非提案工具不产生历史卡；提案工具在正文之后渲染", () => {
+    const plain = renderToString(
+      <MessageItem
+        message={assistantMsg([{ id: "call-0", tool: "get_entity", args: { id: "char-1" } }])}
+        toolResults={new Map()}
+      />,
+    );
+    expect(plain).not.toContain("历史提案");
+    const proposed = renderToString(
+      <MessageItem message={assistantMsg(proposalCalls)} toolResults={new Map()} />,
+    );
+    expect(proposed).toContain("历史提案 · 2 条（只读）");
+    expect(proposed.indexOf("历史提案")).toBeGreaterThan(proposed.indexOf("好的，已给出提案"));
+  });
+
+  it("MessageItem：liveProposalToolCallIds 命中的调用不渲染（按 toolCallId 去重，不靠位置猜测）", () => {
+    const partial = renderToString(
+      <MessageItem
+        message={assistantMsg(proposalCalls)}
+        toolResults={new Map()}
+        liveProposalToolCallIds={new Set(["call-1"])}
+      />,
+    );
+    expect(partial).toContain("历史提案 · 1 条（只读）");
+    expect(partial).toContain("更新实体");
+    expect(partial).not.toContain("新建实体"); // 被 live 组卡承载
+    const empty = renderToString(
+      <MessageItem
+        message={assistantMsg(proposalCalls)}
+        toolResults={new Map()}
+        liveProposalToolCallIds={new Set()}
+      />,
+    );
+    expect(empty).toContain("历史提案 · 2 条（只读）"); // 集合为空 → 全量
+    const allLive = renderToString(
+      <MessageItem
+        message={assistantMsg(proposalCalls)}
+        toolResults={new Map()}
+        liveProposalToolCallIds={new Set(["call-1", "call-2"])}
+      />,
+    );
+    expect(allLive).not.toContain("历史提案"); // 全部由 live 组卡承载 → 不渲染历史卡
   });
 });
 

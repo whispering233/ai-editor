@@ -109,6 +109,9 @@ export interface ProposalCard {
   proposalId: string; // prop_ 前缀
   type: string; // 提案工具名（propose_create_entity 等）
   preview?: unknown;
+  /** 产生该提案的工具调用 id（同帧 `toolCallId`；仅客户端去重用，**不进 API**——
+   *  历史只读卡据此隐藏 live 行，见 DESIGN.md `proposal-card` 历史形态） */
+  toolCallId?: string;
  /**
  * 处理态：pending 未处理 / confirmed / rejected / stale（409 PROPOSAL_STALE 快照失效）/
  * notFound（404——由 store 直接移除卡片、不落此态，保留仅为类型防御）
@@ -908,7 +911,14 @@ export const useChatStore = create<ChatState>((set, get) => {
                 set((s) => ({
                   proposals: [
                     ...s.proposals,
-                    { proposalId: proposal.proposalId, type: proposal.type, preview: proposal.preview, status: "pending" as const },
+                    {
+                      proposalId: proposal.proposalId,
+                      type: proposal.type,
+                      preview: proposal.preview,
+                      status: "pending" as const,
+                      // 同帧工具调用 id：历史只读卡按此去重（同一轮不重复渲染）
+                      toolCallId: id,
+                    },
                   ],
                 }));
               }

@@ -864,7 +864,7 @@ describe("sendMessage（POST /chat + SSE 事件映射，契约 = docs/api/80-api
     });
   });
 
-  it("tool_execution_end（PROPOSAL 工具）→ details 载荷生成提案卡", () => {
+  it("tool_execution_start + tool_execution_end（PROPOSAL 工具）→ details 载荷生成提案卡，写入同帧 toolCallId", () => {
     useChatStore.getState().sendMessage("你好");
     const { onEvent } = sseOptions();
     onEvent("tool_execution_start", {
@@ -891,6 +891,8 @@ describe("sendMessage（POST /chat + SSE 事件映射，契约 = docs/api/80-api
         type: "propose_create_entity",
         preview: { summary: "创建角色张三" },
         status: "pending",
+        // 历史只读卡去重依据：与 start 帧同一 toolCallId（同帧下发）
+        toolCallId: "call-3",
       },
     ]);
   });
