@@ -332,7 +332,7 @@ CREATE TABLE IF NOT EXISTS practice_style_packs (
 
 **理由**：大纲的树形结构与实体关系表对存储格式的要求天然不同——大纲需要整树读写、拖拽重排，JSON 文件更合适。
 
-**节点版本戳**：每个节点携带 `updated_at`（ISO 8601），节点任何字段变更（title/summary/data/children 重排）时由服务端在原子写流程中统一更新，支撑提案快照比对。
+**节点版本戳**：每个节点携带 `updated_at`（ISO 8601），节点任何字段变更（title/summary/data/children 重排）时由服务端在原子写流程中统一更新，支撑提案快照比对。**父容器引用只校验存在性**：父节点版本戳随 children 变更，不能用来判断「父是否仍适合作容器」（见 `docs/design/30-agent-loop.md` §2）。
 
 **节点结构化信息 `data`（2026-08 新增）**：可选 `data` 字段（`Record<string, unknown>`，默认省略），按层级 schema（`OUTLINE_NODE_DATA_SCHEMAS`）校验，字段集基于麦基《故事》理论：
 
