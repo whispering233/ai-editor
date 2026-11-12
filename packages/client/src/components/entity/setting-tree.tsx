@@ -19,7 +19,7 @@
 // 注入会话上下文 + 建立关联）替代行级问 AI 入口（本视图原本无 AskAiButton，右键菜单补齐）。
 import { useEffect, useRef, useState } from "react";
 import type { DragEvent, KeyboardEvent, MouseEvent, ReactNode } from "react";
-import { Button, Input, Select } from "antd";
+import { Button, Input, Select, Switch } from "antd";
 import {
   DeleteOutlined,
   DownOutlined,
@@ -35,6 +35,7 @@ import { TagChip } from "@/components/ui/tag-chip";
 import { DropIndicator } from "@/components/ui/drop-indicator";
 import { EmptyState } from "@/components/ui/empty-state";
 import { SearchableSelect } from "@/components/ui/searchable-select";
+import { useSettingDescVisible } from "@/hooks/use-setting-desc";
 import { errorBannerClass, skeletonClass } from "@/lib/styles";
 import {
   ApiError,
@@ -113,6 +114,7 @@ export function SettingTreeView({ reloadKey }: { reloadKey: number }) {
   const [tagOptions, setTagOptions] = useState<string[]>([]);
   /** 排序方式（2026-08）：name 默认（原行为）；created 创建时间；manual 手动（重排入口） */
   const [sortMode, setSortMode] = useState<SettingSortMode>("manual");
+  const [showDescription, setShowDescription] = useSettingDescVisible();
 
   /** 操作成功后刷新（tick +1 触发加载 effect；保留旧数据渲染，避免骨架闪烁） */
   function reload() {
@@ -841,7 +843,7 @@ export function SettingTreeView({ reloadKey }: { reloadKey: number }) {
           {/* 描述摘要行：弱化样式，空描述不渲染；title 查看完整摘要。
               缩进用**同一条箭头占位链**（`-ml-1 w-6` + gap）而不是手写 `pl-*` 数字——
               标题列位由箭头几何决定，硬编码会随箭头盒变化再次漂移（DESIGN.md「缩进列对齐」） */}
-          {rowDescription !== null && (
+          {showDescription && rowDescription !== null && (
             <div className="flex min-w-0 gap-1.5">
               <span className="-ml-1 w-6 shrink-0" aria-hidden="true" />
               <span className="min-w-0 truncate text-xs text-muted-foreground" title={rowDescription}>
@@ -982,6 +984,15 @@ export function SettingTreeView({ reloadKey }: { reloadKey: number }) {
               { value: "manual", label: "手动排序" },
             ]}
           />
+        </span>
+        <span className="flex items-center gap-1.5 text-sm text-muted-foreground">
+          <Switch
+            size="small"
+            checked={showDescription}
+            onChange={setShowDescription}
+            aria-label="显示设定描述"
+          />
+          描述
         </span>
         <span className="ml-auto flex items-center gap-2">
           <Button disabled={!canToggle} onClick={expandAll}>
