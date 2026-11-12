@@ -183,7 +183,7 @@ search_references(query, type?, tags?)
 web_search(query, count?)
   → [{ title, url, summary, truncated?, date, authority }]（保持 API 返回顺序，空字段省略）
   query: 检索语句，长度上限 = `MAX_SEARCH_QUERY_CHARS`（schema 与工具描述同源）
-  count: 期望条数，缺省 `DEFAULT_SEARCH_RESULT_COUNT`，上限 `MAX_SEARCH_RESULT_COUNT`（条数是上下文成本的主闸门）
+  count: 期望条数，缺省 `DEFAULT_SEARCH_RESULT_COUNT`，上限 `MAX_SEARCH_RESULT_COUNT`（上下文成本的首要旋钮；期望值，工具层不做本地硬切）
   口径：
     - `need_content` 恒 false——只回摘要（summary 为空时回落到 snippet / content，content 回落由 server 完成），正文是否打开由用户决定
     - 单条摘要只做**异常上限**：超过 `MAX_SEARCH_SUMMARY_CHARS` 才截断（结果含省略号、长度不超过上限）并带 `truncated: true`；正常摘要原样返回、不带该字段。需要更多正文走 `fetch_content`
