@@ -2,6 +2,8 @@
 // 覆盖：confirm 成功（无引用 create / 实体引用 update / 关系 remove / Delta 引用）、
 // 快照过期（实体 updated_at 变化 / 实体软删 / 关系物理删 / 大纲节点 updated_at 变化 /
 // 大纲节点软删 / Delta 级联软删 → 409 PROPOSAL_STALE，且提案被一次性移除）、
+// 父容器引用（check: "exists"）只校验存在性：同父多提案顺序确认均 200 / 父仅版本变化仍 200 /
+// 父软删仍 409 / move 目标父版本变化仍 200 而被移动节点版本变化仍 409、
 // 404 PROPOSAL_NOT_FOUND（不存在）、409 PROPOSAL_PROJECT_MISMATCH（跨项目，提案保留）、
 // 执行失败 → 500 INTERNAL_ERROR（幂等冲突，提案同样移除）、
 // reject 成功移除 / 404 / 409 MISMATCH（reject 同校验）
@@ -27,7 +29,14 @@ import {
 } from "@whispering233/ai-editor-db";
 import type { OutlineFileTree } from "@whispering233/ai-editor-shared";
 import { defaultProposalStore } from "@whispering233/ai-editor-agent";
-import { buildProposal, refEntity, refOutlineNode, refRelation } from "@whispering233/ai-editor-tools";
+import {
+  buildProposal,
+  buildProposeMoveNode,
+  buildProposeOutlineNode,
+  refEntity,
+  refOutlineNode,
+  refRelation,
+} from "@whispering233/ai-editor-tools";
 import type { Proposal } from "@whispering233/ai-editor-tools";
 import { errorHandler } from "../middleware/error.js";
 import {
@@ -122,6 +131,24 @@ function softDeletedChapterOutline(): OutlineFileTree {
             ],
           },
         ],
+      },
+    ],
+  };
+}
+
+/** 大纲树变体：ch-1 被物理移除（父容器引用应 409 STALE） */
+function removedChapterOutline(): OutlineFileTree {
+  return {
+    id: "root",
+    type: "root",
+    schema_version: SCHEMA_VERSION,
+    children: [
+      {
+        id: "vol-1",
+        type: "volume",
+        title: "第一卷",
+        updated_at: "2026-08-01T10:00:00Z",
+        children: [],
       },
     ],
   };
@@ -425,6 +452,123 @@ describe("confirm 快照重校验 → 409 PROPOSAL_STALE", () => {
     const { status, body: staleBody } = await confirmProposal(app, deltaProposal.proposal_id);
     expect(status).toBe(409);
     expect(staleBody.error?.code).toBe("PROPOSAL_STALE");
+  });
+});
+
+// ============ 父容器引用（check: "exists"）：同父多提案不互相误判 ============
+
+describe("confirm 父容器引用（check: \"exists\"）", () => {
+  it("同父两个新建提案顺序确认均 200（父 updated_at 已被第一个确认推进）", async () => {
+    const { app } = await seed();
+    const root = getCurrentProject()!.root;
+    const parentBefore = findOutlineNode(readOutlineFile(root), "vol-1")!.updated_at;
+    const first = buildProposeOutlineNode(toolCtx(), { type: "chapter", title: "第二章", parent_id: "vol-1" });
+    const second = buildProposeOutlineNode(toolCtx(), { type: "chapter", title: "第三章", parent_id: "vol-1" });
+ // 父容器引用带 check:"exists"（updated_at 仍照写，确认时忽略）
+    expect(first.references).toEqual([
+      { kind: "outline_node", id: "vol-1", updated_at: parentBefore, check: "exists" },
+    ]);
+    defaultProposalStore.set(first);
+    defaultProposalStore.set(second);
+
+    const firstResult = await confirmProposal(app, first.proposal_id);
+    expect(firstResult.status).toBe(200);
+ // 第一个确认的落树推进了父节点版本戳——旧的按版本比对会在这里把第二个提案误判为过期
+    expect(findOutlineNode(readOutlineFile(root), "vol-1")!.updated_at).not.toBe(parentBefore);
+
+    const secondResult = await confirmProposal(app, second.proposal_id);
+    expect(secondResult.status).toBe(200);
+    const tree = readOutlineFile(root);
+    expect(findOutlineNode(tree, String(secondResult.body.data?.result?.id))).toBeDefined();
+    const vol1 = findOutlineNode(tree, "vol-1") as { children?: { title: string }[] };
+    expect(vol1.children!.map((c) => c.title)).toEqual(["第一章", "第二章", "第三章"]);
+  });
+
+  it("exists 父引用在父仅 updated_at 变化时仍 200", async () => {
+    const { app } = await seed();
+    const root = getCurrentProject()!.root;
+    const proposal = buildProposeOutlineNode(toolCtx(), { type: "scene", title: "场景二", parent_id: "ch-1" });
+    defaultProposalStore.set(proposal);
+ // 入仓后父节点被改名：节点级 updated_at 刷新，但父容器引用只校验存在性
+    await tick();
+    updateOutlineNodeInfo(root, "ch-1", { title: "第一章（改）" }, "2026-08-02T10:00:00Z");
+
+    const { status, body } = await confirmProposal(app, proposal.proposal_id);
+    expect(status).toBe(200);
+    expect(findOutlineNode(readOutlineFile(root), String(body.data?.result?.id))).toBeDefined();
+  });
+
+  it("exists 父引用在父被软删时仍 409 PROPOSAL_STALE", async () => {
+    const { app } = await seed();
+    const proposal = buildProposeOutlineNode(toolCtx(), { type: "scene", title: "场景二", parent_id: "ch-1" });
+    defaultProposalStore.set(proposal);
+    writeOutlineFile(getCurrentProject()!.root, softDeletedChapterOutline()); // ch-1 标 deleted
+
+    const { status, body } = await confirmProposal(app, proposal.proposal_id);
+    expect(status).toBe(409);
+    expect(body.error?.code).toBe("PROPOSAL_STALE");
+    expect(defaultProposalStore.peek(proposal.proposal_id)).toBeNull(); // 终态即消费
+  });
+
+  it("exists 父引用在父节点被物理移除时仍 409 PROPOSAL_STALE", async () => {
+    const { app } = await seed();
+    const proposal = buildProposeOutlineNode(toolCtx(), { type: "scene", title: "场景二", parent_id: "ch-1" });
+    defaultProposalStore.set(proposal);
+    writeOutlineFile(getCurrentProject()!.root, removedChapterOutline());
+
+    const { status, body } = await confirmProposal(app, proposal.proposal_id);
+    expect(status).toBe(409);
+    expect(body.error?.code).toBe("PROPOSAL_STALE");
+  });
+
+  it("move 目标父用存在性引用（父版本变化仍 200）；被移动节点自身版本变化仍 409", async () => {
+    const { app } = await seed();
+    const root = getCurrentProject()!.root;
+    const parentProposal = buildProposeMoveNode(toolCtx(), { node_id: "sc-1", parent_id: "ch-1", order: 0 });
+    defaultProposalStore.set(parentProposal);
+ // 入仓后目标父被改名：目标父版本变化不得阻拦移动
+    await tick();
+    updateOutlineNodeInfo(root, "ch-1", { title: "第一章（改）" }, "2026-08-02T10:00:00Z");
+
+    const parentResult = await confirmProposal(app, parentProposal.proposal_id);
+    expect(parentResult.status).toBe(200);
+    expect(parentResult.body.data?.result?.id).toBe("sc-1");
+
+    const nodeProposal = buildProposeMoveNode(toolCtx(), { node_id: "sc-1", parent_id: "ch-1", order: 0 });
+    defaultProposalStore.set(nodeProposal);
+ // 入仓后被移动节点自身被改名：版本快照断裂 → STALE
+    await tick();
+    updateOutlineNodeInfo(root, "sc-1", { title: "场景一（改）" }, "2026-08-03T10:00:00Z");
+
+    const nodeResult = await confirmProposal(app, nodeProposal.proposal_id);
+    expect(nodeResult.status).toBe(409);
+    expect(nodeResult.body.error?.code).toBe("PROPOSAL_STALE");
+  });
+
+  it("两个 move 提案移入同一目标父顺序确认均 200", async () => {
+    const { app } = await seed();
+    const root = getCurrentProject()!.root;
+    const tree = standardOutline();
+    tree.children![0].children!.push({
+      id: "ch-2",
+      type: "chapter",
+      title: "第二章",
+      updated_at: "2026-08-01T10:00:00Z",
+      children: [
+        { id: "sc-2", type: "scene", title: "场景二", updated_at: "2026-08-01T10:00:00Z" },
+        { id: "sc-3", type: "scene", title: "场景三", updated_at: "2026-08-01T10:00:00Z" },
+      ],
+    });
+    writeOutlineFile(root, tree);
+    const first = buildProposeMoveNode(toolCtx(), { node_id: "sc-2", parent_id: "ch-1", order: 0 });
+    const second = buildProposeMoveNode(toolCtx(), { node_id: "sc-3", parent_id: "ch-1", order: 0 });
+    defaultProposalStore.set(first);
+    defaultProposalStore.set(second);
+
+    expect((await confirmProposal(app, first.proposal_id)).status).toBe(200);
+    expect((await confirmProposal(app, second.proposal_id)).status).toBe(200);
+    const ch1 = findOutlineNode(readOutlineFile(root), "ch-1") as { children?: { id: string }[] };
+    expect(ch1.children!.map((child) => child.id).sort()).toEqual(["sc-1", "sc-2", "sc-3"]);
   });
 });
 

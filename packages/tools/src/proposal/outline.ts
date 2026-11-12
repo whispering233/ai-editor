@@ -6,15 +6,16 @@
 //
 // 生成时校验：
 // - propose_outline_node：parent_id 缺省挂根（**2026-09：只有 volume 能缺省挂根**；chapter 只能挂 volume、
-// scene 必须挂 chapter——assertCanHold 抛 INVALID_HIERARCHY）；父节点存在且未软删时采集节点级 updated_at 快照
+// scene 必须挂 chapter——assertCanHold 抛 INVALID_HIERARCHY）；父节点存在且未软删时采集
+// **存在性引用**（check: "exists"）——父节点版本戳含 children 变更，同父多提案不应互相误判过期
 // - propose_move_node：节点与目标父均存在且未软删，且目标父可容纳该层级（严格三层）；
-// 采集两节点 updated_at 快照
-// - propose_delete_node：节点存在且未软删（软删 + 递归子树，可回收站还原）
+// 被移动节点采集版本快照（自身变更须拦截），目标父采集存在性引用
+// - propose_delete_node：节点存在且未软删（软删 + 递归子树，可回收站还原）；节点采集版本快照
 
 import { assertCanHold } from "@whispering233/ai-editor-db";
 import type { ProposeDeleteNodeArgs, ProposeMoveNodeArgs, ProposeOutlineNodeArgs } from "../schemas/index.js";
 import type { ToolContext } from "../context.js";
-import { buildProposal, checkProposalAborted, refOutlineNode, requireOutlineNode, type Proposal, type ProposalReference, type ToolProposalResult } from "./types.js";
+import { buildProposal, checkProposalAborted, refOutlineNode, refOutlineNodeExists, requireOutlineNode, type Proposal, type ProposalReference, type ToolProposalResult } from "./types.js";
 
 /** 产出新增大纲节点提案（parent_id 缺省挂根；**只有 volume 能缺省**，chapter 必须显式指定卷） */
 export function buildProposeOutlineNode(ctx: ToolContext, args: ProposeOutlineNodeArgs): Proposal {
@@ -25,7 +26,7 @@ export function buildProposeOutlineNode(ctx: ToolContext, args: ProposeOutlineNo
   } else {
     const parent = requireOutlineNode(ctx, args.parent_id);
     assertCanHold(parent.type, args.type);
-    references.push(refOutlineNode(parent));
+    references.push(refOutlineNodeExists(parent));
   }
   return buildProposal(
     ctx,
@@ -68,7 +69,7 @@ export function buildProposeMoveNode(ctx: ToolContext, args: ProposeMoveNodeArgs
   } else {
     const parent = requireOutlineNode(ctx, args.parent_id);
     assertCanHold(parent.type, node.type);
-    references.push(refOutlineNode(parent));
+    references.push(refOutlineNodeExists(parent));
     parentLabel = `「${parent.title}」`;
   }
   return buildProposal(

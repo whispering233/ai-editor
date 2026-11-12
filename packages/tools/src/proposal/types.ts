@@ -13,7 +13,9 @@
 // - project_id：项目绑定（confirm/reject 校验归属）
 // - references：被引用对象 id + updated_at 快照——实体/关系用自身 updated_at、
 // 大纲节点用节点级 updated_at；确认（S7.5）时按 kind 重校验
-// （存在性 + updated_at 比对，失败 409 PROPOSAL_STALE）
+// （存在性 + updated_at 比对，失败 409 PROPOSAL_STALE）。大纲**父容器**引用
+// （check: "exists"）只校验存在且未软删——父节点版本戳含 children 变更，
+// 同父下新增/移入本身就会推进它，按版本比对会误伤兄弟提案
 // - summary：一句话摘要（tool_result + GUI 展示）
 // - createdAt：ISO 8601（应用层写入约定；TTL 计算基准）
 // - preview（F9 起可选）：结构化预览细节（如 propose_reorder_timepoints 的 { changes: [...] }）——
@@ -41,6 +43,13 @@ export interface ProposalReference {
   id: string;
  /** 快照：实体/关系用自身 updated_at；大纲节点用节点级 updated_at */
   updated_at: string;
+ /**
+ * 确认时的校验方式（缺省 "version"，语义不变）：
+ * - "version"：存在且未软删 + updated_at 一致（常规引用）
+ * - "exists"：只校验存在且未软删，**忽略 updated_at**——仅用于大纲父容器
+ * （`refOutlineNodeExists`）；updated_at 仍写入供诊断/展示，确认时不参与比对
+ */
+  check?: "version" | "exists";
 }
 
 /** 提案对象（仅内存；S7.4 提案仓存储，S7.5 confirm/reject 消费） */
@@ -53,7 +62,7 @@ export interface Proposal {
   args: Record<string, unknown>;
  /** 项目绑定（confirm/reject 校验与当前项目一致） */
   project_id: string;
- /** 引用对象快照（存在性 + updated_at） */
+ /** 引用对象快照（校验方式见 ProposalReference.check：版本比对 / 仅存在性） */
   references: ProposalReference[];
  /** 一句话摘要（tool_result + GUI 展示） */
   summary: string;
@@ -112,9 +121,19 @@ export function refRelation(row: RelationRow): ProposalReference {
   return { kind: "relation", id: row.id, updated_at: row.updated_at };
 }
 
-/** 大纲节点引用快照（用节点级 updated_at） */
+/** 大纲节点引用快照（用节点级 updated_at；确认时比对版本） */
 export function refOutlineNode(node: OutlineFileNode): ProposalReference {
   return { kind: "outline_node", id: node.id, updated_at: node.updated_at };
+}
+
+/**
+ * 大纲**父容器**引用快照（check: "exists"）：确认时只校验存在且未软删。
+ * 父节点版本戳包含 children 变更——同父下第二个新增/移入提案确认时，
+ * 父节点 updated_at 已被前一个确认推进；按版本比对会把合法提案误判为过期。
+ * updated_at 仍写入（诊断/展示用），确认时忽略。
+ */
+export function refOutlineNodeExists(node: OutlineFileNode): ProposalReference {
+  return { kind: "outline_node", id: node.id, updated_at: node.updated_at, check: "exists" };
 }
 
 /**

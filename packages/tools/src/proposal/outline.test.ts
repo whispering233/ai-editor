@@ -1,6 +1,6 @@
 // S6.6 提案类工具测试：大纲（propose_outline_node / propose_move_node / propose_delete_node）
-// 覆盖：tool_result 仅 { proposal_id, summary } 无预览 / 完整提案结构（references 节点级
-// updated_at 快照）/ **不落盘**（outline.json 零变化——S6.7 对比核心差异）/
+// 覆盖：tool_result 仅 { proposal_id, summary } 无预览 / 完整提案结构（父容器引用 check:"exists"，
+// 被移动节点与删除节点用版本引用）/ **不落盘**（outline.json 零变化——S6.7 对比核心差异）/
 // 严格三层层级校验（scene 无 parent 拒绝、scene 挂卷拒绝、章挂章拒绝）/
 // 父节点不存在/软删抛错 / signal aborted
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
@@ -89,14 +89,17 @@ describe("propose_outline_node", () => {
     expect(result.summary).toBe("新增大纲节点「第二章」（chapter，挂 vol-1）");
   });
 
-  it("完整提案结构：parent_id 缺省挂根（无引用）；指定父 → 父节点级 updated_at 快照", () => {
+  it("完整提案结构：parent_id 缺省挂根（无引用）；指定父 → 父节点存在性引用（check: \"exists\"）", () => {
     writeOutlineFile(dir, seedOutlineTree());
     const noParent = buildProposeOutlineNode(makeCtx(), { type: "volume", title: "第二卷" });
     expect(noParent.args).toEqual({ type: "volume", title: "第二卷" }); // 不含 parent_id
     expect(noParent.references).toEqual([]); // root 非节点引用（恒存在）
     const withParent = buildProposeOutlineNode(makeCtx(), { type: "chapter", title: "第二章", parent_id: "vol-1" });
     expect(withParent.args).toEqual({ type: "chapter", title: "第二章", parent_id: "vol-1" });
-    expect(withParent.references).toEqual([{ kind: "outline_node", id: "vol-1", updated_at: T0 }]);
+ // 父容器只校验存在性：updated_at 仍照写（诊断），确认时忽略
+    expect(withParent.references).toEqual([
+      { kind: "outline_node", id: "vol-1", updated_at: T0, check: "exists" },
+    ]);
     expect(withParent.project_id).toBe("proj-test");
   });
 
@@ -131,13 +134,14 @@ describe("propose_outline_node", () => {
 });
 
 describe("propose_move_node", () => {
-  it("完整提案结构：节点 + 目标父两端点引用快照", () => {
+  it("完整提案结构：被移动节点用版本引用，目标父用存在性引用", () => {
     writeOutlineFile(dir, seedOutlineTree());
     const proposal = buildProposeMoveNode(makeCtx(), { node_id: "sc-1", parent_id: "ch-1", order: 2 });
     expect(proposal.args).toEqual({ node_id: "sc-1", parent_id: "ch-1", order: 2 });
+ // 被移动节点自身版本变化仍须拦截（无 check，缺省 version）；目标父只校验存在性
     expect(proposal.references).toEqual([
       { kind: "outline_node", id: "sc-1", updated_at: T0 },
-      { kind: "outline_node", id: "ch-1", updated_at: T0 },
+      { kind: "outline_node", id: "ch-1", updated_at: T0, check: "exists" },
     ]);
     const result = runProposeMoveNode(makeCtx(), { node_id: "sc-1", parent_id: "ch-1", order: 2 });
     expect(Object.keys(result).sort()).toEqual(["proposal_id", "summary"]);

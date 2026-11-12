@@ -4,7 +4,7 @@
 // 提案不存在/已过期 → 404 PROPOSAL_NOT_FOUND（store.get 与 peek 均不可见）
 // 提案所属项目 ≠ 当前项目 → 409 PROPOSAL_PROJECT_MISMATCH（get 返回 null 后
 // peek 仍可见 ⇒ 跨项目误操作；防御性——正常流程切换项目时提案已被清空）
-// 快照重校验失败 → 409 PROPOSAL_STALE（引用对象不存在 **或** updated_at 不一致，
+// 快照重校验失败 → 409 PROPOSAL_STALE（引用对象不存在或已软删，或按 check 语义版本不一致，
 // 任一失败即 STALE；前端提示重新生成提案）
 // 执行失败 → 500 INTERNAL_ERROR（未定义该错误码——执行失败属服务端状态异常/数据竞争，
 // 前端按通用错误呈现）
@@ -47,7 +47,11 @@ function throwProposalStale(ref: ProposalReference): never {
  * - kind=delta：getDeltaRow（记录级：自身软删视为不存在）——不存在 → STALE；比对自身 updated_at
  * - kind=outline_node：findOutlineNode 查**调用方预读的树**（S2：references 含多条 outline_node
  * 时不重复读文件；校验前同步读树一次，无间隙）——节点不存在或软删→ STALE；
- * 存在则比对**节点级** updated_at
+ * - `check: "exists"`（大纲**父容器**引用：propose_outline_node 的父节点 /
+ * propose_move_node 的目标父节点）：只校验存在且未软删，**不比对 updated_at**——
+ * 父节点版本戳含 children 变更，同父下新增/移入本身就会推进它，按版本比对会把
+ * 同父下第二个合法提案误判为过期；
+ * - `check` 缺省（"version"）：存在则比对**节点级** updated_at
  * - default（防静默，oracle S1）：未知 kind 属上层调度/构造 bug（仅 4 类引用），
  * 跳过校验直接放行会让提案绕过快照重校验，按内部错误显式拒绝
  * 三种 DB 引用不查大纲可见性联动（getRelation 例外——其 API 内置端点过滤）：
@@ -72,7 +76,11 @@ function assertReferenceFresh(project: ProjectContext, tree: OutlineFileTree, re
     }
     case "outline_node": {
       const node = findOutlineNode(tree, ref.id);
-      if (node === undefined || node.deleted === true || node.updated_at !== ref.updated_at) {
+      if (node === undefined || node.deleted === true) {
+        throwProposalStale(ref);
+      }
+ // 父容器引用只校验存在性（父节点版本戳会被同父下其他新增/移入推进）
+      if (ref.check !== "exists" && node.updated_at !== ref.updated_at) {
         throwProposalStale(ref);
       }
       return;
@@ -103,7 +111,7 @@ function resolveProposal(proposalId: string, projectId: string): Proposal {
 }
 
 // POST /api/v1/proposal/:proposalId/confirm —— 用户确认提案
-// 流程：项目归属解析（404/409）→ 快照逐条重校验（409 PROPOSAL_STALE）→
+// 流程：项目归属解析（404/409）→ 快照逐条重校验（按引用 check 语义，失败 409 PROPOSAL_STALE）→
 // executeProposal({ db, outlineDir: project.root, projectId }, proposal) →
 // 200 { confirmed: true, result }（ok 包裹，result 为执行结果如新创建的 entity id）。
 // 提案移除在 finally 中（一次性消费，见文件头注释）：校验通过 / 快照过期 / 执行失败均为终态，
