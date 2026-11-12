@@ -239,10 +239,10 @@ components:
     textColor: "{colors.secondary}"
     rounded: "{rounded.sm}"
     typography: "{typography.caption}"
+  # 实际视觉 = primary 5% 淡底 + 1px primary 25% 描边（alpha 不属 token 白名单，见 §Components `proposal-card`）
   proposal-card:
-    backgroundColor: "{colors.canvas}"
     rounded: "{rounded.md}"
-    padding: "{spacing.md}"
+    padding: "{spacing.xs}"
   dropdown-panel:
     backgroundColor: "{colors.canvas}"
     rounded: "{rounded.md}"
@@ -492,7 +492,8 @@ components:
 | info-bar（信息条） | 底部 1px `{colors.hairline}` | 无 |
 | tabs（二级 tab 导航条） | 底部 1px `{colors.hairline}`（即页头分割线）+ 选中项 2px `{colors.primary}` 指示条 | 无 |
 | page-header（页头分割线，无 tab 时） | 底部 1px `{colors.hairline}` | 无 |
-| card / proposal-card / dropdown-panel / toast | 1px `{colors.hairline}` | 仅浮层（dropdown-panel / toast）：`0 8px 24px rgba(15, 15, 15, 0.10)`；card 无 |
+| card / dropdown-panel / toast | 1px `{colors.hairline}` | 仅浮层（dropdown-panel / toast）：`0 8px 24px rgba(15, 15, 15, 0.10)`；card 无 |
+| proposal-card | 1px `{colors.primary}` 25% | 无 |
 | input / select / button-default / search-input | 1px `{colors.hairline-strong}` | 无 |
 | 拖拽插入线（drag-indicator） | 无 | 无（实线 `{colors.primary}` 3px + 两端 8px 圆点） |
 | empty-state | 1px 虚线 `{colors.hairline}` | 无 |

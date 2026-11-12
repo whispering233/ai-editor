@@ -44,6 +44,7 @@ import {
   summarizeToolCall,
 } from "../../lib/tool-call-summary";
 import {
+  isProposalActionable,
   useChatStore,
   type ChatMessageView,
   type FocusContext,
@@ -62,15 +63,28 @@ import { ConfirmDialog } from "../outline/dialogs";
 // ============ 文案映射（会话切换/提案卡/focus 小条） ============
 // 会话相对时间用 shared formatRelativeTime（Sidebar/Dashboard 同源；≥30 天回退绝对时间，非法输入原样返回）
 
-/** 提案 type → 中文标题（「提案卡片」；未知 type 显示原始名） */
-const PROPOSAL_TYPE_LABELS: Record<string, string> = {
+/** 提案 type → 中文标题（「提案卡片」；未知 type 显示原始名）
+ * 覆盖 = packages/tools 实际注册的全部 propose_*（16 个；工具清单见 docs/api/tool-calling.md），
+ * 新增提案工具时同步补一行（chat-panel.test.tsx 有全集断言）。 */
+export const PROPOSAL_TYPE_LABELS: Record<string, string> = {
   propose_create_entity: "新建实体",
   propose_update_entity: "更新实体",
+  propose_delete_entity: "删除实体",
   propose_add_relation: "新增关系",
+  propose_remove_relation: "移除关系",
+  propose_add_delta: "追加变更",
   propose_outline_node: "新建大纲节点",
+  propose_move_node: "移动大纲节点",
+  propose_delete_node: "删除大纲节点",
+  propose_create_hook: "新建伏笔",
+  propose_update_hook: "更新伏笔",
+  propose_advance_hook: "推进伏笔",
+  propose_resolve_hook: "回收伏笔",
+  propose_abandon_hook: "废弃伏笔",
   // F9 + G2 修订：时间轴 AI 排序提案（propose_reorder_timepoints 取代 propose_reorder_events——
   // 事件不再带 time_label，语义序载体为时间点实体，见 「AI 排序入口」）
   propose_reorder_timepoints: "重排时间轴时间点",
+  propose_create_reference: "新建参考资料",
 };
 
 /** focus 实体类型 → 中文（focus 小条展示；未知类型显示原文） */
@@ -762,18 +776,45 @@ export function MessageItem({
   );
 }
 
-// ============ 提案卡（「提案卡片」；S8.2 已接 S7.5 confirm/reject 真实调用） ============
+// ============ 提案组卡（一轮全部提案一张卡；S8.2 已接 confirm/reject 真实调用） ============
 
-/** 提案卡（「提案卡片」；S8.2 已接 S7.5 confirm/reject 真实调用；导出供渲染走查测试）
- * preview 摘要化渲染（summary/changes/args 人类可读，不再 JSON dump） */
-export function ProposalCardView({ proposal }: { proposal: ProposalCard }) {
+/** 组卡行状态文案：pending = 待处理；stale 在展开区给全句「数据已变化，此提案已失效」 */
+function proposalStatusText(status: ProposalCard["status"]): string | null {
+  switch (status) {
+    case "pending":
+      return "待处理";
+    case "confirmed":
+      return "✓ 已确认";
+    case "rejected":
+      return "已拒绝";
+    case "stale":
+      return "⚠ 已失效";
+    default:
+      return null; // notFound：store 已移除卡片，理论不可达
+  }
+}
+
+/**
+ * 组卡单行：展开箭头 + 类型中文名 + 摘要首行（truncate）+ 状态 + 行尾逐条确认/拒绝。
+ * 点击/回车展开该提案完整预览（展开态由组卡持有，本组件受控）；逐条按钮 stopPropagation，
+ * 不触发展开。导出供 SSR 渲染测试直出折叠/展开两态（effect 在 SSR 不跑）。
+ */
+export function ProposalRow({
+  proposal,
+  expanded,
+  onToggle,
+}: {
+  proposal: ProposalCard;
+  expanded: boolean;
+  onToggle: () => void;
+}) {
   const confirmProposal = useChatStore((s) => s.confirmProposal);
   const rejectProposal = useChatStore((s) => s.rejectProposal);
+  const proposalBatchRunning = useChatStore((s) => s.proposalBatchRunning);
   const label = PROPOSAL_TYPE_LABELS[proposal.type] ?? proposal.type;
-  // 终态（confirmed/rejected/stale）与处理中（processing 在途）：按钮禁用——
-  // 409 PROPOSAL_STALE 由 store 标 stale（卡标文案见上）+ 按钮随之禁用；
-  // 404 NOT_FOUND / 409 MISMATCH 由 store 移除卡片（组件无需处理）；notFound 不渲染
-  const busy = proposal.status !== "pending" || proposal.processing === true;
+  // 终态与在途（单条 processing / 批量进行中）：逐条按钮禁用
+  const busy =
+    proposal.status !== "pending" || proposal.processing === true || proposalBatchRunning;
 
   // 收集 preview 中 args/changes 的 id 候选 → names/resolve 批量解析（名称渲染）
   const [names, setNames] = useState<ResolvedNames | null>(null);
@@ -817,53 +858,160 @@ export function ProposalCardView({ proposal }: { proposal: ProposalCard }) {
   const showRawPreview =
     proposal.preview !== undefined &&
     (resolveFailed || (previewLines === null && typeof proposal.preview !== "string"));
+  const summaryLine = previewLines !== null && previewLines.length > 0 ? previewLines[0] : null;
+  const statusText = proposalStatusText(proposal.status);
 
   return (
-    <div className="rounded-lg border border-primary/25 bg-primary/5 p-2.5">
-      <div className="flex items-center gap-1.5 text-sm font-medium text-foreground">
-        <BulbOutlined className="shrink-0 text-primary" />
-        <span className="min-w-0 flex-1 truncate">提案：{label}</span>
-        {proposal.status === "confirmed" && (
-          <span className="shrink-0 text-xs text-primary">✓ 已确认</span>
+    <div className="py-1">
+      <div
+        role="button"
+        tabIndex={0}
+        aria-expanded={expanded}
+        onClick={onToggle}
+        onKeyDown={(e) => {
+          // 行内按钮的 Enter/Space 只触发按钮，不冒泡展开整行（原生 button 语义）
+          if (e.target !== e.currentTarget) return;
+          if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            onToggle();
+          }
+        }}
+        className="flex cursor-pointer flex-wrap items-center gap-x-1.5 gap-y-1 rounded px-1 py-1 hover:bg-primary/10"
+      >
+        <RightOutlined
+          className={cn(
+            "shrink-0 text-xs text-muted-foreground transition-transform",
+            expanded && "rotate-90",
+          )}
+        />
+        <span className="shrink-0 text-xs font-medium text-foreground">{label}</span>
+        <span className="min-w-0 flex-1 truncate text-xs text-muted-foreground">
+          {summaryLine ?? "（无预览）"}
+        </span>
+        {statusText !== null && (
+          <span
+            className={cn(
+              "shrink-0 text-xs",
+              proposal.status === "confirmed" && "text-primary",
+              proposal.status === "stale" && "text-destructive",
+              (proposal.status === "pending" || proposal.status === "rejected") &&
+                "text-muted-foreground",
+            )}
+            title={proposal.status === "stale" ? "数据已变化，此提案已失效" : undefined}
+          >
+            {statusText}
+          </span>
         )}
-        {proposal.status === "rejected" && (
-          <span className="shrink-0 text-xs text-muted-foreground">已拒绝</span>
-        )}
-        {proposal.status === "stale" && (
-          <span className="shrink-0 text-xs text-destructive">⚠ 数据已变化，此提案已失效</span>
-        )}
+        <span className="ml-auto flex shrink-0 gap-1">
+          <Button
+            size="small"
+            type="primary"
+            disabled={busy}
+            onClick={(e) => {
+              e.stopPropagation();
+              void confirmProposal(proposal.proposalId);
+            }}
+          >
+            确认
+          </Button>
+          <Button
+            size="small"
+            disabled={busy}
+            onClick={(e) => {
+              e.stopPropagation();
+              void rejectProposal(proposal.proposalId);
+            }}
+          >
+            拒绝
+          </Button>
+        </span>
       </div>
-      {/* preview 摘要渲染（summary 优先 + changes/args 逐行；不再 JSON dump） */}
-      {previewLines !== null && (
-        <ul className="mt-1 max-h-32 space-y-0.5 overflow-auto text-xs whitespace-pre-wrap text-muted-foreground">
-          {previewLines.map((line) => (
-            <li key={line}>{line}</li>
-          ))}
-        </ul>
+      {expanded && (
+        <div className="mt-1 space-y-1 pl-5">
+          {previewLines !== null && (
+            <ul className="max-h-32 space-y-0.5 overflow-auto text-xs whitespace-pre-wrap text-muted-foreground">
+              {previewLines.map((line) => (
+                <li key={line}>{line}</li>
+              ))}
+            </ul>
+          )}
+          {showRawPreview && (
+            <pre className="max-h-32 overflow-auto text-xs whitespace-pre-wrap text-muted-foreground">
+              {typeof proposal.preview === "string"
+                ? proposal.preview
+                : JSON.stringify(proposal.preview, null, 2)}
+            </pre>
+          )}
+          {proposal.status === "stale" && (
+            <p className="text-xs text-destructive">数据已变化，此提案已失效</p>
+          )}
+        </div>
       )}
-      {showRawPreview && (
-        <pre className="mt-1 max-h-32 overflow-auto text-xs whitespace-pre-wrap text-muted-foreground">
-          {typeof proposal.preview === "string"
-            ? proposal.preview
-            : JSON.stringify(proposal.preview, null, 2)}
-        </pre>
-      )}
-      <div className="mt-2 flex gap-1.5">
-        <Button
-          size="small"
-          type="primary"
-          disabled={busy}
-          onClick={() => void confirmProposal(proposal.proposalId)}
-        >
-          确认
-        </Button>
-        <Button
-          size="small"
-          disabled={busy}
-          onClick={() => void rejectProposal(proposal.proposalId)}
-        >
-          拒绝
-        </Button>
+    </div>
+  );
+}
+
+/**
+ * 提案组卡：一轮全部提案合成一张（单条也同形态，`MessageList` 只在有提案时渲染）。
+ * 头部 = 灯泡 + `本轮提案 · N 条（M 待处理）` + 「全部确认 / 全部拒绝」（仅 M > 0 且
+ * 批量未在途时可用）；批量走 store 串行复用单条路径（无服务端批量端点）。
+ */
+export function ProposalCardView({ proposals }: { proposals: ProposalCard[] }) {
+  const confirmAllProposals = useChatStore((s) => s.confirmAllProposals);
+  const rejectAllProposals = useChatStore((s) => s.rejectAllProposals);
+  const proposalBatchRunning = useChatStore((s) => s.proposalBatchRunning);
+  const [expandedIds, setExpandedIds] = useState<ReadonlySet<string>>(() => new Set());
+  const pendingCount = proposals.filter(isProposalActionable).length;
+  // 整串在 JS 里拼：SSR 相邻表达式之间会插注释节点，测试断言拼接文案会失败
+  const headerText = `本轮提案 · ${proposals.length} 条（${pendingCount} 待处理）`;
+  const batchDisabled = pendingCount === 0 || proposalBatchRunning;
+
+  const toggleRow = (proposalId: string) => {
+    setExpandedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(proposalId)) next.delete(proposalId);
+      else next.add(proposalId);
+      return next;
+    });
+  };
+
+  if (proposals.length === 0) return null;
+
+  return (
+    <div className="rounded-lg border border-primary/25 bg-primary/5 p-2">
+      <div className="flex flex-wrap items-center gap-x-1.5 gap-y-1">
+        <BulbOutlined className="shrink-0 text-primary" />
+        <span className="min-w-0 flex-1 truncate text-sm font-medium text-foreground">
+          {headerText}
+        </span>
+        <span className="ml-auto flex shrink-0 gap-1">
+          <Button
+            size="small"
+            type="primary"
+            disabled={batchDisabled}
+            loading={proposalBatchRunning}
+            onClick={() => void confirmAllProposals()}
+          >
+            全部确认
+          </Button>
+          <Button
+            size="small"
+            disabled={batchDisabled}
+            onClick={() => void rejectAllProposals()}
+          >
+            全部拒绝
+          </Button>
+        </span>
+      </div>
+      <div className="mt-1 divide-y divide-border/70">
+        {proposals.map((proposal) => (
+          <ProposalRow
+            key={proposal.proposalId}
+            proposal={proposal}
+            expanded={expandedIds.has(proposal.proposalId)}
+            onToggle={() => toggleRow(proposal.proposalId)}
+          />
+        ))}
       </div>
     </div>
   );
@@ -1103,10 +1251,8 @@ function MessageList({ disabled }: { disabled: boolean }) {
           )}
           {/* 运行时工具行**不在此处**：已并入尾条 assistant 消息的 toolCalls（渲染位置 = 消息内
               思考之后、正文之前，与重载后同序，见 DESIGN.md `chat-message-stream`） */}
-          {/* 提案卡片（tool_execution_end 的 result.details 填充；瞬态，流断开即清空） */}
-          {proposals.map((p) => (
-            <ProposalCardView key={p.proposalId} proposal={p} />
-          ))}
+          {/* 提案组卡（tool_execution_end 的 result.details 填充；一轮合并一张，瞬态） */}
+          {proposals.length > 0 && <ProposalCardView proposals={proposals} />}
         </div>
       )}
     </div>

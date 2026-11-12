@@ -117,6 +117,13 @@ export interface ProposalCard {
   processing?: boolean;
 }
 
+/** 可执行 = pending 且无在途请求；组卡计数、批量目标、单条动作共用同一谓词 */
+export function isProposalActionable(
+  proposal: Pick<ProposalCard, "status" | "processing">,
+): boolean {
+  return proposal.status === "pending" && proposal.processing !== true;
+}
+
 /** 上下文占用（占用条口径 = pi `getContextUsage()`，随 turn_end / agent_end 帧下发）
  * 形状归 shared（`tokens` / `percent` 可为 null = 压缩后到下一次模型响应之间占用未知） */
 export type ContextUsage = ChatContextUsage;
@@ -312,6 +319,16 @@ interface ChatState {
   confirmProposal: (proposalId: string) => Promise<void>;
  /** 拒绝提案：语义同 confirm，成功 → status=rejected */
   rejectProposal: (proposalId: string) => Promise<void>;
+ /** 批量动作在途（组卡「全部确认 / 全部拒绝」按钮禁用；逐条 `processing` 只防单条） */
+  proposalBatchRunning: boolean;
+ /**
+ * 全部确认（组卡批量动作）：串行逐条复用单条路径（**无服务端批量端点**），逐条记账、
+ * 单条失败继续；任一确认成功只 `notifyDataChanged()` 一次；结束只发一条汇总 toast。
+ * 无 pending / 批量在途 → 直接返回。
+ */
+  confirmAllProposals: () => Promise<void>;
+ /** 全部拒绝：语义同 confirmAllProposals（不改数据 ⇒ 不发数据变更信号） */
+  rejectAllProposals: () => Promise<void>;
 }
 
 /**
@@ -420,13 +437,36 @@ let lastSentText: string | null = null;
 /** 工具 details 帧的到达序号（**模块级单调递增**：切会话 / 切项目清空 `lastToolDetails` 时**不归零**
  * ——消费方（练习页）拿序号判「是不是新帧」，序号回退会让旧帧变「新」而重复触发或漏刷） */
 let toolDetailsSeq = 0;
+/** 批量动作代次：切会话/切项目/新轮次时自增，旧批在下一个 await 后自行退出 */
+let proposalBatchSeq = 0;
+
+/**
+ * 单条提案动作结果（批量动作的记账依据）：
+ * - confirmed / rejected = 成功终态
+ * - stale = 409 PROPOSAL_STALE（快照失效，卡标可见）
+ * - removed = 404 NOT_FOUND / 409 PROJECT_MISMATCH（已从列表移除，无需再提示）
+ * - error = 其他失败（保持 pending 可重试；message = 已映射文案）
+ * - skipped = 调用时已非 pending / 处理中 / 卡片不存在（批量在途被单条并发的自然结果）
+ */
+export interface ProposalActionOutcome {
+  status: "confirmed" | "rejected" | "stale" | "removed" | "error" | "skipped";
+  /** 失败文案（status = "error" 时；按 describeProposalActionError 映射） */
+  message?: string;
+}
 
 export const useChatStore = create<ChatState>((set, get) => {
+ /** 作废在途批量（切会话/切项目/新轮次）：旧批下一个 await 后退出，不误复位新批 */
+  const cancelProposalBatch = (): void => {
+    proposalBatchSeq += 1;
+    if (get().proposalBatchRunning) set({ proposalBatchRunning: false });
+  };
+
  /**
- * 提案动作统一处理（confirm/reject 共用）：
- * 1. 防重复：卡片不存在（已移除）/ 非 pending（已确认/拒绝/失效）/ 处理中（processing）→ 忽略
+ * 提案动作统一处理（confirm/reject 共用；单条与批量共用一条路径）：
+ * 1. 防重复：卡片不存在（已移除）/ 非 pending（已确认/拒绝/失效）/ 处理中（processing）→ skipped
  * 2. 在途：置 processing=true（按钮禁用防连点）→ 调 API
  * 3. 成功 → status 终态；错误分支见 switch（404/409 MISMATCH → 移除卡片）
+ * 副作用（notifyDataChanged / toast）**不在此处**：单条动作各自收尾，批量动作汇总一次。
  * 注意：请求在途时切会话/切项目会清空 proposals——响应后按 proposalId 在**当前**列表内
  * map/filter 是空操作，天然无跨会话污染
  */
@@ -434,9 +474,11 @@ export const useChatStore = create<ChatState>((set, get) => {
     proposalId: string,
     apiCall: (id: string) => Promise<unknown>,
     successStatus: "confirmed" | "rejected",
-  ): Promise<void> => {
+  ): Promise<ProposalActionOutcome> => {
     const proposal = get().proposals.find((p) => p.proposalId === proposalId);
-    if (!proposal || proposal.status !== "pending" || proposal.processing === true) return;
+    if (!proposal || !isProposalActionable(proposal)) {
+      return { status: "skipped" };
+    }
     set((s) => ({
       proposals: s.proposals.map((p) =>
         p.proposalId === proposalId ? { ...p, processing: true } : p,
@@ -449,8 +491,7 @@ export const useChatStore = create<ChatState>((set, get) => {
           p.proposalId === proposalId ? { ...p, status: successStatus, processing: false } : p,
         ),
       }));
- // 数据变更信号：确认 = 服务端写库成功，通知中栏页面重拉；拒绝不改数据不触发
-      if (successStatus === "confirmed") useUiStore.getState().notifyDataChanged();
+      return { status: successStatus };
     } catch (err) {
  // apiFetch 只抛 ApiError（code 透传服务端 ErrorCode）；非 ApiError 属理论不可达，按网络错误兜底
       const code = err instanceof ApiError ? err.code : "CLIENT_NETWORK_ERROR";
@@ -462,21 +503,59 @@ export const useChatStore = create<ChatState>((set, get) => {
               p.proposalId === proposalId ? { ...p, status: "stale", processing: false } : p,
             ),
           }));
-          return;
+          return { status: "stale" };
         case "PROPOSAL_NOT_FOUND":
         case "PROPOSAL_PROJECT_MISMATCH":
           set((s) => ({ proposals: s.proposals.filter((p) => p.proposalId !== proposalId) }));
-          return;
+          return { status: "removed" };
         default:
-          useUiStore.getState().showToast(describeProposalActionError(code, message), "error");
           set((s) => ({
             proposals: s.proposals.map((p) =>
               p.proposalId === proposalId ? { ...p, processing: false } : p,
             ),
           }));
-          return;
+          return { status: "error", message: describeProposalActionError(code, message) };
       }
     }
+  };
+
+ /**
+ * 批量动作（组卡「全部确认 / 全部拒绝」；YOLO 自动确认复用同一路径）：
+ * - 目标 = 调用时刻的 pending 且非处理中条目，**串行**逐条走 runProposalAction（无服务端批量端点）；
+ * - 单条失败/失效不中断其余条目（stale 标记、404 移除由单条路径完成）；
+ * - 确认类动作只要有成功就**只发一次** notifyDataChanged（避免逐条重拉中栏）；
+ * - 结束只发一条汇总 toast（失败数 > 0 用 error，否则 success）。
+ */
+  const runProposalBatch = async (
+    apiCall: (id: string) => Promise<unknown>,
+    successStatus: "confirmed" | "rejected",
+  ): Promise<void> => {
+    if (get().proposalBatchRunning) return;
+    const seq = ++proposalBatchSeq;
+    const targets = get().proposals.filter(isProposalActionable).map((p) => p.proposalId);
+    if (targets.length === 0) return;
+    set({ proposalBatchRunning: true });
+    const tally = { ok: 0, stale: 0, error: 0 };
+    try {
+      for (const proposalId of targets) {
+        if (seq !== proposalBatchSeq) return;
+        const outcome = await runProposalAction(proposalId, apiCall, successStatus);
+        if (seq !== proposalBatchSeq) return;
+        if (outcome.status === successStatus) tally.ok += 1;
+        else if (outcome.status === "stale") tally.stale += 1;
+        else if (outcome.status === "error") tally.error += 1;
+      }
+    } finally {
+      if (seq === proposalBatchSeq) set({ proposalBatchRunning: false });
+    }
+ // 全部 404/跳过：没有可汇总结果，不弹「已确认 0 条」
+    if (tally.ok + tally.stale + tally.error === 0) return;
+ // 数据变更信号：确认 = 服务端写库成功，通知中栏页面重拉（一次）；拒绝不改数据不触发
+    if (successStatus === "confirmed" && tally.ok > 0) useUiStore.getState().notifyDataChanged();
+    const parts = [`${successStatus === "confirmed" ? "已确认" : "已拒绝"} ${tally.ok} 条提案`];
+    if (tally.stale > 0) parts.push(`${tally.stale} 条已失效`);
+    if (tally.error > 0) parts.push(`${tally.error} 条失败`);
+    useUiStore.getState().showToast(parts.join("，"), tally.error > 0 ? "error" : "success");
   };
 
  /** 更新流式 AI 占位消息（身份守卫：流已作废则不动） */
@@ -524,6 +603,7 @@ export const useChatStore = create<ChatState>((set, get) => {
     setCurrentSession: (id) => {
  // 同 id 重复点击（下拉点当前会话项）：直接返回，不重载历史、不清 focusContext（避免闪屏）
       if (id === get().currentSessionId) return;
+      cancelProposalBatch();
  // 切换会话：作废在途消息请求 + 中止在途流 + 清空消息与瞬态（旧会话的流事件不得污染新视图）
       msgSeq++;
       abortCurrentStream?.();
@@ -557,6 +637,7 @@ export const useChatStore = create<ChatState>((set, get) => {
     },
 
     clearSessions: () => {
+      cancelProposalBatch();
       loadSeq++; // 作废在途列表请求
       msgSeq++; // 作废在途消息请求
       abortCurrentStream?.(); // 中止在途 SSE 流（切项目后旧流事件不得污染新状态）
@@ -657,6 +738,7 @@ export const useChatStore = create<ChatState>((set, get) => {
     setDisconnected: (v) => set({ disconnected: v }),
 
     proposals: [],
+    proposalBatchRunning: false,
     streamTools: [],
     lastToolDetails: null,
 
@@ -669,6 +751,7 @@ export const useChatStore = create<ChatState>((set, get) => {
  // 防御性终止旧流（正常流程中 sendMessage 前不会有在途流）
       abortCurrentStream?.();
       abortCurrentStream = null;
+      cancelProposalBatch();
 
  // 乐观追加 user 消息 + AI 流式占位（临时 id；切换会话重载历史后得到真实 id）
       const now = new Date().toISOString();
@@ -936,6 +1019,7 @@ export const useChatStore = create<ChatState>((set, get) => {
             m.thinkingStreaming === true ? { ...m, thinkingStreaming: false } : m,
           );
           currentStreamMsgId = null;
+          cancelProposalBatch();
           set({ streaming: false, disconnected: true, proposals: [], streamTools: [], statusNote: null });
         },
         onEnd: () => {
@@ -965,8 +1049,22 @@ export const useChatStore = create<ChatState>((set, get) => {
       get().sendMessage(lastSentText);
     },
 
-    confirmProposal: (proposalId) => runProposalAction(proposalId, confirmProposalApi, "confirmed"),
-    rejectProposal: (proposalId) => runProposalAction(proposalId, rejectProposalApi, "rejected"),
+    confirmProposal: async (proposalId) => {
+      const outcome = await runProposalAction(proposalId, confirmProposalApi, "confirmed");
+ // 数据变更信号：确认 = 服务端写库成功，通知中栏页面重拉；拒绝不改数据不触发
+      if (outcome.status === "confirmed") useUiStore.getState().notifyDataChanged();
+      else if (outcome.status === "error") {
+        useUiStore.getState().showToast(outcome.message ?? "", "error");
+      }
+    },
+    rejectProposal: async (proposalId) => {
+      const outcome = await runProposalAction(proposalId, rejectProposalApi, "rejected");
+      if (outcome.status === "error") {
+        useUiStore.getState().showToast(outcome.message ?? "", "error");
+      }
+    },
+    confirmAllProposals: () => runProposalBatch(confirmProposalApi, "confirmed"),
+    rejectAllProposals: () => runProposalBatch(rejectProposalApi, "rejected"),
   };
 });
 

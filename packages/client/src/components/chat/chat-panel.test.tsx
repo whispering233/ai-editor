@@ -54,7 +54,9 @@ import {
   focusLabel,
   isNearBottom,
   MessageItem,
+  PROPOSAL_TYPE_LABELS,
   ProposalCardView,
+  ProposalRow,
   STICK_BOTTOM_THRESHOLD_PX,
   ThinkingBlock,
   ToolCallRow,
@@ -65,7 +67,7 @@ import {
 import type { StreamToolRecord } from "../../stores/chat";
 import { SessionStatusBar, SessionStatusBarView } from "./session-status-bar";
 import { sessionStatusView } from "../../lib/session-status";
-import type { ChatMessageView } from "../../stores/chat";
+import type { ChatMessageView, ProposalCard } from "../../stores/chat";
 
 const mocked = {
   listSessions: vi.mocked(apiListSessions),
@@ -98,6 +100,13 @@ const makeConfig = (id: string): ProjectConfig => ({
  * stub 最小可用实现（SSR 不执行 effect，无需真实监听） */
 const windowStub = {
   matchMedia: () => ({ matches: true, addEventListener: vi.fn(), removeEventListener: vi.fn() }),
+};
+
+/** 取「目标文案最近的前一个 <button> 起始标签」：antd SSR 的 disabled 落在该标签上（组卡头部按钮态断言） */
+const buttonTagBefore = (html: string, label: string): string => {
+  const idx = html.indexOf(label);
+  expect(idx).toBeGreaterThan(-1);
+  return html.slice(0, idx).split("<button").pop() ?? "";
 };
 
 beforeEach(() => {
@@ -513,7 +522,7 @@ describe("消息流顺序与滚动跟随（DESIGN.md `chat-message-stream`）", 
   });
 });
 
-describe("新会话路径叶子组件富数据渲染走查（问题 3：任务侦察标注的 ToolCallRow/MessageItem 未读路径）", () => {
+describe("新会话路径叶子组件富数据渲染走查（问题 3）+ 提案组卡契约（proposal-card）", () => {
   it("MessageItem：user 气泡 / assistant 正文 + 历史工具调用行（含 tool result 成对挂载）不抛异常", () => {
     const userMsg: ChatMessageView = {
       id: "m1",
@@ -692,45 +701,186 @@ describe("新会话路径叶子组件富数据渲染走查（问题 3：任务�
     expect(other).not.toContain("第一条命中");
   });
 
-  it("ProposalCardView：pending / confirmed / stale 三态 + preview 存在/缺失渲染不抛异常", () => {
-    const pending = renderToString(
-      <ProposalCardView
-        proposal={{
-          proposalId: "prop-1",
-          type: "propose_create_entity",
-          status: "pending",
-          preview: { summary: "创建角色张三" },
-        }}
-      />,
-    );
-    expect(pending).toContain("提案");
-    expect(pending).toContain("新建实体"); // PROPOSAL_TYPE_LABELS 映射
-    const confirmed = renderToString(
-      <ProposalCardView
-        proposal={{ proposalId: "prop-1", type: "propose_create_entity", status: "confirmed" }}
-      />,
-    );
-    expect(confirmed).toContain("已确认");
-    const stale = renderToString(
-      <ProposalCardView
-        proposal={{ proposalId: "prop-1", type: "propose_update_entity", status: "stale" }}
-      />,
-    );
-    expect(stale).toContain("此提案已失效");
-  });
-
-  it("ProposalCardView：propose_reorder_timepoints（F9 + G2 修订）标题映射「重排时间轴时间点」+ preview 摘要渲染（不再 JSON dump）", () => {
+  it("ProposalCardView：单条提案也渲染组卡形态（头部计数 + 全部确认/全部拒绝 + 行内类型与摘要）", () => {
     const html = renderToString(
       <ProposalCardView
+        proposals={[
+          {
+            proposalId: "prop-1",
+            type: "propose_create_entity",
+            status: "pending",
+            preview: { summary: "创建角色张三" },
+          },
+        ]}
+      />,
+    );
+    // 头部文案整串在 JS 拼接（SSR 相邻表达式之间会插注释节点）
+    expect(html).toContain("本轮提案 · 1 条（1 待处理）");
+    expect(html).toContain("全部确认");
+    expect(html).toContain("全部拒绝");
+    expect(buttonTagBefore(html, "全部确认")).not.toContain("disabled");
+    expect(buttonTagBefore(html, "全部拒绝")).not.toContain("disabled");
+    expect(html).toContain("新建实体"); // PROPOSAL_TYPE_LABELS 映射
+    expect(html).toContain("创建角色张三"); // 摘要首行
+    expect(html).toContain("待处理");
+    // 行尾逐条按钮（antd 对两字中文按钮插空格：确 认 / 拒 绝）
+    expect(html).toMatch(/<span>确\s*认<\/span>/);
+    expect(html).toMatch(/<span>拒\s*绝<\/span>/);
+  });
+
+  it("ProposalCardView：一轮多条提案合并为一张组卡（计数/类型/状态齐全，容器唯一）", () => {
+    const html = renderToString(
+      <ProposalCardView
+        proposals={[
+          {
+            proposalId: "prop-1",
+            type: "propose_create_entity",
+            status: "pending",
+            preview: { summary: "创建角色张三" },
+          },
+          {
+            proposalId: "prop-2",
+            type: "propose_update_entity",
+            status: "confirmed",
+            preview: { summary: "更新角色张三" },
+          },
+          {
+            proposalId: "prop-3",
+            type: "propose_create_hook",
+            status: "stale",
+            preview: { summary: "新建伏笔「黑潮」" },
+          },
+        ]}
+      />,
+    );
+    expect(html).toContain("本轮提案 · 3 条（1 待处理）");
+    expect(html.split("本轮提案").length - 1).toBe(1); // 一轮一张卡（不再是逐条 ProposalCardView）
+    for (const label of ["新建实体", "更新实体", "新建伏笔"]) expect(html).toContain(label);
+    expect(html).toContain("创建角色张三");
+    expect(html).toContain("更新角色张三");
+    expect(html).toContain("✓ 已确认");
+    expect(html).toContain("⚠ 已失效");
+    expect(html).toContain("待处理");
+  });
+
+  it("ProposalCardView：无 pending → 全部确认/全部拒绝禁用；空列表不渲染", () => {
+    const html = renderToString(
+      <ProposalCardView
+        proposals={[{ proposalId: "prop-1", type: "propose_create_entity", status: "confirmed" }]}
+      />,
+    );
+    expect(html).toContain("本轮提案 · 1 条（0 待处理）");
+    expect(buttonTagBefore(html, "全部确认")).toContain("disabled");
+    expect(buttonTagBefore(html, "全部拒绝")).toContain("disabled");
+    expect(renderToString(<ProposalCardView proposals={[]} />)).toBe("");
+  });
+
+  it("ProposalCardView：processing 条目不计数为待处理（与批量目标同一谓词）", () => {
+    const html = renderToString(
+      <ProposalCardView
+        proposals={[
+          {
+            proposalId: "prop-1",
+            type: "propose_create_entity",
+            status: "pending",
+            processing: true,
+          },
+        ]}
+      />,
+    );
+    expect(html).toContain("本轮提案 · 1 条（0 待处理）");
+    expect(buttonTagBefore(html, "全部确认")).toContain("disabled");
+    expect(buttonTagBefore(html, "全部拒绝")).toContain("disabled");
+  });
+
+  it("ProposalRow：折叠只给摘要首行（truncate），展开给完整预览；行尾逐条按钮常在", () => {
+    const proposal: ProposalCard = {
+      proposalId: "prop-1",
+      type: "propose_add_delta",
+      status: "pending",
+      preview: { changes: ["第一条改动", "第二条改动"] },
+    };
+    const collapsed = renderToString(
+      <ProposalRow proposal={proposal} expanded={false} onToggle={() => {}} />,
+    );
+    expect(collapsed).toContain("追加变更");
+    expect(collapsed).toContain("第一条改动"); // 摘要首行
+    expect(collapsed).not.toContain("第二条改动");
+    expect(collapsed).toContain("truncate"); // 首行独占一行（truncate）
+    expect(collapsed).toContain('aria-expanded="false"');
+    expect(collapsed).toMatch(/<span>确\s*认<\/span>/); // 逐条按钮不受折叠影响
+    expect(collapsed).toMatch(/<span>拒\s*绝<\/span>/);
+    const expanded = renderToString(
+      <ProposalRow proposal={proposal} expanded onToggle={() => {}} />,
+    );
+    expect(expanded).toContain('aria-expanded="true"');
+    expect(expanded).toContain("第一条改动");
+    expect(expanded).toContain("第二条改动"); // 展开 = 完整预览
+  });
+
+  it("ProposalRow：stale 行尾「⚠ 已失效」+ title 全句；展开再给正文全句", () => {
+    const proposal: ProposalCard = {
+      proposalId: "prop-1",
+      type: "propose_update_entity",
+      status: "stale",
+    };
+    const collapsed = renderToString(
+      <ProposalRow proposal={proposal} expanded={false} onToggle={() => {}} />,
+    );
+    expect(collapsed).toContain("⚠ 已失效");
+    expect(collapsed).toContain('title="数据已变化，此提案已失效"');
+    const expanded = renderToString(
+      <ProposalRow proposal={proposal} expanded onToggle={() => {}} />,
+    );
+    expect(expanded).toContain("数据已变化，此提案已失效");
+  });
+
+  it("PROPOSAL_TYPE_LABELS 覆盖服务端注册的全部 propose_*（16 个，无多余/无遗漏）", () => {
+    // 清单来源 = packages/tools/src/index.ts 实际注册的提案工具（新增提案工具必须补中文名）
+    const registered = [
+      "propose_create_entity",
+      "propose_update_entity",
+      "propose_delete_entity",
+      "propose_add_relation",
+      "propose_remove_relation",
+      "propose_add_delta",
+      "propose_outline_node",
+      "propose_move_node",
+      "propose_delete_node",
+      "propose_create_hook",
+      "propose_update_hook",
+      "propose_advance_hook",
+      "propose_resolve_hook",
+      "propose_abandon_hook",
+      "propose_reorder_timepoints",
+      "propose_create_reference",
+    ];
+    for (const type of registered) expect(PROPOSAL_TYPE_LABELS[type], type).toBeTruthy();
+    expect(Object.keys(PROPOSAL_TYPE_LABELS).sort()).toEqual([...registered].sort());
+    // 未知 type 回退裸工具名（行内仍能显示类型）
+    const html = renderToString(
+      <ProposalRow
+        proposal={{ proposalId: "prop-x", type: "propose_future_tool", status: "pending" }}
+        expanded={false}
+        onToggle={() => {}}
+      />,
+    );
+    expect(html).toContain("propose_future_tool");
+  });
+
+  it("ProposalRow：propose_reorder_timepoints 标题映射「重排时间轴时间点」+ preview 摘要渲染（不再 JSON dump）", () => {
+    const html = renderToString(
+      <ProposalRow
         proposal={{
           proposalId: "prop-9",
           type: "propose_reorder_timepoints",
           status: "pending",
           preview: { changes: [{ id: "tp-1", order: 2 }] },
         }}
+        expanded={false}
+        onToggle={() => {}}
       />,
     );
-    expect(html).toContain("提案");
     expect(html).toContain("重排时间轴时间点"); // PROPOSAL_TYPE_LABELS 映射（G2 修订：propose_reorder_timepoints）
     // preview 摘要渲染——changes 对象项 id 未解析（SSR 不跑 useEffect）→ 兜底「调整位置」；
     // 不再 JSON dump（changes 字面量不出现）

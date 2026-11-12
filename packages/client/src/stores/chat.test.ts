@@ -145,6 +145,7 @@ afterEach(() => {
     statusNote: null,
     disconnected: false,
     proposals: [],
+    proposalBatchRunning: false,
     streamTools: [],
     lastToolDetails: null,
   });
@@ -1417,6 +1418,190 @@ describe("confirmProposal / rejectProposal（S8.2：提案卡接入 S7.5 confirm
   it("卡片不存在（已移除/幽灵 id）→ 忽略，不调 API", async () => {
     await useChatStore.getState().confirmProposal("prop-ghost");
     expect(mocked.confirmProposal).not.toHaveBeenCalled();
+  });
+});
+
+describe("confirmAllProposals / rejectAllProposals（组卡批量：串行 / 失败继续 / 只刷新一次 / 一条汇总）", () => {
+  const proposalIds = () => useChatStore.getState().proposals.map((p) => p.proposalId);
+
+  it("全部确认：按顺序串行调用全部 pending，逐条终态，只发一次数据变更 + 一条汇总 toast", async () => {
+    mocked.confirmProposal.mockResolvedValue({ confirmed: true, result: undefined });
+    useChatStore.setState({
+      proposals: ["p1", "p2", "p3"].map((proposalId) => makeProposal({ proposalId })),
+    });
+    await useChatStore.getState().confirmAllProposals();
+    expect(mocked.confirmProposal.mock.calls.map((c) => c[0])).toEqual(["p1", "p2", "p3"]);
+    expect(useChatStore.getState().proposals.map((p) => p.status)).toEqual([
+      "confirmed",
+      "confirmed",
+      "confirmed",
+    ]);
+    expect(useUiStore.getState().dataVersion).toBe(1); // 三条成功仍只刷新一次
+    expect(useUiStore.getState().toast).toMatchObject({
+      kind: "success",
+      text: "已确认 3 条提案",
+    });
+    expect(useChatStore.getState().proposalBatchRunning).toBe(false);
+  });
+
+  it("串行：前一条未返回前不发下一条请求（不并发打服务端）", async () => {
+    let resolveFirst: (v: { confirmed: true; result: unknown }) => void = () => {};
+    mocked.confirmProposal.mockImplementationOnce(() => new Promise((r) => (resolveFirst = r)));
+    mocked.confirmProposal.mockResolvedValue({ confirmed: true, result: undefined });
+    useChatStore.setState({
+      proposals: ["p1", "p2"].map((proposalId) => makeProposal({ proposalId })),
+    });
+    const batch = useChatStore.getState().confirmAllProposals();
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(mocked.confirmProposal).toHaveBeenCalledTimes(1);
+    expect(useChatStore.getState().proposalBatchRunning).toBe(true);
+    expect(useChatStore.getState().proposals[0]).toMatchObject({ processing: true });
+    resolveFirst({ confirmed: true, result: undefined });
+    await batch;
+    expect(mocked.confirmProposal.mock.calls.map((c) => c[0])).toEqual(["p1", "p2"]);
+    expect(useChatStore.getState().proposalBatchRunning).toBe(false);
+  });
+
+  it("部分失败继续：中间一条 500 保持 pending、其余照常成功，汇总「1 条失败」（error 态）", async () => {
+    mocked.confirmProposal
+      .mockResolvedValueOnce({ confirmed: true, result: undefined })
+      .mockRejectedValueOnce(new ApiError("INTERNAL_ERROR" as ErrorCode, "提案执行失败"))
+      .mockResolvedValueOnce({ confirmed: true, result: undefined });
+    useChatStore.setState({
+      proposals: ["p1", "p2", "p3"].map((proposalId) => makeProposal({ proposalId })),
+    });
+    await useChatStore.getState().confirmAllProposals();
+    expect(mocked.confirmProposal).toHaveBeenCalledTimes(3); // 失败不中断后续
+    expect(useChatStore.getState().proposals.map((p) => p.status)).toEqual([
+      "confirmed",
+      "pending",
+      "confirmed",
+    ]);
+    expect(useChatStore.getState().proposals[1]).toMatchObject({ processing: false });
+    expect(useUiStore.getState().dataVersion).toBe(1);
+    expect(useUiStore.getState().toast).toMatchObject({
+      kind: "error",
+      text: "已确认 2 条提案，1 条失败",
+    });
+  });
+
+  it("404 PROPOSAL_NOT_FOUND：移除该条并继续，其余成功不计失败", async () => {
+    mocked.confirmProposal
+      .mockResolvedValueOnce({ confirmed: true, result: undefined })
+      .mockRejectedValueOnce(new ApiError("PROPOSAL_NOT_FOUND", "提案不存在或已过期"))
+      .mockResolvedValueOnce({ confirmed: true, result: undefined });
+    useChatStore.setState({
+      proposals: ["p1", "p2", "p3"].map((proposalId) => makeProposal({ proposalId })),
+    });
+    await useChatStore.getState().confirmAllProposals();
+    expect(proposalIds()).toEqual(["p1", "p3"]);
+    expect(useChatStore.getState().proposals.map((p) => p.status)).toEqual([
+      "confirmed",
+      "confirmed",
+    ]);
+    expect(useUiStore.getState().dataVersion).toBe(1);
+    expect(useUiStore.getState().toast).toMatchObject({
+      kind: "success",
+      text: "已确认 2 条提案",
+    });
+  });
+
+  it("409 PROPOSAL_STALE：标 stale 并继续，汇总「1 条已失效」", async () => {
+    mocked.confirmProposal
+      .mockResolvedValueOnce({ confirmed: true, result: undefined })
+      .mockRejectedValueOnce(new ApiError("PROPOSAL_STALE", "提案引用对象已变化"))
+      .mockResolvedValueOnce({ confirmed: true, result: undefined });
+    useChatStore.setState({
+      proposals: ["p1", "p2", "p3"].map((proposalId) => makeProposal({ proposalId })),
+    });
+    await useChatStore.getState().confirmAllProposals();
+    expect(useChatStore.getState().proposals.map((p) => p.status)).toEqual([
+      "confirmed",
+      "stale",
+      "confirmed",
+    ]);
+    expect(useUiStore.getState().toast).toMatchObject({
+      kind: "success",
+      text: "已确认 2 条提案，1 条已失效",
+    });
+  });
+
+  it("全部拒绝：status=rejected、不发数据变更信号、汇总「已拒绝 N 条提案」", async () => {
+    mocked.rejectProposal.mockResolvedValue({ rejected: true });
+    useChatStore.setState({
+      proposals: ["p1", "p2"].map((proposalId) => makeProposal({ proposalId })),
+    });
+    await useChatStore.getState().rejectAllProposals();
+    expect(mocked.rejectProposal.mock.calls.map((c) => c[0])).toEqual(["p1", "p2"]);
+    expect(useChatStore.getState().proposals.map((p) => p.status)).toEqual([
+      "rejected",
+      "rejected",
+    ]);
+    expect(useUiStore.getState().dataVersion).toBe(0);
+    expect(useUiStore.getState().toast).toMatchObject({
+      kind: "success",
+      text: "已拒绝 2 条提案",
+    });
+  });
+
+  it("只处理 pending 且非 processing 的条目（终态/在途条目不参与）", async () => {
+    mocked.confirmProposal.mockResolvedValue({ confirmed: true, result: undefined });
+    useChatStore.setState({
+      proposals: [
+        makeProposal({ proposalId: "p1", status: "confirmed" }),
+        makeProposal({ proposalId: "p2", processing: true }),
+        makeProposal({ proposalId: "p3" }),
+      ],
+    });
+    await useChatStore.getState().confirmAllProposals();
+    expect(mocked.confirmProposal.mock.calls.map((c) => c[0])).toEqual(["p3"]);
+    expect(useUiStore.getState().toast).toMatchObject({ text: "已确认 1 条提案" });
+  });
+
+  it("无 pending → 不发请求、不发 toast", async () => {
+    useChatStore.setState({
+      proposals: [makeProposal({ proposalId: "p1", status: "confirmed" })],
+    });
+    await useChatStore.getState().confirmAllProposals();
+    expect(mocked.confirmProposal).not.toHaveBeenCalled();
+    expect(useUiStore.getState().toast).toBeNull();
+  });
+
+  it("切会话取消在途批量：复位标记、旧批收尾不弹汇总 toast", async () => {
+    let resolveFirst: (v: { confirmed: true; result: unknown }) => void = () => {};
+    mocked.confirmProposal.mockImplementationOnce(() => new Promise((r) => (resolveFirst = r)));
+    useChatStore.setState({
+      currentSessionId: "sess-1",
+      proposals: ["p1", "p2"].map((proposalId) => makeProposal({ proposalId })),
+    });
+    const batch = useChatStore.getState().confirmAllProposals();
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(useChatStore.getState().proposalBatchRunning).toBe(true);
+    useChatStore.getState().setCurrentSession("sess-2");
+    expect(useChatStore.getState().proposalBatchRunning).toBe(false);
+    resolveFirst({ confirmed: true, result: undefined });
+    await batch;
+    expect(useUiStore.getState().toast).toBeNull();
+    expect(mocked.confirmProposal).toHaveBeenCalledTimes(1);
+  });
+
+  it("批量在途防重：再次触发直接返回，不重复调用同批条目", async () => {
+    let resolveFirst: (v: { confirmed: true; result: unknown }) => void = () => {};
+    mocked.confirmProposal.mockImplementationOnce(() => new Promise((r) => (resolveFirst = r)));
+    mocked.confirmProposal.mockResolvedValue({ confirmed: true, result: undefined });
+    useChatStore.setState({
+      proposals: ["p1", "p2"].map((proposalId) => makeProposal({ proposalId })),
+    });
+    const batch = useChatStore.getState().confirmAllProposals();
+    await Promise.resolve();
+    await Promise.resolve();
+    await useChatStore.getState().confirmAllProposals();
+    expect(mocked.confirmProposal).toHaveBeenCalledTimes(1);
+    resolveFirst({ confirmed: true, result: undefined });
+    await batch;
+    expect(mocked.confirmProposal.mock.calls.map((c) => c[0])).toEqual(["p1", "p2"]);
   });
 });
 
