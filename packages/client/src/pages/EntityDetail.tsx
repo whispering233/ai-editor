@@ -538,7 +538,7 @@ export default function EntityDetail({
 
       {/* 加载骨架 */}
       {loading && !detail && (
-        <div className="grid gap-4 md:grid-cols-2">
+        <div className="flex flex-col gap-4">
           <div className="space-y-3 rounded-md border border-border p-4">
             {Array.from({ length: 5 }, (_, i) => (
               <div key={i} className={cn(skeletonClass, "h-9")} />
@@ -565,8 +565,8 @@ export default function EntityDetail({
       )}
 
       {detail && form && (
-        <div className="grid gap-4 md:grid-cols-2">
-          {/* 左栏：data 表单（按类型差异化渲染） */}
+        <div className="flex flex-col gap-4">
+          {/* 信息区：data 表单（按类型差异化渲染） */}
           <div className="rounded-md border border-border p-4">
             <h2 className="mb-3 text-sm font-semibold text-foreground">基础信息</h2>
             <div className="flex flex-col gap-3">
@@ -595,7 +595,7 @@ export default function EntityDetail({
             {saveError && <p className="mt-3 text-sm text-destructive">{saveError}</p>}
           </div>
 
-          {/* 右栏：关联（1 跳双向）——setting 类型前置「层级」区块（父子边独自分区，
+          {/* 关联区：关联（1 跳双向）——setting 类型前置「层级」区块（父子边独自分区，
               下方关联列表过滤掉层级边，避免同一条边两处重复展示） */}
           <div className="rounded-md border border-border p-4">
             <div className="mb-3 flex items-center justify-between">

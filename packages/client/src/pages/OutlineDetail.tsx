@@ -340,8 +340,8 @@ export default function OutlineDetail({ nodeId }: { nodeId: string }) {
           </Button>
         </div>
       ) : node === null || dataForm === null ? null : (
-        /* 表单区：左栏（基础信息/结构化信息/变更记录/伏笔标记）+ 右栏（相关实体） */
-        <div className="grid gap-4 md:grid-cols-2">
+        /* 表单区：信息区（基础信息/结构化信息/变更记录/伏笔标记）在上，关联区（相关实体）在下 */
+        <div className="flex flex-col gap-4">
           <div className="flex min-w-0 flex-col gap-4">
             {/* 基础信息：标题/摘要 */}
             <SectionCard title="基础信息">
@@ -417,7 +417,7 @@ export default function OutlineDetail({ nodeId }: { nodeId: string }) {
             </SectionCard>
           </div>
 
-          {/* 右栏：相关实体（本节点作为 source；scope 模式复用 RelationsView） */}
+          {/* 关联区：相关实体（本节点作为 source；scope 模式复用 RelationsView） */}
           <div className="flex min-w-0 flex-col gap-4">
             <SectionCard title="相关实体">
               <div className="mb-3 flex items-center justify-between">

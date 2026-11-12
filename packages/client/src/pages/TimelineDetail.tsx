@@ -351,7 +351,7 @@ export default function TimelineDetail({ id }: { id: string }) {
 
       {/* 加载骨架 */}
       {loading && !detail && (
-        <div className="grid gap-4 md:grid-cols-2">
+        <div className="flex flex-col gap-4">
           <div className="space-y-3 rounded-md border border-border p-4">
             {Array.from({ length: 5 }, (_, i) => (
               <div key={i} className="h-9 animate-pulse rounded bg-muted" />
@@ -378,8 +378,8 @@ export default function TimelineDetail({ id }: { id: string }) {
       )}
 
       {detail && form && (
-        <div className="grid gap-4 md:grid-cols-2">
-          {/* 左栏：基础信息表单（name + data 两字段，G2 无 time_label——时间标签 = 挂载，详情页字段编辑 + 挂载时间点选择器） */}
+        <div className="flex flex-col gap-4">
+          {/* 信息区：基础信息表单（name + data 两字段，G2 无 time_label——时间标签 = 挂载，详情页字段编辑 + 挂载时间点选择器） */}
           <div className="rounded-md border border-border p-4">
             <h2 className="mb-3 text-sm font-semibold text-foreground">基础信息</h2>
             <div className="flex flex-col gap-3">
@@ -448,7 +448,7 @@ export default function TimelineDetail({ id }: { id: string }) {
             </div>
           </div>
 
-          {/* 右栏：occurs_in 关联节点管理（详情页核心交互；UX3：选择器为 Popover 轻量弹层） */}
+          {/* 关联区：occurs_in 关联节点管理（详情页核心交互；UX3：选择器为 Popover 轻量弹层） */}
           <div className="rounded-md border border-border p-4">
             <div className="mb-3 flex items-center justify-between">
               {/* 标题不再暴露内部关系键（`occurs_in` 是 `relation_records.relation_type` 的取值，
