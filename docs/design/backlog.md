@@ -187,6 +187,15 @@
 
 ## 前端 / UI
 
+- **提案组卡 / YOLO / 设定描述开关缺组件级渲染断言**（2026-11 oracle 登记，低）
+  - 现状：组卡与两个 `Switch` 的 DOM 契约（`aria-label` / 风险 `title`、关闭后摘要消失而标题仍在）只有浏览器实测，无 SSR / 渲染测试；两个偏好 hook 的纯函数已有单测。
+  - 触发条件：下次改这些控件或升级 antd `Switch` 时。
+  - 最小修法：在已有 `ChatPanel` SSR 测试与新增 `setting-tree` 渲染测试中各加 1–2 条断言。
+
+- **`OutlineDetail` 详情壳冗余嵌套**（2026-11 oracle 登记，低）
+  - 现状：`flex flex-col gap-4` 外层内再套一层布局等价的 `flex min-w-0 flex-col gap-4`，可合并。
+  - 触发条件：下次触碰该页布局时。
+
 - **贴底跟随的「接线」无自动化咬合（2026-09 消息流 oracle 登记，中低危）**
   - 现状：单测只覆盖纯函数 `isNearBottom`（真值表）；`ChatPanel.tsx` 的三处接线——`onScroll` 同步意图、`stickRef` 的上升沿复位（`streaming` / `messagesLoading`）、滚动 effect 里的 `if (stickRef.current)` 守卫——**一起删掉也不会红**（oracle 变异探针 6：38 passed 全绿），即「抖动 / 停不住」的修复本体只靠浏览器核对。
   - 触发条件：再改这三个 effect / 事件时，或需要回归护栏时。
