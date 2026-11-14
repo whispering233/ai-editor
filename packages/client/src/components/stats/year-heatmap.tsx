@@ -1,6 +1,7 @@
 // 年度码字热力（DESIGN.md「码字统计页」→「年度热力」）：
-// 53 周 × 7 行、周一起始、全宽放在最后；0 档 = `bg-accent`（surface-muted），正档由 `bg-primary` 透明度派生；
-// 点格子 = 选中该日（页面据此跳到对应月）。窄中栏走横向滚动，不压缩格子。
+// 53 周 × 7 行、周一起始、全宽放在最后；周列 `flex-1` 铺满宽中栏、`min-w-2.5` 保底 10px ⇒ 窄中栏才横向滚动；
+// 0 档 = `bg-accent`（surface-muted），正档由 `bg-primary` 透明度派生；
+// 点格子 = 选中该日（页面据此跳到对应月）。
 // 档位阈值只取 `lib/writing-stats.ts` 的 `WRITING_HEAT_THRESHOLDS`，组件不手写数字；宽度/天数同源常量。
 import { SectionCard } from "@/components/ui/section-card";
 import { cn } from "../../lib/utils";
@@ -46,11 +47,11 @@ export function YearHeatmap({ charsByDate, today, selectedDate, onSelectDate }: 
   return (
     <SectionCard title={`码字热力 · 近 ${WRITING_HEATMAP_DAYS} 天`}>
       <div className="overflow-x-auto">
-        <div className="flex w-max gap-0.5">
+        <div className="flex w-full gap-0.5">
           {weeks.map((week, weekIndex) => (
-            <div key={weekIndex} className="flex flex-col gap-0.5">
+            <div key={weekIndex} className="flex flex-1 min-w-2.5 flex-col gap-0.5">
               {week.map((cell, weekdayIndex) => {
-                if (cell === null) return <div key={weekdayIndex} className="h-2.5 w-2.5" />;
+                if (cell === null) return <div key={weekdayIndex} className="aspect-square w-full" />;
                 const chars = charsByDate.get(cell) ?? 0;
                 const selected = cell === selectedDate;
                 return (
@@ -62,7 +63,7 @@ export function YearHeatmap({ charsByDate, today, selectedDate, onSelectDate }: 
                     aria-pressed={selected}
                     onClick={() => onSelectDate(cell)}
                     className={cn(
-                      "h-2.5 w-2.5 shrink-0 rounded-sm hover:ring-1 hover:ring-primary",
+                      "aspect-square w-full rounded-sm hover:ring-1 hover:ring-primary",
                       HEAT_CELL_CLASS[writingHeatLevel(chars)],
                       selected && "ring-1 ring-primary",
                     )}
