@@ -60,6 +60,7 @@ import { errorBannerClass, skeletonClass } from "../lib/styles";
 import { navigate } from "../hooks/use-route";
 import { useOutlineLoader } from "../hooks/use-outline-loader";
 import { useProjectStore } from "../stores/project";
+import { useWritingSessionStore } from "../stores/writing-session";
 import { useUiStore } from "../stores/ui";
 import { cn } from "../lib/utils";
 
@@ -101,6 +102,9 @@ export default function Manuscript({ chapterId }: { chapterId: string }) {
   // 专注模式（卡 13.4）：**瞬态**全局标志（不持久化，路由变化由 MainPanel 的守卫归零）
   const focusMode = useUiStore((s) => s.focusMode);
   const setFocusMode = useUiStore((s) => s.setFocusMode);
+  // 码字悬浮面板（会话累计）：当前项目 id + 变更记入口；数字只在客户端内存
+  const projectId = useProjectStore((s) => s.config?.id ?? null);
+  const recordDelta = useWritingSessionStore((s) => s.recordDelta);
 
   /** 版本戳基准（保存时回传 base_updated_at）；null = 服务端从未写过 */
   const baseRef = useRef<string | null>(null);
@@ -451,6 +455,9 @@ export default function Manuscript({ chapterId }: { chapterId: string }) {
             key={editorEpoch}
             initialContent={content}
             onChange={handleChange}
+            onTextDelta={(delta) => {
+              if (projectId !== null) recordDelta(projectId, delta, Date.now());
+            }}
             onReady={setEditorApi}
             /* 字数 · 保存态（含保存时刻）：专注模式下页头已隐藏 ⇒ 改由工具条右端承载同一份 statusText
                （非专注时仍在页头，不同时显示；时间字符串不在工具条另算） */

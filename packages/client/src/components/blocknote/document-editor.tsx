@@ -19,12 +19,12 @@
 //   本组件**不持有**专注状态（源头 = ui store，外壳与页头各自订阅）。
 // - 卡 14.1：`save`（手动保存）同样原样透传；不传 = 工具条不渲染该按钮
 //   （章正文页与参考资料详情页（编辑态）各自注入，草稿态不注入）。
-import { useEffect, useMemo, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, type ReactNode } from "react";
 import type { PartialBlock } from "@blocknote/core";
 import { zh } from "@blocknote/core/locales";
 import { useCreateBlockNote } from "@blocknote/react";
 import { BlockNoteView } from "@blocknote/ariakit";
-import { isBlockArray } from "@whispering233/ai-editor-shared";
+import { blocksToPlainMd, isBlockArray } from "@whispering233/ai-editor-shared";
 import { useThemeMode } from "../../hooks/use-theme-mode";
 import { toWritingCssVars, useWritingPrefs } from "../../hooks/use-writing-prefs";
 import { EditorToolbar, type ToolbarFocus, type ToolbarSave } from "./editor-toolbar";
@@ -68,6 +68,9 @@ export interface DocumentEditorProps {
   initialContent: string;
  /** 内容变化：把 editor.document 序列化为块数组 JSON 字符串交给调用方（保存/自动保存） */
   onChange: (content: string) => void;
+ /** 纯文本长度变化（码字悬浮面板累计用）：只在文本长度变化时回调（纯格式变更 = 0 不回调）；
+   * 传了才计算（参考资料编辑器不传，行为零变化） */
+  onTextDelta?: (delta: number) => void;
  /** 实例能力出口：挂载（含换 key 重挂）后回调一次，页面存进 ref/state 供导入导出使用 */
   onReady?: (api: DocumentEditorApi) => void;
  /** 工具条右端状态区（章正文页注入「字数 · 保存态」）；不传 = 该区不渲染（卡 13.4） */
@@ -78,9 +81,15 @@ export interface DocumentEditorProps {
   save?: ToolbarSave;
 }
 
+/** 块数组 → 纯文本长度（码字增量的唯一口径，与保存/导出共用 shared 投影） */
+function plainLength(blocks: unknown): number {
+  return blocksToPlainMd(blocks).length;
+}
+
 export function DocumentEditor({
   initialContent,
   onChange,
+  onTextDelta,
   onReady,
   status,
   focus,
@@ -94,6 +103,12 @@ export function DocumentEditor({
     initialContent: parseBlockContent(initialContent),
     dictionary: zh,
   });
+
+  // 码字增量基线（仅传 onTextDelta 时维护）：挂载时从初始内容取，之后每次 onChange 前移
+  const plainLengthRef = useRef<number | null>(null);
+  if (plainLengthRef.current === null && onTextDelta !== undefined) {
+    plainLengthRef.current = plainLength(parseBlockContent(initialContent));
+  }
 
   // 能力出口（随实例变化：换 key 重挂 = 新实例）。onReady 只在 effect 里回调，避免渲染期改父组件状态
   const api = useMemo<DocumentEditorApi>(
@@ -122,7 +137,15 @@ export function DocumentEditor({
          data-writing-indent 是开关（on/off）——两串都要与 blocknote.css 的属性选择器逐字对应。 */
       data-writing-paper={prefs.paperTexture}
       data-writing-indent={prefs.indent ? "on" : "off"}
-      onChange={(next) => onChange(JSON.stringify(next.document))}
+      onChange={(next) => {
+        if (onTextDelta !== undefined && plainLengthRef.current !== null) {
+          const length = plainLength(next.document);
+          const delta = length - plainLengthRef.current;
+          plainLengthRef.current = length;
+          if (delta !== 0) onTextDelta(delta);
+        }
+        onChange(JSON.stringify(next.document));
+      }}
     >
       <EditorToolbar prefs={prefs} setPref={setPref} status={status} focus={focus} save={save} />
     </BlockNoteView>

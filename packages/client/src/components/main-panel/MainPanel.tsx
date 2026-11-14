@@ -11,6 +11,7 @@ import { useProjectStore } from "../../stores/project";
 import { useChatStore } from "../../stores/chat";
 import { useUiStore } from "../../stores/ui";
 import { InfoBar } from "./InfoBar";
+import { StatsHud } from "../stats/stats-hud";
 
 export function MainPanel({
   route,
@@ -66,6 +67,9 @@ export function MainPanel({
       {!focusMode && <InfoBar chatOpen={chatOpen} onToggleChat={onToggleChat} />}
       {/* 页面内容区：溢出纵向滚动（原 AppShell p-6 保留，页面不自带 padding） */}
       <div className="min-h-0 flex-1 overflow-y-auto p-6">{children}</div>
+      {/* 当日码字悬浮面板（DESIGN.md「当日码字悬浮面板」）：必须挂在滚动区**之外**的绝对定位宿主上
+          （随内容滚动会跑位）；入口 z 20 在「问 AI」z 30 之下、位置在其正上方 */}
+      <StatsHud focusMode={focusMode} />
       {/* 中栏右下悬浮「问 AI」（C1，用户反馈 #3）：绝对定位于中栏容器（不越到右栏，
           滚动区外不随内容滚动）；点「无焦点」= 普通进入聊天，聚焦右栏输入框。
           「点击必有反应」（用户反馈跟进）：右栏收起/小屏抽屉关着时先展开打开（onOpenChat），
