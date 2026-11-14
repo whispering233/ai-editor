@@ -17,9 +17,10 @@ describe("NAV_RAIL_BY_KIND（kind → 左栏形态的唯一定义处）", () => 
     expect(Object.keys(NAV_RAIL_BY_KIND).sort()).toEqual([...WORKSPACE_KINDS].sort());
   });
 
-  it("小说：九项一级导航 + 回收站 + 书名按钮（「码字统计」在参考资料之后）", () => {
+  it("小说：十项一级导航 + 回收站 + 书名按钮（「写作」在「大纲」之前，「码字统计」在参考资料之后）", () => {
     const novel = NAV_RAIL_BY_KIND.novel;
     expect(novel.items.map((item) => item.key)).toEqual([
+      "/writing",
       "/outline",
       "/characters",
       "/setting",
@@ -30,7 +31,11 @@ describe("NAV_RAIL_BY_KIND（kind → 左栏形态的唯一定义处）", () => 
       "/references",
       "/stats",
     ]);
-    // 「概览」不占一级导航位（入口 = 书名按钮）
+    // 「写作」= 一级页入口，排在大纲之前；「概览」不占一级导航位（入口 = 书名按钮）
+    expect(novel.items[0]?.label).toBe("写作");
+    expect(novel.items.map((item) => item.key).indexOf("/writing")).toBeLessThan(
+      novel.items.map((item) => item.key).indexOf("/outline"),
+    );
     expect(novel.items.map((item) => item.key)).not.toContain("/overview");
     expect(novel.items.map((item) => item.key)).not.toContain("/trash");
     expect(novel.brandLabel).toBe("书架");

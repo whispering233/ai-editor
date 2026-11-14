@@ -2,7 +2,8 @@
 // 解析 location.hash（形如 "#/outline"、"#/characters/char-abc"）为结构化路由。
 // 路由表见 （10 路由，一级化）：#/、#/overview、#/outline、#/outline/:nodeId、
 // #/characters[/:id]、#/setting[/:id]、#/locations[/:id]、#/relations、#/hooks[/:id]、
-// #/timeline、#/timeline/:id、#/timepoints/:id、#/references[/:id]、#/manuscript/:chapterId、#/stats、
+// #/timeline、#/timeline/:id、#/timepoints/:id、#/references[/:id]、
+// #/writing[/:chapterId]（写作页；旧章正文路由 #/manuscript/:chapterId 仍可用）、#/stats、
 // #/trash、#/preferences、
 // 练习工作区五页：#/author、#/works、#/style、#/practice[/:sampleId]、#/free[/:pieceId]
 // （工作区类型路由守卫见 lib/workspace-route-guard.ts——它由 main.tsx 在渲染前判定）
@@ -21,8 +22,10 @@ export interface Route {
  * 一级化后：characters/setting/locations/relations/timepoints/preferences 为新段；
  * practice = 练习工作区段（`#/practice` 列表 + `#/practice/:sampleId` 练习页）；
  * author/works/style/free = 练习工作区其余四页（`60-practice.md` §9）；
- * entities/settings 仍属已知段——仅作旧址重定向（main.tsx 处理），避免老书签被误判回退 */
+ * entities/settings 仍属已知段——仅作旧址重定向（main.tsx 处理），避免老书签被误判回退
+ * writing = 写作页一级段（`#/writing` 无选中章 + `#/writing/:chapterId` 章正文）。 */
 export const KNOWN_ROUTE_SEGMENTS = [
+  "writing",
   "outline",
   "overview",
   "entities",

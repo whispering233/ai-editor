@@ -1,7 +1,7 @@
 // 章视图（大纲页第二形态，2026-09）：平铺章列表——阅读序 = 卷序 → 卷内章序，行 = `第N卷` + `第N章`
 // 两枚编号徽标 + 标题 + 摘要 + 伏笔标记 + 推演节点徽标（只读）+ 正文字数 + 「写正文」入口 + 「阅读进度」徽标。
 // 本视图的两条**导航链接**：伏笔标记 → 该伏笔详情（`#/hooks/:id`，与树视图共用
-// `node-hook-badge`）；「写正文」= 指向 #/manuscript/:id 的链接（卡 12.5；2026-09 卡 18.2 由下划线文字改为行尾
+// `node-hook-badge`）；「写正文」= 指向 #/writing/:id 的链接（写作页为一级页；2026-09 卡 18.2 由下划线文字改为行尾
 // 图标按钮——给 antd `Button` 传 `href`，它渲染成 `<a>`：拿 `icon-button` 表皮的同时保住链接语义，
 // 也不破「本视图行内无操作按钮」的收窄）。
 // 交互有意收窄（契约见 `docs/ui/DESIGN.md`「大纲页双视图」）：**结构编辑只有两项——单击标题就地改名 +
@@ -167,7 +167,7 @@ export function ChapterView({
                   color="default"
                   variant="text"
                   size="small"
-                  href={`#/manuscript/${node.id}`}
+                  href={`#/writing/${node.id}`}
                   title="写正文"
                   aria-label="写正文"
                   icon={<EditOutlined className="text-sm" />}

@@ -242,9 +242,10 @@ export default function OutlineDetail({ nodeId }: { nodeId: string }) {
         truncateTitle
         action={
           <>
-            {/* 写正文（卡 12.5）：仅章节点（正文只挂章，卷/场景 → 端点 400，不留必定失败的入口） */}
+            {/* 写正文（卡 12.5）：仅章节点（正文只挂章，卷/场景 → 端点 400，不留必定失败的入口）；
+                入口指向写作页 #/writing/:id，`Button href` 渲染成 `<a>` ⇒ 保住导航链接语义（同章视图写正文按钮） */}
             {node?.type === "chapter" && (
-              <Button onClick={() => navigate(`/manuscript/${node.id}`)}>写正文</Button>
+              <Button href={`#/writing/${node.id}`}>写正文</Button>
             )}
             {/* S13.2 设为阅读进度（动作入口；状态徽标在元信息行）：已是阅读进度 → 禁用 + 「阅读进度」标记，
                 与 S13.1 前大纲页 disabled={isCurrent || busy} 语义一致；

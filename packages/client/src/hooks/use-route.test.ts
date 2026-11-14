@@ -53,6 +53,9 @@ describe("parseHashRoute", () => {
     ["#/timepoints/tp-abc", ["timepoints", "tp-abc"]],
     ["#/preferences", ["preferences"]],
     ["#/overview", ["overview"]],
+    // 写作页：无选中章 + 章正文两态（写作页 = 一级页，见 DESIGN.md `writing-page`）
+    ["#/writing", ["writing"]],
+    ["#/writing/ch-1", ["writing", "ch-1"]],
     ["#/entities/character", ["entities", "character"]], // 旧址：已知段，redirect 兜底
     ["#/settings", ["settings"]],
     ["#/practice", ["practice"]],

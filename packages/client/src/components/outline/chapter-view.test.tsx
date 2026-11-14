@@ -95,15 +95,15 @@ describe("ChapterView（章视图平铺列表）", () => {
     expect(html({ hookMarks: null })).not.toContain("埋设伏笔");
   });
 
-  it("「写正文」入口（卡 12.5 / 18.2）：每行一个 `EditOutlined` 图标按钮——antd `Button href` 渲染成 `<a>`，故仍是导航", () => {
+  it("「写正文」入口（卡 12.5 / 18.2 / writing-1）：每行一个 `EditOutlined` 图标按钮——antd `Button href` 渲染成 `<a>`，故仍是导航；目标 = 写作页 `#/writing/:id`", () => {
     const out = html();
-    expect(out).toContain('href="#/manuscript/ch-1"');
-    expect(out).toContain('href="#/manuscript/ch-2"');
-    expect(out).toContain('href="#/manuscript/ch-9"');
+    expect(out).toContain('href="#/writing/ch-1"');
+    expect(out).toContain('href="#/writing/ch-2"');
+    expect(out).toContain('href="#/writing/ch-9"');
     expect(out.split('aria-label="写正文"')).toHaveLength(4); // 每行一个（split 段数 = 出现数 + 1）
     expect(out.split('title="写正文"')).toHaveLength(4);
     expect(out).not.toContain(">写正文<"); // 文案不再落可见文本（改由 title / aria-label 承载）
-    expect(out.split('<a href="#/manuscript/')).toHaveLength(4); // 三个链接（段数 = 出现数 + 1）
+    expect(out.split('<a href="#/writing/')).toHaveLength(4); // 三个链接（段数 = 出现数 + 1）
     expect(out).toContain("ant-btn-variant-text"); // 走 icon-button 表皮（antd 的 text 变体）
   });
 

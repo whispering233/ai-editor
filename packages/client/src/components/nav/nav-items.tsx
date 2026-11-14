@@ -50,6 +50,8 @@ export const NAV_RAIL_BY_KIND: Record<WorkspaceKind, NavRailSpec> = {
   novel: {
     brandLabel: "书架",
     items: [
+      // 「写作」排在「大纲」之前（写作页 = 一级页，见 DESIGN.md `writing-page`）
+      { key: "/writing", icon: <EditOutlined />, label: "写作" },
       { key: "/outline", icon: <ApartmentOutlined />, label: "大纲" },
       { key: "/characters", icon: <TeamOutlined />, label: "人物" },
       { key: "/setting", icon: <TagsOutlined />, label: "设定" },

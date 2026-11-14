@@ -22,6 +22,7 @@ import TimelineDetail from "./pages/TimelineDetail";
 import ReferenceList from "./pages/ReferenceList";
 import ReferenceDetail from "./pages/ReferenceDetail";
 import Manuscript from "./pages/Manuscript";
+import Writing from "./pages/Writing";
 import WritingStats from "./pages/WritingStats";
 import AuthorIntro from "./pages/AuthorIntro";
 import Works from "./pages/Works";
@@ -134,8 +135,19 @@ function renderPage(route: Route): ReactNode {
       ) : (
         <ReferenceList />
       );
+    case "writing":
+      // 写作页（2026-11）：#/writing = 页面壳（本卡为无选中章空态）；#/writing/:chapterId = 章正文；
+      // 更深段归一回 #/writing。**页面不挂 key**——换章只重挂编辑器子树（Writing 内对 ChapterEditor 挂 key），
+      // 以便后续卡的卷章导航栏 / 页面状态不随换章重挂
+      if (second === undefined) return <Writing />;
+      return third === undefined ? (
+        <Writing chapterId={second} />
+      ) : (
+        <RedirectTo to="/writing" />
+      );
     case "manuscript":
-      // 章正文页（卡 12.5）：#/manuscript/:chapterId——缺章 id 或多余段归一回大纲页
+      // 旧章正文页（卡 12.5）：#/manuscript/:chapterId——缺章 id 或多余段归一回大纲页。
+      // 写正文入口已改指 #/writing/:chapterId；本段保留可用（旧书签），重定向留待后续卡
       // （key = chapterId 变化强制卸载重挂：正文按章重置、在途自动保存 flush）
       return second !== undefined && third === undefined ? (
         <Manuscript key={second} chapterId={second} />

@@ -1,5 +1,5 @@
-// 章正文页（卡 12.5）：路由 #/manuscript/:chapterId（入口 = 大纲页章视图行「写正文」、
-// #/outline/:ch-* 详情页「写正文」）。页面本身只是薄壳：负责大纲树的按页加载，正文的一切
+// 章正文页（卡 12.5）：路由 #/manuscript/:chapterId。写正文入口已改指写作页 `#/writing/:chapterId`，
+// 本页仅保留旧书签可用；页面本身只是薄壳：负责大纲树的按页加载，正文的一切
 // （加载 / 自动保存 / 冲突 / 导入导出 / 专注 / 页头 / 工具条 / 字数与保存态）都在
 // `components/manuscript/chapter-editor.tsx`。契约：docs/api/110-api-manuscript.md、
 // docs/ui/DESIGN.md §Layout「页头常驻」；设计语义见 design/10-data-model.md §13。

@@ -15,6 +15,7 @@ import type {
   ProjectConfig,
 } from "@whispering233/ai-editor-shared";
 import Outline from "./Outline";
+import OutlineDetail from "./OutlineDetail";
 import { useProjectStore } from "../stores/project";
 
 const chapter = (id: string, title: string, children?: OutlineScene[]): OutlineChapter => ({
@@ -127,5 +128,31 @@ describe("大纲页树视图：推演节点徽标", () => {
     expect(deduction).toBeGreaterThan(-1);
     expect(current).toBeGreaterThan(-1);
     expect(deduction).toBeLessThan(current);
+  });
+});
+
+// 写正文入口迁移（writing-1）：详情页是章正文的另一个入口，写作页为一级页后目标改指 `#/writing/:id`。
+// 写法 = `Button href`（antd 渲染成 `<a>`）⇒ SSR 可直接断言目标；卷节点仍不给入口（正文只挂章）。
+describe("大纲节点详情页：写正文入口指向写作页", () => {
+  function renderDetail(nodeId: string): string {
+    Object.assign(useProjectStore.getInitialState(), {
+      config: CONFIG,
+      outline: OUTLINE,
+      configLoading: false,
+      outlineLoading: false,
+      outlineWithMetadata: true,
+    });
+    return renderToString(<OutlineDetail nodeId={nodeId} />).replace(/<!--[^>]*-->/g, "");
+  }
+
+  it("章节点：「写正文」= 导航链接，目标 #/writing/:id（不再指旧 #/manuscript/:id）", () => {
+    const html = renderDetail("ch-1");
+    expect(html).toContain("写正文");
+    expect(html).toContain('href="#/writing/ch-1"');
+    expect(html).not.toContain("#/manuscript/");
+  });
+
+  it("卷节点：不渲染「写正文」（正文只挂章，不留必定 400 的入口）", () => {
+    expect(renderDetail("vol-1")).not.toContain("写正文");
   });
 });
