@@ -531,6 +531,10 @@
 
 多标签页并发、undo、token 统计、跨书参考资料导入——为 MVP 边界，实现前需先改产品口径（见 `00-master-design.md`）。**正文侧的「多标签页并发」已有局部防守**：块文档保存携带 `base_updated_at`，不一致回 409 `DOCUMENT_STALE`（防覆盖，不做协同合并）。**「token 统计」的会话级用量已随状态栏落地**（占用 / 费用 / 解码速度 / 缓存命中率 / 累计 tokens），仍未做的是聚合与审计面（会话列表成本列、全库汇总——见「会话状态栏的延期项」）。
 
+- **外壳分栏的「双竖线」（2026-11 写作页验收时登记）**
+  - 现状：左栏 `NavRail` 自带 `border-r`，紧邻的 6px 拖拽手柄另有 1px 中线 ⇒ 交界处出现两条相距约 3.5px 的竖线（右栏同理）。写作页的卷章导航栏已按 `DESIGN.md` 收为**只有手柄中线**一条；外壳两栏仍是旧观感。
+  - 触发条件：下次统一外壳分栏视觉时（或有人报告线条显得脏）⇒ 删 `NavRail` / `ChatPanel` 的 `border-r` / `border-l`，由手柄中线与收起窄条承担边界；届时同步核对 `DESIGN.md` §Layout「分栏之间靠 1px hairline」措辞。
+
 ## 有意保留（非待办，仅登记）
 
 - **`PROVIDER_ICONS` 里的「非内置家」品牌映射（2026-09 pi 升级 oracle 复核后登记，**不是死键**）** — 现状：映射表 41 键里有 6 个（`moonshot` / `qwen` / `zhipu` / `cohere` / `perplexity` / `grok`）不是 pi 内置 provider id——逐版核对 0.74.2 / 0.80.5 / 0.85.1 / 0.87.1 / 1.0.4 / 1.3.0 都没有这些 id（1.3.0 实测目录 43 个 provider id，旧版里 `qwen` 的命中是 `thinkingFormat: "qwen"` 兼容标记，不是 provider）。它们随 `7288288` 从 pi-web 的同名表**整体搬入**（与该 svg 精灵一起，这 6 个 symbol 都在 `provider-icons.svg` 里）。**上游已核实（2026-10-08）**：`agegr/pi-web`（本机克隆 `~/projects/pi-web`，v0.9.1 / `8366762`）的 `components/ProviderIcon.tsx` —— 两表各 41 键、symbol 与 color **零差异**（唯一差别就是本卡的 `azure` 改名），且 `public/provider-icons.svg` 与本仓**逐字节相同（md5 `f19b29d3…`）**；pi-web 自己的 provider 列表同样来自 pi SDK（`lib/provider-listing-runtime.ts` 的 `modelRuntime.getProviders()`）并同样支持自定义 `models.json` 家 ⇒ 这 6 个在两边都是同一种东西，不是搬错的遗留。**为什么要留着**：provider 列表是数据驱动的（`modelRuntime.getProviders()`，无白名单），自定义 `models.json` 家（id 由用户起）同样走 `providerIcon(id)` ⇒ 自建一个叫 `cohere` / `grok` 的家能拿到正确品牌图标。本次升级只改了真被改名的 `azure-openai-responses` → `azure`（0.87.1 → 1.0.4 目录里被删/改名的 provider 仅此一个）。**别当死代码删**。
