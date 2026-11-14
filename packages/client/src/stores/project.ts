@@ -35,6 +35,8 @@ interface ProjectState {
  /** 大纲树（GET /outline）；null = 未加载/加载失败 */
   outline: OutlineTree | null;
   outlineLoading: boolean;
+ /** 最近一次大纲加载的错误码（null = 未加载/加载中/成功）——页面据此区分「首帧 / 加载中」与「失败」 */
+  outlineError: string | null;
  /** 当前树是否带联查统计（loadOutline 的 withMetadata 口径）——展示字数的页面据此判断要不要补拉 */
   outlineWithMetadata: boolean;
  /** 书架（GET /project/list）；null = 未加载/加载失败 */
@@ -81,6 +83,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
   loadError: null,
   outline: null,
   outlineLoading: false,
+  outlineError: null,
   outlineWithMetadata: false,
   bookshelf: null,
   bookshelfLoading: false,
@@ -124,12 +127,16 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
     if (get().outlineLoading) return;
     // withMetadata 按页开启（卡 12.5）：带 stats 的树供大纲页/章详情页展示章的 textLength
     const withMetadata = options?.withMetadata === true;
-    set({ outlineLoading: true });
+    set({ outlineLoading: true, outlineError: null });
     try {
       const outline = await getOutline({ withMetadata });
-      set({ outline, outlineWithMetadata: withMetadata });
-    } catch {
-      set({ outline: null, outlineWithMetadata: false });
+      set({ outline, outlineWithMetadata: withMetadata, outlineError: null });
+    } catch (err) {
+      set({
+        outline: null,
+        outlineWithMetadata: false,
+        outlineError: err instanceof ApiError ? err.code : "CLIENT_NETWORK_ERROR",
+      });
     } finally {
       set({ outlineLoading: false });
     }
@@ -188,6 +195,7 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
       config: null,
       loadError: null,
       outline: null,
+      outlineError: null,
       outlineWithMetadata: false,
       agents: null,
       agentsProjectId: null,

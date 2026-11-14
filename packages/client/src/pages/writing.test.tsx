@@ -1,27 +1,33 @@
 // 写作页（`#/writing` / `#/writing/:chapterId`）SSR 走查（仓内无 jsdom，同 pages/practice.test.tsx 惯例）。
 // 契约 = docs/ui/DESIGN.md `writing-page` + §Layout「写作页的中栏内分栏」「页头常驻」。
 //
-// 本卡（writing-1）只落导航 / 路由 / 页面壳：断言外壳几何 + 无 id 空态 + 有 id 渲染章正文编辑面板。
-// rail（卷章导航栏）/ 最近导航 / 宽度拖拽由后续卡接线，故这里还钉一条否定契约：页面**不渲染**空白 rail 占位。
+// writing-2 起本页 = rail（固定 240px）+ 正文列；窄屏两级互斥、专注模式隐藏 rail / 返回条。
+// `useMediaQuery` 的 useState 初始化器读 `window.matchMedia`，SSR 下直接跑会崩 ⇒ 用 `vi.hoisted`
+// 变量 mock（浏览器行为不变；测试只切 desktop / narrow 两态）。
 // 有 id 的用例在 SSR 下不跑 effect ⇒ 只有编辑面板的加载骨架（不发请求）。
 import { renderToString } from "react-dom/server";
-import { describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type {
   OutlineChapter,
-  OutlineScene,
   OutlineTree,
   OutlineVolume,
   ProjectConfig,
 } from "@whispering233/ai-editor-shared";
 import Writing from "./Writing";
 import { useProjectStore } from "../stores/project";
+import { useUiStore } from "../stores/ui";
 
-const chapter = (id: string, title: string, children?: OutlineScene[]): OutlineChapter => ({
+const media = vi.hoisted(() => ({ desktop: true }));
+vi.mock("../hooks/use-media-query", () => ({
+  useMediaQuery: () => media.desktop,
+}));
+
+const chapter = (id: string, title: string, textLength?: number): OutlineChapter => ({
   id,
   type: "chapter",
   title,
   updatedAt: "t",
-  children,
+  ...(textLength === undefined ? {} : { metadata: { textLength } }),
 });
 const volume = (id: string, title: string, children: OutlineChapter[]): OutlineVolume => ({
   id,
@@ -37,9 +43,19 @@ const OUTLINE: OutlineTree = {
   type: "root",
   schemaVersion: 1,
   children: [
-    volume("vol-1", "第一卷", [chapter("ch-1", "雪夜出走"), chapter("ch-2", "旧盟友")]),
+    volume("vol-1", "第一卷", [
+      chapter("ch-1", "雪夜出走", 1200),
+      chapter("ch-2", "旧盟友"),
+    ]),
     volume("vol-2", "第二卷", [chapter("ch-3", "入城")]),
   ],
+};
+
+const EMPTY_OUTLINE: OutlineTree = {
+  id: "root",
+  type: "root",
+  schemaVersion: 1,
+  children: [],
 };
 
 const CONFIG: ProjectConfig = {
@@ -56,48 +72,212 @@ const CONFIG: ProjectConfig = {
   updatedAt: "t",
 };
 
+interface RenderOptions {
+  chapterId?: string;
+  outline?: OutlineTree | null;
+  outlineLoading?: boolean;
+  outlineError?: string | null;
+  focusMode?: boolean;
+  desktop?: boolean;
+}
+
 /**
  * SSR 预置 store：zustand 的服务端快照取 `getInitialState()`（不是 `getState()`）——`setState` 对
  * `renderToString` 无效，故本用例直接往初始 state 对象（`getInitialState()` 返回的就是它）上写。
  */
-function render(props: { chapterId?: string } = {}): string {
+function render({
+  chapterId,
+  outline = OUTLINE,
+  outlineLoading = false,
+  outlineError = null,
+  focusMode = false,
+  desktop = true,
+}: RenderOptions = {}): string {
+  media.desktop = desktop;
   Object.assign(useProjectStore.getInitialState(), {
     config: CONFIG,
-    outline: OUTLINE,
+    outline,
+    outlineError,
     configLoading: false,
-    outlineLoading: false,
-    outlineWithMetadata: true,
+    outlineLoading,
+    outlineWithMetadata: outline !== null,
   });
-  return renderToString(<Writing {...props} />).replace(/<!--[^>]*-->/g, "");
+  Object.assign(useUiStore.getInitialState(), { focusMode });
+  return renderToString(<Writing chapterId={chapterId} />).replace(/<!--[^>]*-->/g, "");
 }
 
-describe("写作页外壳（writing-1：导航 / 路由 / 页面壳）", () => {
-  it("全高分栏外壳（抵消中栏 p-6）+ 正文列吸收全部宽度——本卡不渲染 rail 占位", () => {
+beforeEach(() => {
+  media.desktop = true;
+});
+
+afterEach(() => {
+  media.desktop = true;
+  Object.assign(useProjectStore.getInitialState(), {
+    config: null,
+    outline: null,
+    outlineError: null,
+    outlineLoading: false,
+    outlineWithMetadata: false,
+  });
+  Object.assign(useUiStore.getInitialState(), { focusMode: false });
+});
+
+describe("写作页 · 桌面（rail + 正文列）", () => {
+  it("全高分栏外壳（抵消中栏 p-6）+ rail 240px + 正文列吸收剩余宽度", () => {
     const html = render();
     expect(html).toContain("-m-6 flex h-[calc(100%+3rem)] min-h-0 overflow-hidden");
     expect(html).toContain("flex min-h-0 min-w-0 flex-1 flex-col p-6");
-    // rail 未建（writing-2）：页面不得先摆一个空白栏
-    expect(html).not.toContain("卷章");
-    expect(html).not.toContain("aria-label=\"调整卷章导航栏宽度\"");
+    expect(html).toContain("w-60");
+    expect(html).toContain(">卷章<");
+    expect(html).toContain("第1卷");
+    expect(html).toContain("第1章");
+    expect(html).toContain("2章");
+    // 2b 才加宽度手柄 / 收起按钮
+    expect(html).not.toContain("调整卷章导航栏宽度");
+    expect(html).not.toContain('aria-label="收起"');
   });
 
-  it("无 id：page-title「写作」+ 空态文案 + 「去大纲」导航链接（不在此页新建）", () => {
+  it("无 id：page-title「写作」+「从左侧选择一章开始写作」（不落空态）", () => {
     const html = render();
-    expect(html).toContain(">写作</");
-    expect(html).toContain("从大纲选择一章开始写作");
-    expect(html).toContain('href="#/outline"');
-    expect(html).toContain("去大纲");
-    // 页头常驻模板：页头 + 内容进内层可滚容器
-    expect(html).toContain("flex h-full min-h-0 flex-col");
-    expect(html).toContain("flex min-h-0 flex-1 flex-col overflow-y-auto");
+    expect(html).toContain(">写作<");
+    expect(html).toContain("从左侧选择一章开始写作");
+    expect(html).not.toContain("还没有章节");
+    expect(html).not.toContain("章节目录");
   });
 
-  it("有 id：渲染章正文编辑面板（章标题 + 加载骨架 + 上/下一章），不落空态", () => {
+  it("无章（rows 为空）：空态「还没有章节」+「去大纲新建第一卷」导航链接", () => {
+    const html = render({ outline: EMPTY_OUTLINE });
+    expect(html).toContain(">写作<");
+    expect(html).toContain("还没有章节");
+    expect(html).toContain("去大纲新建第一卷");
+    expect(html).toContain('href="#/outline"');
+    expect(html).not.toContain("从左侧选择一章开始写作");
+  });
+
+  it("只有 0 章卷：卷行存在但没有章行，仍走无章空态（不误判为「有章待选」）", () => {
+    const html = render({
+      outline: {
+        id: "root",
+        type: "root",
+        schemaVersion: 1,
+        children: [volume("vol-empty", "空卷", [])],
+      },
+    });
+    expect(html).toContain("还没有章节");
+    expect(html).toContain("去大纲新建第一卷");
+    expect(html).not.toContain("从左侧选择一章开始写作");
+  });
+
+  it("有 id：rail 选中行 aria-current + 章正文编辑面板（章标题 / 加载骨架 / 上下一章）", () => {
     const html = render({ chapterId: "ch-2" });
-    expect(html).toContain(">旧盟友</"); // 章标题取自大纲树
+    expect(html).toContain('href="#/writing/ch-2"');
+    expect(html).toContain('aria-current="page"');
+    expect(html).toContain("1.2 千字"); // rail 字数取 metadata.textLength
+    expect(html).toContain(">旧盟友</");
     expect(html).toContain("上一章");
     expect(html).toContain("下一章");
     expect(html).toContain("h-5"); // 正文加载骨架（SSR 不跑 effect，拿不到正文）
-    expect(html).not.toContain("从大纲选择一章开始写作");
+    expect(html).not.toContain("从左侧选择一章开始写作");
+  });
+});
+
+describe("写作页 · 窄屏两级互斥（<1024px）", () => {
+  it("无 id：只渲染 rail 全宽（无正文、无「写作」页头）", () => {
+    const html = render({ desktop: false });
+    expect(html).toContain("w-full");
+    expect(html).toContain("border-r-0");
+    expect(html).toContain(">卷章<");
+    expect(html).not.toContain(">写作<");
+    expect(html).not.toContain("从左侧选择一章开始写作");
+    expect(html).not.toContain("章节目录");
+  });
+
+  it("有 id：正文全宽 + 顶部「章节目录」返回条（无 rail）", () => {
+    const html = render({ desktop: false, chapterId: "ch-1" });
+    expect(html).not.toContain(">卷章<");
+    expect(html).not.toContain("w-60");
+    expect(html).toContain("章节目录");
+    expect(html).toContain('href="#/writing"');
+    expect(html).toContain(">雪夜出走</");
+  });
+});
+
+describe("写作页 · 专注模式", () => {
+  it("桌面：rail 不渲染，正文独占（无「章节目录」返回条）", () => {
+    const html = render({ focusMode: true, chapterId: "ch-1" });
+    expect(html).not.toContain(">卷章<");
+    expect(html).not.toContain('aria-label="卷章导航栏"');
+    expect(html).not.toContain("章节目录");
+    expect(html).toContain("h-5");
+  });
+
+  it("窄屏：rail 与「章节目录」返回条都不渲染，正文独占", () => {
+    const html = render({ focusMode: true, desktop: false, chapterId: "ch-1" });
+    expect(html).not.toContain(">卷章<");
+    expect(html).not.toContain("章节目录");
+    expect(html).toContain("h-5");
+  });
+});
+
+describe("写作页 · 错误态", () => {
+  it("大纲已加载但 chapterId 不在可见大纲：错误条 + 返回章节目录，不渲染编辑器、不自动回退", () => {
+    const html = render({ chapterId: "ch-missing" });
+    expect(html).toContain("章节不存在或已删除");
+    expect(html).toContain('href="#/writing"');
+    expect(html).toContain("返回章节目录");
+    expect(html).not.toContain("上一章");
+    expect(html).not.toContain("下一章");
+  });
+
+  it("有 id 但大纲未就绪：正文只给骨架，不先挂编辑器（坏 chapterId 不先发 404）", () => {
+    const html = render({ chapterId: "no-such-chapter", outline: null, outlineLoading: true });
+    expect(html).toContain("animate-pulse");
+    expect(html).not.toContain("章节不存在或已删除");
+    expect(html).not.toContain("上一章");
+    expect(html).not.toContain("下一章");
+  });
+
+  it("大纲失败且有 id：正文只给错误条 + 重试，不挂编辑器", () => {
+    const html = render({
+      chapterId: "ch-1",
+      outline: null,
+      outlineError: "CLIENT_NETWORK_ERROR",
+    });
+    expect(html).toContain("大纲加载失败");
+    expect(html).toMatch(/重\s*试/);
+    expect(html).not.toContain("上一章");
+    expect(html).not.toContain("下一章");
+  });
+
+  it("大纲加载中：rail 骨架、正文列不出错误；首帧（error 为 null）同样不误报", () => {
+    const loading = render({ outline: null, outlineLoading: true });
+    expect(loading).toContain("animate-pulse");
+    expect(loading).not.toContain("大纲加载失败");
+
+    const firstFrame = render({ outline: null, outlineLoading: false });
+    expect(firstFrame).toContain("animate-pulse");
+    expect(firstFrame).not.toContain("大纲加载失败");
+
+    const failed = render({
+      outline: null,
+      outlineLoading: false,
+      outlineError: "CLIENT_NETWORK_ERROR",
+    });
+    expect(failed).toContain("animate-pulse");
+    expect(failed).toContain("大纲加载失败");
+    expect(failed).toMatch(/重\s*试/);
+    expect(failed).not.toContain("还没有章节");
+  });
+
+  it("窄屏目录页：大纲失败在 rail 内给错误 + 重试（没有正文列可挂错误条）", () => {
+    const html = render({
+      desktop: false,
+      outline: null,
+      outlineLoading: false,
+      outlineError: "CLIENT_NETWORK_ERROR",
+    });
+    expect(html).toContain("大纲加载失败");
+    expect(html).toMatch(/重\s*试/);
+    expect(html).not.toContain("animate-pulse");
   });
 });

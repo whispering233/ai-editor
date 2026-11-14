@@ -72,6 +72,7 @@ afterEach(() => {
     bookshelf: null,
     bookshelfLoading: false,
     bookshelfError: null,
+    outlineError: null,
     agents: null,
     agentsProjectId: null,
     agentsLoading: false,
@@ -142,6 +143,7 @@ describe("loadOutline 的 withMetadata 口径（卡 12.5：统计按页开启）
     await useProjectStore.getState().loadOutline();
     expect(mocked.getOutline).toHaveBeenCalledWith({ withMetadata: false });
     expect(useProjectStore.getState().outlineWithMetadata).toBe(false);
+    expect(useProjectStore.getState().outlineError).toBeNull();
   });
 
   it("页面传 withMetadata:true → 带统计拉取，标记落 true（返回后本页不再重拉）", async () => {
@@ -153,13 +155,28 @@ describe("loadOutline 的 withMetadata 口径（卡 12.5：统计按页开启）
     expect(useProjectStore.getState().outlineWithMetadata).toBe(true);
   });
 
-  it("加载失败：树置空且统计标记回落 false（下次进页重拉）", async () => {
+  it("加载失败：树置空、统计标记回落 false、错误码落 outlineError（下次进页可重试）", async () => {
     mocked.getOutline.mockResolvedValue(emptyTree);
     await useProjectStore.getState().loadOutline({ withMetadata: true });
     mocked.getOutline.mockRejectedValue(new ApiError("CLIENT_NETWORK_ERROR", "网络请求失败"));
     await useProjectStore.getState().loadOutline();
     expect(useProjectStore.getState().outline).toBeNull();
     expect(useProjectStore.getState().outlineWithMetadata).toBe(false);
+    expect(useProjectStore.getState().outlineError).toBe("CLIENT_NETWORK_ERROR");
+  });
+
+  it("重试开始即清错（错误条不等到请求落地才消失）", async () => {
+    useProjectStore.setState({ outline: null, outlineError: "CLIENT_NETWORK_ERROR" });
+    let resolveOutline!: (value: typeof emptyTree) => void;
+    mocked.getOutline.mockReturnValue(
+      new Promise<typeof emptyTree>((resolve) => {
+        resolveOutline = resolve;
+      }),
+    );
+    const loading = useProjectStore.getState().loadOutline({ withMetadata: true });
+    expect(useProjectStore.getState().outlineError).toBeNull();
+    resolveOutline(emptyTree);
+    await loading;
   });
 });
 
