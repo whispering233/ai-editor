@@ -10,27 +10,6 @@
 
 ## 当前任务卡
 
-### writing-2b-rail-resize — 卷章导航栏宽度拖拽与收起
-
-**状态**：待执行
-**依赖**：writing-2；排期在 writing-3 之后（同改 `Writing.tsx`）
-**范围**：抽 `AppShell` 的 `ResizeHandle` / `CollapseStrip` 到 `components/ui/`；新建 `hooks/use-writing-rail.ts`；`chapter-rail.tsx` header 加收起、右侧加手柄；`Writing.tsx` 接 `railWidth` / `collapsed`；**不改选章 / 折叠 / 窄屏 / 专注语义**，不改服务端。
-
-**改动**
-- 抽 `AppShell.tsx` 的 `ResizeHandle` / `CollapseStrip` 到 `components/ui/resize-handle.tsx` / `collapse-strip.tsx` 并参数化（手柄 `label` / `active` / `onStart` / `onMove` / `onEnd`，窄条 `side: "left" | "right"` / `label` / `onExpand`）；`AppShell` 两处改用，视觉不变；写作页复用同一对。
-- `hooks/use-writing-rail.ts`：默认 240、区间 200–480（复用 `use-panels.ts` 的 `clampPanelWidth`）、`collapsed`；`localStorage` `ai-editor:writing-rail` `{ width, collapsed }`（全局一份）；拖动只改内存、`pointerup` 一次写，收起 / 展开立即写；坏值整体回默认、`collapsed` 仅严格 `true`；导出纯函数 `defaultWritingRailLayout` / `parseWritingRailLayout`。
-- `chapter-rail.tsx`：header 右侧加收起 `icon-button` `DoubleLeftOutlined`；右侧 6px 手柄（`role="separator"` + `aria-label`，1px 中线常显、hover / 拖拽高亮）；拖拽中页面 `select-none`；**收起态不渲染手柄**。
-- `Writing.tsx`：桌面展开 = `railWidth` + 手柄 + 正文列；收起 = 32px `CollapseStrip`（`DoubleRightOutlined`、`bg-sidebar`、右边线）+ 正文列；宽度保留、展开恢复原宽；窄屏（<1024）无手柄 / 收起，rail 全宽；专注模式不渲染 rail / 窄条。
-- 测试：`hooks/use-writing-rail.test.ts`（纯函数 `defaultWritingRailLayout` / `parseWritingRailLayout` / `clampPanelWidth` 的默认、夹取、坏值、`collapsed` 严格 `true`；hook 本体依赖 window，node 环境不渲染，同 `use-panels.test.ts`）；`pages/writing.test.tsx` 增「收起态渲染窄条 / 展开态渲染手柄与收起按钮」；**否定契约**：窄屏不渲染手柄 / 收起，专注不渲染 rail / 窄条。
-
-**硬完成判据**
-- 1920/1440：默认 240；可拖到 200/480 并夹取；收起为 32px 窄条、展开恢复原宽；刷新后宽度 / 收起态保留；无横向溢出。
-- 760：无手柄 / 收起，rail 全宽。
-- 专注模式 rail / 窄条都不渲染；正文吸收剩余宽度。
-- `pnpm --filter @whispering233/ai-editor-client test`、`pnpm typecheck`、`pnpm lint` 全绿。
-- 浏览器验收（独立 `ui-verifier`，≤6 项）：默认 240、拖到 200/480、收起 / 展开 / 刷新保留、窄屏无手柄、专注。
-- 新 commit + `git status` 干净；汇报 hash/输出。
-
 ### writing-4-remove-chapter-view — 删章视图与旧路由收口
 
 **状态**：待执行
