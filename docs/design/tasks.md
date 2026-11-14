@@ -10,7 +10,23 @@
 
 ## 当前任务卡
 
-（当前无未完成任务卡。）
+### stats-4-calendar-header — 修宽中栏月历标题竖排
+
+**状态**：待执行
+**依赖**：无（`stats-2-page` 已落地）
+**范围**：仅 `packages/client/src/components/stats/month-calendar.tsx` 的头部布局与对应 SSR 断言；不动页面其余布局、热力色阶、服务端/统计口径。
+
+**改动**
+- 标题行只保留 `SectionCard` 标题「码字日历」+ 右侧「今天」按钮。
+- 月份切换移到标题行下方的新导航行：左右箭头分别贴左/右，当前月份文本居中（`justify-between`）。
+- 保留现有 aria-label / title（上个月/下个月）、`今天` 行为、月份切换与选日逻辑。
+- 320px 月历卡内标题保持单行，不再被月份控件挤成竖排。
+
+**硬完成判据**
+- 新增/修改代码只落在上述范围；SSR 测试覆盖“标题、今天、翻月入口仍在”。
+- `pnpm --filter @whispering233/ai-editor-client test`、`pnpm typecheck`、`pnpm lint` 全绿。
+- 产出新 commit（`git log -1` 可查）、`git status` 干净；汇报附 commit hash 与命令输出。
+- 浏览器验收另由 `ui-verifier` 执行：1920×1080 宽中栏标题单行、今天/翻月/选日可用；1440 与 760 回归；浅/深色无回归。
 
 ---
 
