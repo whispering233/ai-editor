@@ -1,7 +1,7 @@
 // 码字日历（月历，DESIGN.md「码字统计页」→「码字日历（月历）」）：
 // 7 列、周一起始；每格 = 日号 + 仅正字数时显示当日字数；点格选中日期；标题行 = 今天，下一行 = 翻月导航。
 // 栅格固定 `MONTH_CALENDAR_WEEKS` 周：`monthMatrix` 返回 4–6 行，尾部补空位到 `MONTH_CALENDAR_WEEKS × WRITING_STATS_WEEKDAYS.length` 格，翻月时卡高不变。
-// 月矩阵 / 千分位取 `lib/writing-stats.ts`；月合计 / 活跃天数按真实日格累计。
+// 月矩阵 / 月合计 / 活跃天数 / 千分位都取 `lib/writing-stats.ts`，组件不重复写派生。
 import { Button } from "antd";
 import { LeftOutlined, RightOutlined } from "@ant-design/icons";
 import { cn } from "../../lib/utils";
@@ -12,6 +12,7 @@ import {
   formatChars,
   monthLabel,
   monthMatrix,
+  monthSummary,
   parseDateKey,
   WRITING_STATS_WEEKDAYS,
 } from "../../lib/writing-stats";
@@ -51,15 +52,7 @@ export function MonthCalendar({
       () => null,
     ),
   ];
-  let monthChars = 0;
-  let activeDays = 0;
-  for (const cell of cells) {
-    const chars = cell === null ? 0 : (charsByDate.get(cell) ?? 0);
-    if (chars > 0) {
-      monthChars += chars;
-      activeDays += 1;
-    }
-  }
+  const { chars: monthChars, activeDays } = monthSummary(charsByDate, year, monthIndex);
   const selectedChars = charsByDate.get(selectedDate) ?? 0;
   const shiftMonth = (delta: number) => {
     const next = addMonths(year, monthIndex, delta);

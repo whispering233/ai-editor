@@ -25,7 +25,9 @@
 
 ### Changed
 
-- **章正文保存的副作用**：`PUT /api/v1/manuscript/:nodeId` 在写出正文后按 `content_text` 长度正差累计当日码字统计（best-effort，统计失败不回滚正文、不改变响应）；正文保存仍不产生 Delta、不推进 `current_position`。
+- **码字统计页视觉收口**：年度热力改用 GitHub 绿色阶（浅色浅 → 深，深色低档暗 → 高档亮）；月历头部改为「标题 + 今天」与「翻月导航 + 月份」两行，窄卡内标题不再被月份控件挤成竖排。
+
+- **章正文保存的副作用**：`PUT /api/v1/manuscript/:chapterNodeId` 在写出正文后按 `content_text` 长度正差累计当日码字统计（best-effort，统计失败不回滚正文、不改变响应）；正文保存仍不产生 Delta、不推进 `current_position`。
 
 - **数据库 schema 升到 v14**：新增 `writing_stats_daily` 表与 `014_writing_stats` 迁移；旧项目打开时自动升级。统计从升级后开始累计，不回溯历史正文。
 

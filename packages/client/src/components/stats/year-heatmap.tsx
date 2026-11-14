@@ -23,8 +23,6 @@ const HEAT_CELL_CLASS: Record<WritingHeatLevel, string> = {
   4: "bg-heat-4",
 };
 
-const HEAT_LEVELS: readonly WritingHeatLevel[] = WRITING_HEAT_LEVELS;
-
 export interface YearHeatmapProps {
   /** 日键 → 当日字数 */
   charsByDate: ReadonlyMap<string, number>;
@@ -77,7 +75,7 @@ export function YearHeatmap({ charsByDate, today, selectedDate, onSelectDate }: 
 
       <div className="mt-3 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
         <span>少</span>
-        {HEAT_LEVELS.map((level) => (
+        {WRITING_HEAT_LEVELS.map((level) => (
           <span key={level} className={cn("h-2.5 w-2.5 rounded-sm", HEAT_CELL_CLASS[level])} />
         ))}
         <span>多</span>

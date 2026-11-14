@@ -324,8 +324,6 @@ components:
 - **浅色 `heat-1..4`**（`#9be9a8` / `#40c463` / `#30a14e` / `#216e39`）：GitHub 贡献图的浅 → 深绿阶；**深色 `heat-1..4`**（`#0e4429` / `#006d32` / `#26a641` / `#39d353`）：GitHub 深色贡献图（低档暗、高档亮，保证深底可辨）。0 档 = `{colors.surface-muted}`。
 - **只用于码字热力图块**，不参与状态语义、文字与其他图表；值唯一定义在 `index.css` 的 `--heat-*` 段（同 tint 口径，不散落调用点）。
 
-### 交互与语义
-
 ### antd 实现映射（seed token，唯一改色入口）
 
 改色只改 `packages/client/src/components/AntdProvider.tsx` 的 theme 对象；其余色阶由 light/dark 算法派生。
