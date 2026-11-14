@@ -41,13 +41,13 @@ describe("年度热力", () => {
     expect(html).toContain("overflow-x-auto");
   });
 
-  it("0 档 = surface-muted（bg-accent）；正档由 bg-primary 透明度派生；选中格有描边", () => {
+  it("0 档 = surface-muted（bg-accent）；正档用 GitHub 绿阶 heat-1..4；选中格有描边", () => {
     const html = renderHeatmap("2026-11-15");
     expect(html).toContain("bg-accent");
-    expect(html).toContain("bg-primary/20");
-    expect(html).toContain("bg-primary/40");
-    expect(html).toContain("bg-primary/60");
-    expect(html).toContain("bg-primary/80");
-    expect(html).toMatch(/bg-primary\/80[^"]*ring-1 ring-primary/);
+    expect(html).toContain("bg-heat-1");
+    expect(html).toContain("bg-heat-2");
+    expect(html).toContain("bg-heat-3");
+    expect(html).toContain("bg-heat-4");
+    expect(html).toMatch(/bg-heat-4[^"]*ring-1 ring-primary/);
   });
 });

@@ -65,6 +65,11 @@
   --color-tag-sky: var(--tag-sky);
   --color-tag-sage: var(--tag-sage);
   --color-tag-yellow: var(--tag-yellow);
+  /* 码字热力绿色阶（GitHub 贡献图口径；chart 专用，不参与状态语义） */
+  --color-heat-1: var(--heat-1);
+  --color-heat-2: var(--heat-2);
+  --color-heat-3: var(--heat-3);
+  --color-heat-4: var(--heat-4);
   /* 类型徽标边框色（描边式 chip，两态同值；底/字随主题翻转）；人物页「角色定位」字色（两态不同值）*/
   --color-type-badge-border: var(--type-badge-border);
   --color-character-role: var(--character-role);
@@ -77,6 +82,11 @@
   --tag-sky: #cce9fc;
   --tag-sage: #d1e2c4;
   --tag-yellow: #ffd800;
+  /* 码字热力绿色阶：GitHub 浅色贡献图（heat-1 最浅 → heat-4 最深）；0 档走 surface-muted */
+  --heat-1: #9be9a8;
+  --heat-2: #40c463;
+  --heat-3: #30a14e;
+  --heat-4: #216e39;
   /* 类型徽标边框（描边式 chip）：两态同一值——1px 线在灰底上需 ≥3:1 才可见（浅底 3.61 / 深底 3.34）。
      底与字不在这里定义：底 = --accent（surface-muted）、字 = --foreground，两者都随主题翻转 */
   --type-badge-border: #d94a4a;
@@ -94,6 +104,11 @@
   --tag-sky: rgb(204 233 252 / 0.2);
   --tag-sage: rgb(209 226 196 / 0.2);
   --tag-yellow: rgb(255 216 0 / 0.2);
+  /* 码字热力绿色阶：GitHub 深色贡献图（低档暗 → 高档亮，保证深底可辨） */
+  --heat-1: #0e4429;
+  --heat-2: #006d32;
+  --heat-3: #26a641;
+  --heat-4: #39d353;
   --character-role: #ef8354;
   /* 纸张深色值 = 「暖色深色纸」推断值（DESIGN.md §Known gaps：「纸张深色值未与实机比对」）——
      观感不对只改这一处，别去动 blocknote.css 的引用 */

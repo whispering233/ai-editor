@@ -1,6 +1,5 @@
-// 年度码字热力（DESIGN.md「码字统计页」→「年度热力」）：
-// 53 周 × 7 行、周一起始、全宽放在最后；周列 `flex-1` 铺满宽中栏、`min-w-2.5` 保底 10px ⇒ 窄中栏才横向滚动；
-// 0 档 = `bg-accent`（surface-muted），正档由 `bg-primary` 透明度派生；
+// 码字热力（GitHub 风格绿色阶）：宽中栏铺满、窄中栏保底 10px 横向滚动；
+// 0 档 = `bg-accent`（surface-muted），正档 = GitHub 绿阶 `heat-1..4`（浅 → 深）；
 // 点格子 = 选中该日（页面据此跳到对应月）。
 // 档位阈值只取 `lib/writing-stats.ts` 的 `WRITING_HEAT_THRESHOLDS`，组件不手写数字；宽度/天数同源常量。
 import { SectionCard } from "@/components/ui/section-card";
@@ -14,13 +13,14 @@ import {
   type WritingHeatLevel,
 } from "../../lib/writing-stats";
 
-/** 档位 → 底色类（字面量查表：Tailwind 只扫字面量类名，禁止拼接） */
+/** 档位 → 底色类（字面量查表：Tailwind 只扫字面量类名，禁止拼接）
+ * 绿色阶 = GitHub 贡献图口径；0 档保持中性的 surface-muted。 */
 const HEAT_CELL_CLASS: Record<WritingHeatLevel, string> = {
   0: "bg-accent",
-  1: "bg-primary/20",
-  2: "bg-primary/40",
-  3: "bg-primary/60",
-  4: "bg-primary/80",
+  1: "bg-heat-1",
+  2: "bg-heat-2",
+  3: "bg-heat-3",
+  4: "bg-heat-4",
 };
 
 const HEAT_LEVELS: readonly WritingHeatLevel[] = WRITING_HEAT_LEVELS;
