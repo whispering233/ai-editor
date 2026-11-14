@@ -58,6 +58,12 @@
 | GET | `/api/v1/manuscript/:chapterNodeId` | 章正文（块文档） |
 | PUT | `/api/v1/manuscript/:chapterNodeId` | 章正文（块文档） |
 
+### 码字统计（[130-api-writing-stats.md](./130-api-writing-stats.md)）
+
+| 方法 | 路径 | 文档 |
+| :--- | :--- | :--- |
+| GET | `/api/v1/writing-stats` | 按天码字统计（小说） |
+
 ### 作家文风练习（[120-api-practice.md](./120-api-practice.md)）
 
 | 方法 | 路径 | 文档 |

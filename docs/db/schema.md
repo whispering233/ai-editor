@@ -17,7 +17,8 @@
 │           ├── entities       # 人物 / 设定 / 地点 / 伏笔 / 事件 / 时间点 / 参考资料
 │           ├── relation_records  # 通用关系表
 │           ├── delta_records    # 属性变更记录
-│           └── document_records # 块文档（章正文 / 参考资料正文，2026-09）
+│           ├── document_records # 块文档（章正文 / 参考资料正文，2026-09）
+│           └── writing_stats_daily # 码字日统计（小说工作区，2026-11）
 │       # 注：项目目录下**不再有** references/ 目录（2026-09 废弃：参考资料正文进 document_records，
 │       #     外部编辑能力改为单文件导入导出；历史遗留的同名目录不被读取、不被打包）
 ├── practice/                 # 作家文风练习工作区（kind = "practice"，2026-10；一个工作区 = 一位预置作家）
@@ -42,8 +43,8 @@
   - `user_version > SCHEMA_VERSION`（未来版本）→ **拒绝打开** 409 `PROJECT_VERSION_NEWER`（数据原封不动，提示升级程序）；
   - `user_version < SCHEMA_VERSION`（旧版本）→ **有迁移路径**（`packages/db/src/migrations/` 存在从当前版本到目标版本的连续迁移链）→ `runMigrations` 前向迁移；**无迁移路径** → 删库重建兜底（备份 `data.db.v{n}.bak` + `outline.json.v{n}.bak`）。
 - **迁移机制**：`migrations/` 目录每个文件导出一个 `Migration = { version, up }`（`001_xxx.ts` → version 1），`index.ts` 按 version 升序聚合导出 `MIGRATIONS`（tsc 编译进 dist 随包分发，无运行时目录读取）。`runMigrations` 对缺失版本逐个执行：**每个迁移一个事务（`up(db)` + `setUserVersion(version)` 原子提交——成功 ⇒ 版本已写入；失败 ⇒ 版本未变）**；**整批迁移前自动快照** data.db → `data.db.v{n}.{YYYYMMDDHHmmssSSSZ}.bak`（checkpoint 后复制主文件，时间戳命名，失败重试现场保留）。迁移失败 → 该迁移回滚 + 版本停在前一迁移后，下次 open 重试。（**粒度注**：迁移侧快照为毫秒时间戳且**无去重循环**——同一毫秒的两次批量迁移会后者覆盖前者；真实升级路径不可达，与备份侧 backup 的 +1ms 去重口径不同但已接受。）
-- 当前 `SCHEMA_VERSION = 13`；迁移链：`002_event_timeline.ts`（version 2：entities 表 CHECK 扩入 `'event'` + 新增 `sort_order` 列）、`003_timepoint.ts`（version 3，G2 修订：entities 表 CHECK 扩入 `'timepoint'` + `event.data.time_label` 迁移为 timepoint 实体 + occurs_at 关系，同名 time_label 合并为同一 timepoint）、`004_setting_tags.ts`（version 4，K2 修订：**无 DDL**——setting 旧 `data.rules` 分类值复制到 `data.tags` 并移除 rules，仅 data JSON 数据迁移）、`005_reference.ts`（version 5：entities 表 CHECK 扩入 `'reference'`，无数据搬移仅 DDL）、`006_sessions_jsonl.ts`（version 6：**对话历史出库**——`chat_messages` 全量导出为旧格式 `sessions/<session_id>.jsonl` 后 `DROP TABLE`；产物为旧 v1 格式，现已被 pi session 格式取代、不再被读取（数据保留在磁盘）；**id 不合法的旧会话以 `sess_legacy_<sha256 前 16 位>` 文件名导出**）、`007_character_ability_panel.ts`（version 7，2026-09：**无 DDL**——`character.data.abilities[]` 迁为 `ability_panel` 叶子并移除旧字段，幂等且不覆盖已有 `ability_panel`，仅 data JSON 数据迁移，同 004 先例）、`008_document_records.ts`（version 8，2026-09：新增 `document_records` 表（块文档），纯 DDL 无数据搬移——开发阶段，旧 `references/` 目录与旧参考资料行不作兼容读取）、`009_decompose.ts`（version 9：新增 `decompose_jobs` / `decompose_batches` 两表，纯 DDL 无数据搬移——旧项目没有 job 行，无需回填）、`010_decompose_concurrency.ts`（version 10：`decompose_jobs` 新增 `concurrency` 列，纯 DDL 无数据搬移——存量行回填 `DEFAULT 1`）、`011_drop_decompose.ts`（version 11：`DROP TABLE` 上述两表，纯 DDL——「拆解小说」功能已整功能移除（见 CHANGELOG），009/010 保留只为旧库升级链连续）、`012_practice.ts`（version 12，2026-10：新增 `practice_targets` / `practice_samples` 两张练习表，纯 DDL 无数据搬移——旧项目没有练习行，无需回填；**2026-10 修订**：不再创建 `idx_practice_samples_target`——该索引只服务旧模型，且会让「回退 `user_version` 后重跑整条链」的历史迁移用例在 v13 库上报 `no such column: target_id`；真实 v12 库持有的旧索引由 013 的 `DROP INDEX IF EXISTS` 清除）、`013_author_practice.ts`（version 13，2026-10：**练习数据模型重建**——`DROP INDEX IF EXISTS idx_practice_samples_target` + drop `practice_targets` 与旧形状 `practice_samples`，建 `practice_samples`（新形状：`work_id` 可空 + `excerpt_label`）/ `practice_free_pieces` / `practice_style_packs` 三表（**均不建索引**），纯 DDL 无数据搬移——旧「文风目标」是自由文本，无法映射到预置作家与作品，且练习功能当时尚未发布、无正式用户数据）。**SQLite 无法直接修改 CHECK 约束**，迁移走「建新表（新 CHECK）→ 拷贝数据 → drop 旧表 → rename」四步（`relation_records`/`delta_records` 无外键指向 entities，迁移只动 entities 表）；v1 → v13 迁移链存在 ⇒ 旧库 open 时自动前向迁移，不再走删库重建兜底。
-- **import 侧联动**：导入备份时 `user_version < SCHEMA_VERSION` 且**有迁移路径** → 接受（搬入后 open 自动迁移，v5 及更早备份经增量迁移升到 **v13**，含对话历史出库、能力面板迁移、块文档表创建与已下线功能的表清理）；无路径 → 409 `SCHEMA_VERSION_MISMATCH`；`>` 当前 → 409（未来版本语义）。
+- 当前 `SCHEMA_VERSION = 14`；迁移链：`002_event_timeline.ts`（version 2：entities 表 CHECK 扩入 `'event'` + 新增 `sort_order` 列）、`003_timepoint.ts`（version 3，G2 修订：entities 表 CHECK 扩入 `'timepoint'` + `event.data.time_label` 迁移为 timepoint 实体 + occurs_at 关系，同名 time_label 合并为同一 timepoint）、`004_setting_tags.ts`（version 4，K2 修订：**无 DDL**——setting 旧 `data.rules` 分类值复制到 `data.tags` 并移除 rules，仅 data JSON 数据迁移）、`005_reference.ts`（version 5：entities 表 CHECK 扩入 `'reference'`，无数据搬移仅 DDL）、`006_sessions_jsonl.ts`（version 6：**对话历史出库**——`chat_messages` 全量导出为旧格式 `sessions/<session_id>.jsonl` 后 `DROP TABLE`；产物为旧 v1 格式，现已被 pi session 格式取代、不再被读取（数据保留在磁盘）；**id 不合法的旧会话以 `sess_legacy_<sha256 前 16 位>` 文件名导出**）、`007_character_ability_panel.ts`（version 7，2026-09：**无 DDL**——`character.data.abilities[]` 迁为 `ability_panel` 叶子并移除旧字段，幂等且不覆盖已有 `ability_panel`，仅 data JSON 数据迁移，同 004 先例）、`008_document_records.ts`（version 8，2026-09：新增 `document_records` 表（块文档），纯 DDL 无数据搬移——开发阶段，旧 `references/` 目录与旧参考资料行不作兼容读取）、`009_decompose.ts`（version 9：新增 `decompose_jobs` / `decompose_batches` 两表，纯 DDL 无数据搬移——旧项目没有 job 行，无需回填）、`010_decompose_concurrency.ts`（version 10：`decompose_jobs` 新增 `concurrency` 列，纯 DDL 无数据搬移——存量行回填 `DEFAULT 1`）、`011_drop_decompose.ts`（version 11：`DROP TABLE` 上述两表，纯 DDL——「拆解小说」功能已整功能移除（见 CHANGELOG），009/010 保留只为旧库升级链连续）、`012_practice.ts`（version 12，2026-10：新增 `practice_targets` / `practice_samples` 两张练习表，纯 DDL 无数据搬移——旧项目没有练习行，无需回填；**2026-10 修订**：不再创建 `idx_practice_samples_target`——该索引只服务旧模型，且会让「回退 `user_version` 后重跑整条链」的历史迁移用例在 v13 库上报 `no such column: target_id`；真实 v12 库持有的旧索引由 013 的 `DROP INDEX IF EXISTS` 清除）、`013_author_practice.ts`（version 13，2026-10：**练习数据模型重建**——`DROP INDEX IF EXISTS idx_practice_samples_target` + drop `practice_targets` 与旧形状 `practice_samples`，建 `practice_samples`（新形状：`work_id` 可空 + `excerpt_label`）/ `practice_free_pieces` / `practice_style_packs` 三表（**均不建索引**），纯 DDL 无数据搬移——旧「文风目标」是自由文本，无法映射到预置作家与作品，且练习功能当时尚未发布、无正式用户数据）、`014_writing_stats.ts`（version 14，2026-11：新增 `writing_stats_daily` 码字日统计表，纯 DDL 无数据搬移——旧项目没有历史统计，首次保存正文后才开始累计）。**SQLite 无法直接修改 CHECK 约束**，迁移走「建新表（新 CHECK）→ 拷贝数据 → drop 旧表 → rename」四步（`relation_records`/`delta_records` 无外键指向 entities，迁移只动 entities 表）；v1 → v14 迁移链存在 ⇒ 旧库 open 时自动前向迁移，不再走删库重建兜底。
+- **import 侧联动**：导入备份时 `user_version < SCHEMA_VERSION` 且**有迁移路径** → 接受（搬入后 open 自动迁移，v5 及更早备份经增量迁移升到 **v14**，含对话历史出库、能力面板迁移、块文档表创建、码字日统计表创建与已下线功能的表清理）；无路径 → 409 `SCHEMA_VERSION_MISMATCH`；`>` 当前 → 409（未来版本语义）。
 - **全新空库短路（2026-09）**：`user_version = 0` 且**表结构与当前 DDL 一致**且**业务表无行** → 直接写入 `SCHEMA_VERSION`（**不重建、不备份、不碰 `outline.json`**）——覆盖“书目录有 project.json/outline.json 但缺 data.db”的场景（否则会走无路径重建兼重置大纲）。**反向守住**：结构陈旧（旧 CHECK / 残留表）或有数据的 v0 库仍走既有重建兑底。**已知不对称（已登记）**：备份包内的 v0 空库仍在导入侧被 409 拒绝（`validateBackupPackage` 复用 `hasMigrationPath`），而盘上同内容文件现在会被接受——偏差方向只宽松、无数据风险。
 
 ## entities — 实体表
@@ -233,6 +234,31 @@ CREATE TABLE document_records (
 | **不进 outline.json** | 章正文若写进大纲树，会让整树接口（大纲页、`get_outline` 工具）被动拖入长文本——因此单独成表 |
 
 **读取投影的两个消费面**：① AI 工具（单章只读拉取 / 参考资料全文）——只拿 `content_text`，绝不拿块 JSON；② 列表与摘要（参考资料列表的 `content` 摘要定长截断（长度单一定义 = db `toSummary`）、`GET /outline?with_metadata=true` 的章 `charCount`）——用 `length(content_text)` 与切片，不解析块体。
+
+## writing_stats_daily — 码字日统计表（2026-11）
+
+小说工作区专属的**按作品、按天**正文新增字数累计表。一个 `data.db` = 一部作品 = 一份统计；不按章、不按会话、不记时段。
+
+```sql
+CREATE TABLE IF NOT EXISTS writing_stats_daily (
+  stat_date  TEXT PRIMARY KEY,   -- 服务端本地日 YYYY-MM-DD（不带时区）
+  chars      INTEGER NOT NULL CHECK (chars > 0),  -- 当日累计新增正文字数（只加正增量）
+  updated_at TEXT NOT NULL       -- 最后一次累计写入时刻（ISO 8601）
+);
+```
+
+| 不变式 | 口径 |
+| :--- | :--- |
+| **口径 = 正增量** | 每次 `PUT /api/v1/manuscript/:chapterNodeId` 用保存前后的 `content_text.length` 做差；**只有正差**累加。删除 / 回退 / 覆盖为空**不扣减**；粘贴、文件导入等经同一保存路径的正差照常计入 |
+| **长度口径同源** | 与 `charCount` / 大纲 `metadata.textLength` 完全同源（JS 字符串长度，UTF-16 code unit），不另算「汉字数」 |
+| **日键 = 服务端本地日** | `stat_date` 取服务端进程本地时区的自然日；客户端不提交日期、不参与日键计算。跨时区或跨午夜以服务端时钟为准；不做 UTC 归一 |
+| **只存日合计** | 不存章 id、会话、开始/结束时间、逐次增量。月汇总、年度热力、活跃天数都由行集在客户端派生；**不建月表 / 年表** |
+| **无空行** | 只在该日有正增量时存在一行；`chars > 0` 是表级 CHECK。读取按 `stat_date` 升序 |
+| **无外键 / 无软删 / 无索引** | 不依赖大纲节点或实体；删章、清回收站不抹历史；恢复旧备份 / 云端拉取按三文件整体回退；删书随目录消失。主键即日期，范围查询走主键，不另建索引 |
+| **写入是 best-effort** | 统计写失败**不回滚正文**（正文是主数据，统计是旁路计量）；失败记日志，最坏少记一次。唯一写入口 = `PUT /manuscript`，不提供人工编辑 / 删除统计端点 |
+| **不做会话时长落库** | 悬浮面板的「本次码字 / 码字时间 / 空闲时间」是**进程内会话态**，刷新/重启即清零；不写 `data.db`，不做 30 分钟切会话（用户口径：同一本书内跨页/跨章持续到应用退出） |
+
+**为什么不是「每日净变化」或「只统计键入」**：净变化需要记录删除量并与历史行做减法，恢复/导入旧包时会出现负值；只统计键入无法覆盖粘贴与导入，且客户端无法可信上报。正增量口径与用户看到的「正文变长了多少」一致，可用服务端唯一的正文写入口计算，且无需新增写端点。
 
 ## practice_samples / practice_free_pieces / practice_style_packs — 练习三表（2026-10）
 

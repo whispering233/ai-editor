@@ -1,0 +1,48 @@
+# 码字统计（按天）
+
+> 小说工作区专属的**只读**统计端点。数据来源 = `PUT /api/v1/manuscript/:chapterNodeId` 的正文字数正增量（见 [110-api-manuscript.md](./110-api-manuscript.md)）；表与不变式见 [`../db/schema.md`](../db/schema.md)「writing_stats_daily」。
+> 公共约定/命名/响应结构见 [api-public.md](./api-public.md)，错误码见 [error-code.md](./error-code.md)；
+> 请求/响应 schema 单一来源：`@whispering233/ai-editor-shared` `types/api.ts`；接口索引见 [00-api-index.md](./00-api-index.md)。
+
+**统计口径**：一部作品 = 一个 `data.db` = 一份统计。每次保存章正文，服务端比较保存前后 `content_text` 的 **JS 字符串长度**（UTF-16 code unit，与 `charCount` 同源），**只把正差**累加到服务端本地日 `YYYY-MM-DD` 的行。删除、回退、覆盖为空不扣减；粘贴与文件导入经同一保存路径的净正差照常计入。**不按章、不按会话、不记时段**；不做历史重算。
+
+### GET /api/v1/writing-stats
+
+读取当前小说的全部按天统计行。无查询参数、无分页——只返回**有正增量**的日期（空日不建行）。
+
+```typescript
+// Res: 200
+{
+  today: string;              // 服务端本地日 YYYY-MM-DD（页面「今日」与日键口径的权威值）
+  totalChars: number;         // 全部行 chars 之和
+  totalDays: number;          // 行数 = 有码字记录的天数
+  days: Array<{
+    date: string;             // YYYY-MM-DD（服务端本地日）
+    chars: number;            // 当日累计新增正文字数；恒 > 0
+  }>;                         // 按 date 升序；不含 0 字日期
+}
+
+// Res: 400（练习工作区）
+{ error: { code: "KIND_MISMATCH", message: "该端点仅适用于小说工作区" } }
+
+// Res: 409（未打开任何项目）
+{ error: { code: "NO_PROJECT_OPEN" } }
+```
+
+**语义**：
+
+| 项 | 口径 |
+| :--- | :--- |
+| 作用域 | 当前打开的小说工作区；切书 = 换 `data.db` = 另一份统计。练习工作区由路由组守卫直接 400 |
+| 读侧 | 只读端点；**没有**写 / 删 / 导入统计的端点。唯一写入点是章正文 PUT 的派生副作用 |
+| 日期 | `stat_date` / `today` 都是**服务端本地日**，不带时区信息；客户端只展示，不自行生成日键 |
+| 空数据 | 新书 / 从未保存正文 → `today` 正常给、`totalChars = 0`、`totalDays = 0`、`days = []` |
+| 行集 | 只含有正增量的日期；同一天多次保存 = 一行累加。不返回逐章 / 逐会话 / 逐次增量 |
+| 体量 | 活跃日一年最多 365 行，全量返回；不做分页、不做月表 / 年表 |
+| 备份 / 云 | 统计行在 `data.db`，随三文件备份 / 导出 / 云端 / 恢复 / 导入整体走；恢复旧包或云拉取会把统计一并回退，删书随目录消失 |
+
+**客户端派生**（不增加端点）：月汇总、近 7 / 15 / 30 天柱状图、近 365 天热力图、活跃天数、选中日详情均由 `days` 在客户端聚合；月份 / 年度汇总不得在服务端另建表或另写快照。
+
+**与正文保存的关系**：统计写入是 **best-effort**——统计写失败不回滚正文、不改变 PUT 的 200；正文保存成功即视为主操作成功（最坏少记当天一次）。正文保存的其他语义（版本戳、冲突、不产生 Delta、不推进 `current_position`）不变，见 [110-api-manuscript.md](./110-api-manuscript.md)。
+
+**不做**（v1 明确边界）：每日写作时长 / 空闲时长落库、逐章统计、按会话统计、目标 / 连续天数 / 周报 / 月度计划、设备合并、统计编辑与导入。会话面板的「本次码字 / 码字时间 / 空闲时间」是客户端进程内状态，不走本端点。
