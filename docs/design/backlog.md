@@ -248,6 +248,10 @@
   - 触发条件：再改这三处行结构/行尾操作区时。
   - 最小修法：把 Outline 的页头/行操作区拆成 presenter 组件后补 `renderToString` 断言（与人物页同款）；**代价 = 一次真实拆分**，不要在页面里塞测试钩子。
   - **2026-09 局部兑现 → 2026-11 大纲页收口为单树视图**：章视图 presenter（`components/outline/chapter-view.tsx`）与 `chapter-view.test.tsx` 随本批删除退场；**大纲树行仍未拆**（树行渲染仍闭在 `Outline.tsx` 的 `renderNodes` 内）——下次改树行操作区时仍按上一条拆。
+- **章正文面板的大纲兜底「重试」在途时静默 no-op（2026-11 W0 验收登记）**
+  - 现状：`ChapterEditor` 的兜底提示用 `useProjectStore.getState().loadOutline({ withMetadata: false })`；store 在 `outlineLoading` 时早退。旧版 `useOutlineLoader().retry` 会把重试排队到在途请求结束后。差异仅「首拉在途时点重试且该请求随后失败」→ 需再点一次；不丢数据、不留错态。
+  - 触发条件：用户在大纲加载中看到兜底提示并点击重试。
+  - 最小修法：`ChapterEditor` 增可选 `onRetryOutline`，壳传 `useOutlineLoader().retry`；或接受现状并保留本条目。
 - **写作页卷章导航栏不做结构编辑（2026-11）**
   - 现状：rail 只有「卷折叠 / 选章 / 字数 / 宽度拖拽 / 收起」，新建章 / 卷、改名、删除、结构拖拽排序全在大纲树。写作页是持续写作面，**有意把结构编辑留给大纲页**（rail 是导航，不是第二个大纲页）。
   - 触发条件：用户反馈「在写作页要能新建下一章 / 调整卷内顺序」。
