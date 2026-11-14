@@ -7,6 +7,7 @@ import { cn } from "../../lib/utils";
 import {
   formatChars,
   heatmapWeeks,
+  WRITING_HEAT_LEVELS,
   WRITING_HEATMAP_DAYS,
   writingHeatLevel,
   type WritingHeatLevel,
@@ -21,7 +22,7 @@ const HEAT_CELL_CLASS: Record<WritingHeatLevel, string> = {
   4: "bg-primary/80",
 };
 
-const HEAT_LEVELS: readonly WritingHeatLevel[] = [0, 1, 2, 3, 4];
+const HEAT_LEVELS: readonly WritingHeatLevel[] = WRITING_HEAT_LEVELS;
 
 export interface YearHeatmapProps {
   /** 日键 → 当日字数 */
@@ -79,7 +80,7 @@ export function YearHeatmap({ charsByDate, today, selectedDate, onSelectDate }: 
           <span key={level} className={cn("h-2.5 w-2.5 rounded-sm", HEAT_CELL_CLASS[level])} />
         ))}
         <span>多</span>
-        <span className="ml-auto tabular-nums">活跃 {activeDays} 天</span>
+        <span className="@min-[720px]:ml-auto tabular-nums">活跃 {activeDays} 天</span>
       </div>
     </SectionCard>
   );

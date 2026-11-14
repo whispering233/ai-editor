@@ -127,11 +127,11 @@ export function MonthCalendar({
           <div className="text-sm tabular-nums">{formatChars(selectedChars)}</div>
         </div>
         <div>
-          <div className="text-xs text-muted-foreground">本月累计</div>
+          <div className="text-xs text-muted-foreground">当月累计</div>
           <div className="text-sm tabular-nums">{formatChars(monthChars)}</div>
         </div>
         <div>
-          <div className="text-xs text-muted-foreground">本月活跃天数</div>
+          <div className="text-xs text-muted-foreground">当月活跃天数</div>
           <div className="text-sm tabular-nums">{activeDays}</div>
         </div>
       </div>

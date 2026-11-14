@@ -22,9 +22,9 @@ export const WRITING_HEATMAP_WEEKS = 53;
 /** 热力正档下界（`chars >= 阈值` 即进该档；0 = 无记录；4 档上限） */
 export const WRITING_HEAT_THRESHOLDS = [1, 200, 500, 1000] as const;
 
-/** 档位值域（0 = 无记录 + 4 正档） */
-const HEAT_LEVELS = [0, 1, 2, 3, 4] as const;
-export type WritingHeatLevel = (typeof HEAT_LEVELS)[number];
+/** 档位值域（0 = 无记录 + 4 正档；页头图例与取档共用同一份） */
+export const WRITING_HEAT_LEVELS = [0, 1, 2, 3, 4] as const;
+export type WritingHeatLevel = (typeof WRITING_HEAT_LEVELS)[number];
 
 /** 宽中栏阈值（px）：≥ 此宽度「月历 320 + 趋势」并排；类字面量 `@min-[<该值>px]` 在页面里 */
 export const STATS_TWO_COLUMN_MIN_WIDTH = 720;
@@ -215,7 +215,7 @@ export function writingHeatLevel(chars: number): WritingHeatLevel {
   for (const threshold of WRITING_HEAT_THRESHOLDS) {
     if (chars >= threshold) level += 1;
   }
-  return HEAT_LEVELS[level] ?? 0;
+  return WRITING_HEAT_LEVELS[level] ?? 0;
 }
 
 /** 年热力窗口（`today` 往前推 `WRITING_HEATMAP_DAYS` 天，含首尾） */

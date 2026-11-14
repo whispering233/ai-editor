@@ -1,6 +1,6 @@
 // 码字日历 SSR 走查（仓内无 jsdom/@testing-library，用 `react-dom/server` 直渲染）。
 // 契约依据 = DESIGN.md「码字统计页」→「码字日历（月历）」：7 列星期头、日号 + 仅正字数时显示字数、
-// 选中日详情三格（选中日字数 / 本月累计 / 本月活跃天数）、翻月 + 今天按钮。
+// 选中日详情三格（选中日字数 / 当月累计 / 当月活跃天数）、翻月 + 今天按钮。
 import { renderToString } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import { MonthCalendar } from "./month-calendar";
@@ -46,13 +46,13 @@ describe("码字日历（月历）", () => {
     expect(html).not.toContain(">0<"); // 日号 1..30 里没有 0；字数 0 也不占文本
   });
 
-  it("选中日详情三格：选中日字数 / 本月累计 / 本月活跃天数", () => {
+  it("选中日详情三格：选中日字数 / 当月累计 / 当月活跃天数", () => {
     const html = renderCalendar("2026-11-05");
     expect(html).toContain("选中日字数");
-    expect(html).toContain("本月累计");
-    expect(html).toContain("本月活跃天数");
+    expect(html).toContain("当月累计");
+    expect(html).toContain("当月活跃天数");
     expect(html).toContain(">1,234<"); // 选中日
-    expect(html).toContain(">1,834<"); // 本月累计 1234 + 100 + 500
+    expect(html).toContain(">1,834<"); // 当月累计 1234 + 100 + 500
     expect(html).toContain(">3<"); // 活跃 3 天
   });
 
