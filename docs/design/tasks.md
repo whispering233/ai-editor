@@ -10,30 +10,6 @@
 
 ## 当前任务卡
 
-### writing-3-recent-chapter — 最近打开优先、服务端回退与保存后即时字数
-
-**状态**：待执行
-**依赖**：writing-2
-**范围**：shared 类型/zod、db 批量查询、server outline metadata、client `lib/writing.ts` 的最近导航纯函数 / `Writing` 解析 / 保存回调 / store 补丁；**不新增表、不新增端点**。
-
-**改动**
-- shared：`OutlineNodeMetadata` 加 `documentUpdatedAt?: string`；`types/api.ts` 对应 zod 加 `documentUpdatedAt: z.string().optional()`（与 `textLength` 同块）。
-- db：`queries/document.ts` 新增批量取 `owner_id + updated_at`（一次查询、空数组短路，风格同 `getDocumentTextLengths`）；`document.test.ts` 覆盖有/无行、多 owner。
-- server：`routes/outline.ts` 的 `attachMetadata` 复用 `chapterIds` 批量取时间戳，**仅 chapter** 写 `metadata.documentUpdatedAt`；**无文档行 = 字段缺省**。`outline.test.ts` 覆盖仅章、无文档缺省、批量。
-- `lib/writing.ts`：`parseLastOpenedChapters` / `readLastOpenedChapter(projectId)` / `writeLastOpenedChapter(projectId, chapterId)`（key `ai-editor:writing-last-opened`，per-book `{ [projectId]: chapterId }`；只存 id；坏 JSON / 非对象 / 非字符串值 → 空表；写失败静默）；`pickRecentChapter(outline)`（文件序可见章中最大 `documentUpdatedAt`，平局取先序第一个，无则 null）；`resolveWritingTarget(outline, lastOpenedId)` = 最近打开仍在**可见大纲**则用它，否则回退 `pickRecentChapter`；测试覆盖 per-book 隔离、脏值、最近打开优先、失效回退、平局、软删、根级章。
-- `pages/Writing.tsx`：`#/writing/:id` 命中可见章时写最近打开（窄屏也写）；`#/writing` 无 id 且桌面端 → effect 里 `resolveWritingTarget`，有目标 `window.location.replace("#/writing/" + id)`，无目标空态；解析中骨架；**以当前 hash 是否已是目标作幂等守卫**（StrictMode 第二次 effect 跳过；从 `#/writing/:id` 再点「写作」可重新解析）；**窄屏不自动跳**。
-- `stores/project.ts`：新增 `patchChapterMetadata(chapterId, { textLength, documentUpdatedAt })`——不可变递归更新 `outline`（未命中分支保持原引用），不改 `outlineWithMetadata` 标志；`project.test.ts` 断言不可变与未命中不换根。
-- `ChapterEditor`：保存成功（自动 / 手动，含 409 覆盖分支）后调用 `onSaved({ charCount, updatedAt })`；`Writing` 传入并 patch store。**不重拉大纲树**。
-- 先 `pnpm -r build` 再跑下游（shared/db 改了 src）。
-
-**硬完成判据**
-- 打开 A 不保存 → 再进写作回 A（localStorage 优先）；保存 B → 进 B；B 软删 → 回退 A（`documentUpdatedAt` 最大）；切书再回各回各的。
-- 无最近打开且无已保存正文 → 空态，不跳「第一章」；窄屏 `#/writing` 不自动跳。
-- 保存后 rail 字数立即更新，网络里没有新的 `GET /outline`；`documentUpdatedAt` 随 PUT `updatedAt` 更新。
-- `pnpm -r build`、client / db / server 单包测试、`pnpm typecheck`、`pnpm lint` 全绿。
-- 浏览器验收（独立 `ui-verifier`，≤6 项）：打开 A 不保存回 A、保存 B 回 B、软删回退、切书隔离、无目标空态、字数即时。
-- 新 commit + `git status` 干净；汇报 hash/输出。
-
 ### writing-2b-rail-resize — 卷章导航栏宽度拖拽与收起
 
 **状态**：待执行
