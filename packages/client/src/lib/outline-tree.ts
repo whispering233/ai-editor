@@ -280,7 +280,7 @@ export function chapterNodeExists(tree: OutlineTree | null, nodeId: string): boo
 // 与服务端 `deriveChapterOrder`（含软删章、保 Delta/伏笔引用稳定）**不同源**——见
 // `docs/design/10-data-model.md` §4「UI 展示编号 ≠ 本节的章序」：本处编号只作展示，不参与任何计算。
 
-/** 章视图行（阅读序：卷序 → 卷内章序） */
+/** 阅读序章行（卷序 → 卷内章序；供 `chapterNeighbors` 取上一/下一章） */
 export interface OutlineChapterRow {
   chapter: OutlineChapter;
   /** 所属卷 id；**存量直挂 root 的章** = `ROOT_NODE_ID` */
@@ -291,11 +291,11 @@ export interface OutlineChapterRow {
   chapterLabel: string;
 }
 
-/** 大纲编号结果（树视图按 `labels` 查、章视图直接读 `chapterRows`） */
+/** 大纲编号结果（树视图按 `labels` 查；`chapterRows` 供阅读序取相邻章） */
 export interface OutlineNumbering {
   /** 节点 id → 编号徽标文案（`第1卷` / `第3章`）；**场景不编号**，不入 Map */
   labels: Map<string, string>;
-  /** 章视图行（先序 = 阅读序） */
+  /** 阅读序章行（先序 = 阅读序） */
   chapterRows: OutlineChapterRow[];
 }
 

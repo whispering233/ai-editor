@@ -3,7 +3,8 @@
 // 路由表见 （10 路由，一级化）：#/、#/overview、#/outline、#/outline/:nodeId、
 // #/characters[/:id]、#/setting[/:id]、#/locations[/:id]、#/relations、#/hooks[/:id]、
 // #/timeline、#/timeline/:id、#/timepoints/:id、#/references[/:id]、
-// #/writing[/:chapterId]（写作页；旧章正文路由 #/manuscript/:chapterId 仍可用）、#/stats、
+// #/writing[/:chapterId]（写作页；旧章正文路由 #/manuscript/:chapterId 保留为已知段，由 main.tsx 的
+// `ReplaceTo` 重定向到写作页——入表是为了不被当成未知 hash 回退成 `#/`）、#/stats、
 // #/trash、#/preferences、
 // 练习工作区五页：#/author、#/works、#/style、#/practice[/:sampleId]、#/free[/:pieceId]
 // （工作区类型路由守卫见 lib/workspace-route-guard.ts——它由 main.tsx 在渲染前判定）

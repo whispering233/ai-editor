@@ -6,14 +6,14 @@
 // S9.2 伏笔标记：title 行尾紧凑徽标（plants/advances/resolves 图标 + title tooltip 伏笔名），
 // 数据 = GET /relation（source_type=outline_node）三类并行拉取聚合（lib/outline-hooks）；
 // 2026-09：徽标改为**导航链接**——点击跳该伏笔详情 #/hooks/:id（行 click/dblclick 守卫排除 `a`，
-// 点徽标不选中行、不进节点详情；两视图共用 components/outline/node-hook-badge）
+// 点徽标不选中行、不进节点详情；徽标组件 = components/outline/node-hook-badge）
 // 交互收敛：行级「详情」「＋ 新建」按钮移除（只留删除 + 阅读进度徽标）——单击行选中、
 // 选中后 Enter 新建子级（类型由父层级推导）、双击行跳详情、单击标题/摘要行内编辑、拖拽排序保留；
 // 行级 AskAiButton 已移除——右键菜单替代（RowContextMenu：注入会话上下文 + 建立关联
 // + 「设为阅读进度」/「标记为推演节点」——卡片 1.1/D2：仅章节点行传入，卷/场景行不出现；
 // 已是阅读进度则禁用，推演标记项不置灰、按当前状态切换文案）
-// 路由：#/outline；数据：GET /api/v1/outline?with_metadata=true（整树 + 章的字数统计；
-// 本页章视图行展示 metadata.textLength，按页开启见 hooks/use-outline-loader）+ GET /api/v1/relation（伏笔标记，S9.2）；操作：POST/PUT/DELETE /outline、PUT /project/config（设阅读进度）
+// 路由：#/outline（2026-11 起只有树视图，写作入口独立成 #/writing）；数据：GET /api/v1/outline?with_metadata=true
+// （整树，按页开启见 hooks/use-outline-loader）+ GET /api/v1/relation（伏笔标记，S9.2）；操作：POST/PUT/DELETE /outline、PUT /project/config（设阅读进度）
 // 2026-09：卷/章行的类型徽标改为**编号徽标**（`第N卷` / `第N章`，展示口径——只计可见节点、删后重排，
 // 与服务端 `deriveChapterOrder` 不同源；纯函数 = lib/outline-tree 的 numberOutline）；占位几何随徽标宽度同步（见 DESIGN.md）。
 // （S2.4 + S13.1 + 版）——行内编辑标题/摘要（Enter 保存/Esc 取消/失焦保存）、
@@ -35,7 +35,6 @@ import {
   BranchesOutlined,
 } from "@ant-design/icons";
 import { CHILD_TYPE, TYPE_LABEL } from "../components/outline/dialogs";
-import { ChapterView } from "../components/outline/chapter-view";
 import { InlineInput } from "../components/outline/inline-input";
 import { NodeHookMarkBadge } from "../components/outline/node-hook-badge";
 import { TypeChip } from "@/components/ui/tag-chip";
@@ -85,7 +84,6 @@ import { focusNewItem } from "../lib/new-item-focus";
 import { useSaveShortcut } from "../lib/save-shortcut";
 import { navigate } from "../hooks/use-route";
 import { useOutlineLoader } from "../hooks/use-outline-loader";
-import { useOutlineView } from "../hooks/use-outline-view";
 import { useDataRefresh } from "../hooks/use-data-refresh";
 import { useProjectStore } from "../stores/project";
 import { useUiStore } from "../stores/ui";
@@ -95,8 +93,6 @@ type EditingState = { nodeId: string; field: "title" | "summary" } | null;
 
 /** 就地新建目标：parentId "root" = 顶层（**只建卷**，2026-09：章只挂卷），否则父节点决定子类型（CHILD_TYPE） */
 type CreatingState = { parentId: string; type: OutlineNodeType } | null;
-
-/** 页面形态：大纲树（默认）/ 章视图（平铺章列表）——见 `hooks/use-outline-view`（持久化，卡 18.3） */
 
 /** 提取错误码（ApiError → 服务端码；未知 → null 走兜底文案） */
 function errorCode(err: unknown): string | null {
@@ -157,7 +153,7 @@ export default function Outline() {
   const outlineLoading = useProjectStore((s) => s.outlineLoading);
   const config = useProjectStore((s) => s.config);
   const configLoading = useProjectStore((s) => s.configLoading);
- // 大纲加载（本页章视图行要章的 metadata.textLength ⇒ withMetadata: true；hook 管首拉/补齐/失败重试）
+  // 大纲加载（hook 管首拉/补齐/失败重试；`withMetadata` 保持既有口径——章的字数统计由写作页 rail / 章详情页消费）
   const { reload, retry } = useOutlineLoader({ withMetadata: true });
   // 跨页定位（U4 方案 A）：ui store 的 transient 目标节点 id——InfoBar/概览页点击「阅读进度」
   // 设置后跳转本页；本页消费（展开祖先+滚动+高亮）后清除，不侵入 hash 路由
@@ -177,8 +173,6 @@ export default function Outline() {
   const [focusedNodeId, setFocusedNodeId] = useState<string | null>(null);
   /** 选中节点 id（单击行选中，选中后按 Enter 新建子级）；null = 无选中 */
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
-  /** 页面形态（大纲树 / 章视图；选择落 localStorage——跳转/刷新后保持，见 DESIGN.md「大纲页双视图」） */
-  const [view, setView] = useOutlineView();
 
   // S2.4 就地交互状态
   const [editing, setEditing] = useState<EditingState>(null);
@@ -194,10 +188,9 @@ export default function Outline() {
 
   const noProject = config === null && !configLoading;
 
-  /** 大纲编号（展示口径：卷序 + 全局章序，只计可见节点 ⇒ 删后重排；与
-   * `docs/design/10-data-model.md` §4 的服务端章序不同源）——树视图行为徽标查 `labels`，
-   * 章视图直接读 `chapterRows` */
-  const numbering = useMemo(() => numberOutline(outline), [outline]);
+  /** 大纲编号徽标文案（展示口径：卷序 + 全局章序，只计可见节点 ⇒ 删后重排；与
+   * `docs/design/10-data-model.md` §4 的服务端章序不同源） */
+  const labels = useMemo(() => numberOutline(outline).labels, [outline]);
 
   /** 推演节点标记（§15）：**唯一来源 = shared `buildDeductionMarks`**（过滤失效/非章 → 树序排序 →
    * 角色与文案），本页不自己算文案/章号；`config.deductionNodes` 由 store 重拉驱动刷新 */
@@ -411,7 +404,6 @@ export default function Outline() {
   function startCreate(parentId: string, type: OutlineNodeType) {
     cancelEdit();
     setSelectedNodeId(null); // 选中态与新建态互斥（创建输入框接管 Enter）
-    setView("tree"); // 就地输入行只活在树视图：章视图里点「+ 新建卷」/ 空态入口 → 切回树视图再开输入行
     setCreatingAt({ parentId, type });
     setCreateValue("");
     if (parentId !== ROOT_NODE_ID) expand(parentId); // 新建输入显示在父 children 末尾
@@ -651,7 +643,7 @@ export default function Outline() {
   /**
    * 行级「标记为推演节点 / 移出推演节点」：仅章行给入口（`isDeductionMarkHost`，
    * 与服务端 `PUT /project/config` 同口径）——提交实现与详情页共用（lib/deduction.ts），
-   * 全量数组一次提交，成功后 store 重拉 config ⇒ 本页徽标与章视图/详情页同步收敛（无需重拉树）。
+   * 全量数组一次提交，成功后 store 重拉 config ⇒ 本页徽标与详情页同步收敛（无需重拉树）。
    */
   async function handleToggleDeduction(node: OutlineNode) {
     // 基底 = **可见标记**（不是 raw config——失效 id 回传会被服务端 400 锁死，见 lib/deduction.ts 注释）
@@ -717,7 +709,7 @@ export default function Outline() {
       const focused = node.id === focusedNodeId;
       const selected = selectedNodeId === node.id;
       // 编号徽标文案（卷/章 = `第N卷` / `第N章`；场景不编号 → undefined，徽标回落到枚举文案）
-      const numberLabel = numbering.labels.get(node.id);
+      const numberLabel = labels.get(node.id);
       // 推演标记（§15；非章 / 未标记 → undefined，不渲染徽标）
       const deductionMark = deduction.byNode.get(node.id);
       // 行级新建子级：子类型由本行层级推导；null = 叶子（场），无按钮
@@ -974,28 +966,17 @@ export default function Outline() {
       <PageHeader
         title="大纲"
         controls={
-          /* 右端组：ml-auto 挂**容器**（不是某个按钮）——组内按钮可能不渲染（清除按钮无标记时不出现、
-             「全部折叠」章视图下不出现），挂单个按钮会让整组在它缺席时丢掉右对齐 */
+          /* 右端组：ml-auto 挂**容器**（不是某个按钮）——组内按钮可能不渲染（清除按钮无标记时不出现），
+             挂单个按钮会让整组在它缺席时丢掉右对齐 */
           <div className="ml-auto flex items-center gap-3">
             {/* 一键清空推演标记（DESIGN.md「`推演节点` 徽标」）：仅**有可见标记**时渲染
-                （无标记时清空无意义，也不给一个点了没反应的按钮）；两视图共用；无二次确认 */}
+                （无标记时清空无意义，也不给一个点了没反应的按钮）；无二次确认 */}
             {deduction.marks.length > 0 && (
               <Button onClick={() => void clearDeductionMarks()}>清除推演标记</Button>
             )}
-            {/* 视图切换（DESIGN.md「大纲页双视图」）：文案 = **目标视图**——单按钮写「点它会去哪」
-                比写「现在在哪」少一次解读；位置 = 右端组内、清除按钮之后 */}
-            <Button onClick={() => setView(view === "tree" ? "chapters" : "tree")}>
-              {view === "tree" ? "章视图" : "大纲树"}
+            <Button onClick={toggleAllCollapse} disabled={!outline || outline.children.length === 0}>
+              {collapsed.size > 0 ? "全部展开" : "全部折叠"}
             </Button>
-            {/* 「全部折叠」只在树视图出现（平铺章列表无折叠语义） */}
-            {view === "tree" && (
-              <Button
-                onClick={toggleAllCollapse}
-                disabled={!outline || outline.children.length === 0}
-              >
-                {collapsed.size > 0 ? "全部展开" : "全部折叠"}
-              </Button>
-            )}
             <Button type="primary" onClick={() => startCreate(ROOT_NODE_ID, "volume")}>
               + 新建卷
             </Button>
@@ -1068,27 +1049,6 @@ export default function Outline() {
             </span>
           </EmptyState>
         )
-      ) : view === "chapters" ? (
-        /* 章视图（DESIGN.md「大纲页双视图」）：平铺章列表——只放改名 + 进详情；
-           新建/删除/拖拽仍只在树视图（所以 startCreate 会先切回树视图） */
-        <ChapterView
-          rows={numbering.chapterRows}
-          currentPositionId={config?.currentPosition ?? null}
-          hookMarks={hookMarks}
-          deductionMarks={deduction.marks}
-          editing={
-            editing?.field === "title"
-              ? { nodeId: editing.nodeId, value: editingValue }
-              : null /* 摘要编辑态不映射到本视图（本视图只有标题输入框） */}
-          focusedNodeId={focusedNodeId}
-          handlers={{
-            onStartEdit: (node) => startEdit(node, "title"),
-            onChangeEditingValue: setEditingValue,
-            onCommitEdit: (node) => void commitEdit(node, "title"),
-            onCancelEdit: cancelEdit,
-            onOpenDetail: (nodeId) => navigate(`/outline/${nodeId}`),
-          }}
-        />
       ) : (
         /* 整树渲染（容器同时是 root 拖放目标：拖到空白处 = 排顶层末尾；scene 会被 canMoveTo 拒绝） */
         <div

@@ -3,7 +3,7 @@
 // 大纲页页头「清除推演标记」）。
 //
 // 语义：PUT /project/config { deduction_nodes }——**全量替换**（服务端去重 + 按可见章先序归一），
-// store updateConfig 成功后自动重拉 config，联动大纲树与章视图行尾徽标、详情页元信息行。
+// store updateConfig 成功后自动重拉 config，联动大纲树行尾徽标、详情页元信息行。
 // 服务端只接受**可见的章节点**（卷/场景/软删 → 400）；调用方负责入口可见性（仅章行/章页给入口）。
 // 徽标文案与章号**一律来自 shared `buildDeductionMarks`**（唯一编号口径，见 `10-data-model.md` §15），
 // 本模块只做 title 组装与菜单文案，不手抄任何标签或章号。

@@ -1,4 +1,4 @@
-// 章正文编辑面板（无路由）：由 `pages/Manuscript.tsx` 与写作页共用。契约：docs/api/110-api-manuscript.md
+// 章正文编辑面板（无路由）：由写作页 `pages/Writing.tsx` 挂载。契约：docs/api/110-api-manuscript.md
 // （GET/PUT 端点）、docs/ui/DESIGN.md §Colors「块编辑器（--bn-*）」、§Layout「中栏页头结构 → 页头常驻」。
 // 设计语义见 design/10-data-model.md §13。
 //
@@ -86,8 +86,8 @@ export interface ChapterEditorProps {
   outline: OutlineTree | null;
   /** 章节点 id（路由已解析） */
   chapterId: string;
-  /** 上一/下一章链接的路由前缀：`#/manuscript/:id` 或 `#/writing/:id` */
-  basePath: "/manuscript" | "/writing";
+  /** 上一/下一章链接的路由前缀（写作页 = `#/writing/:id`） */
+  basePath: "/writing";
   /** 保存成功（自动 / 手动 / 409 覆盖）后回调：写作页据此不可变补丁 store 的章统计（不重拉大纲） */
   onSaved?: (info: { charCount: number; updatedAt: string }) => void;
 }

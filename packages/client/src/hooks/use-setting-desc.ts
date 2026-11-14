@@ -1,6 +1,6 @@
 // 设定树「描述」显示开关的持久化。
 // 为什么持久化：描述摘要行是阅读辅助，用户按屏幕/书写习惯长期开或关，刷新后不该回弹。
-// 存储哲学同 use-outline-view：纯展示偏好、不进项目文件 / 备份 / 云同步。
+// 存储哲学同其他展示偏好 hook（use-theme / use-panels / use-writing-prefs）：纯展示偏好、不进项目文件 / 备份 / 云同步。
 // 读写防御：坏值 / 隐私模式 / SSR 异常一律回落 `true`（默认显示，保持既有行为）。
 // 契约：docs/ui/DESIGN.md §Components「data-row」、docs/design/config.md（key 清单）。
 import { useState } from "react";

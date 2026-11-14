@@ -131,6 +131,18 @@ describe("大纲页树视图：推演节点徽标", () => {
   });
 });
 
+// 写作入口迁到一级页（writing-4 收口）：大纲页只有树视图，页头不再有视图切换
+// （旧双视图与视图持久化 key 已删）——此处只钉「切换文案不出现 + 右端组按钮在」。
+describe("大纲页：单树视图", () => {
+  it("页头无视图切换按钮，右端组 =「全部折叠」+「+ 新建卷」", () => {
+    const html = render();
+    expect(html).not.toContain("章视图");
+    expect(html).not.toContain("大纲树");
+    expect(html).toContain("全部折叠");
+    expect(html).toContain("+ 新建卷");
+  });
+});
+
 // 写正文入口迁移（writing-1）：详情页是章正文的另一个入口，写作页为一级页后目标改指 `#/writing/:id`。
 // 写法 = `Button href`（antd 渲染成 `<a>`）⇒ SSR 可直接断言目标；卷节点仍不给入口（正文只挂章）。
 describe("大纲节点详情页：写正文入口指向写作页", () => {

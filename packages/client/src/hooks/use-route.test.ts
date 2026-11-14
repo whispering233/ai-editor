@@ -87,6 +87,6 @@ describe("parseHashRoute", () => {
       segments: ["manuscript", "ch-1"],
       isFallback: false,
     });
- // 1 段（缺章 id）也是已知段：由 main.tsx 归一回大纲页，不当作未知 hash 回退
+ // 1 段（缺章 id）也是已知段：由 main.tsx `ReplaceTo` replace 回大纲页，不当作未知 hash 回退
     expect(parseHashRoute("#/manuscript").isFallback).toBe(false);
   });

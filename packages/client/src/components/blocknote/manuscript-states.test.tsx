@@ -1,5 +1,5 @@
 // 章正文页两个整页状态的渲染走查（卡 12.5）：仓内无 jsdom，用 react-dom/server `renderToString`
-// 直渲染 presenter（数据与副作用在容器 pages/Manuscript.tsx）——覆盖「404 态」与「加载失败 + 重试」。
+// 直渲染 presenter（数据与副作用在容器 components/manuscript/chapter-editor.tsx）——覆盖「404 态」与「加载失败 + 重试」。
 import { describe, expect, it, vi } from "vitest";
 import { renderToString } from "react-dom/server";
 import { ManuscriptLoadFailure, ManuscriptMissing } from "./manuscript-states";

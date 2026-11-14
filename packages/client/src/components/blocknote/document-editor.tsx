@@ -1,6 +1,6 @@
 // 块编辑器封装（卡 12.5）：章正文与参考资料正文共用（12.8 复用同一组件）。
 // - 编辑器实例 = @blocknote/react 的 useCreateBlockNote —— **初始内容只在挂载时消费一次**
-//   （BlockNote 非受控：外部改写内容必须换 key 重挂，见 pages/Manuscript.tsx 的 editorEpoch）
+//   （BlockNote 非受控：外部改写内容必须换 key 重挂，见 chapter-editor.tsx 的 editorEpoch）
 // - 视图 = @blocknote/ariakit 变体（DESIGN.md §Colors「块编辑器」登记的第二套表皮；样式随该包引入）
 // - 常显写作工具条（卡 13.1）= 本组件的 children（EditorToolbar）：children 落在 `.bn-container` 内、
 //   contentEditable **之外**（仍在 BlockNoteContext + ComponentsContext 之内），靠 blocknote.css 的

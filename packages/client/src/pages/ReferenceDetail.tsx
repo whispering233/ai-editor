@@ -8,7 +8,7 @@
 //   名称/分类/标签/URL 与正文一起由「保存」按钮 / Ctrl+S（useSaveShortcut）手动提交；
 //   **无版本戳保护**：实体 PUT 不接受 `base_updated_at`（strict schema），并发写 = 后写覆盖，
 //   与其它实体一致（卡 12.8 裁决；章正文的 409 弹窗不适用于此页）
-// - 导入 / 导出（纯客户端，无端点；范式照抄 pages/Manuscript.tsx）：导出块 JSON（无损）/ markdown（先确认有损）；
+// - 导入 / 导出（纯客户端，无端点；范式照抄 components/manuscript/chapter-editor.tsx）：导出块 JSON（无损）/ markdown（先确认有损）；
 //   导入 md / 块 JSON 覆盖正文（有损必须先确认）→ **换 key 重挂编辑器**（BlockNote 非受控）→ 交给自动保存落盘
 // 焦点上报：编辑态上报 focus_entity_type/id；新建态无实体不上报
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -296,7 +296,7 @@ export default function ReferenceDetail({ id, draft = false }: { id?: string; dr
     }
   }
 
-  // ============ 导入 / 导出（纯客户端，范式同 pages/Manuscript.tsx） ============
+  // ============ 导入 / 导出（纯客户端，范式同 components/manuscript/chapter-editor.tsx） ============
 
   /** 导入导出的文件名基名（条目名；未命名回退「参考资料」，与页头标题同口径） */
   function documentTitle(): string {

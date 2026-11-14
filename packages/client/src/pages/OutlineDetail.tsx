@@ -191,7 +191,7 @@ export default function OutlineDetail({ nodeId }: { nodeId: string }) {
   /**
    * 标记 / 移出推演节点：提交实现 = lib/deduction.ts 唯一入口（大纲行右键菜单共用）——
    * PUT /project/config { deduction_nodes } 全量替换，store 成功后重拉 config，联动本页元信息行徽标 /
-   * 大纲树与章视图行尾徽标。已标记 → 按钮文案变「移出推演节点」（点即切换，不置灰）；
+   * 大纲树行尾徽标。已标记 → 按钮文案变「移出推演节点」（点即切换，不置灰）；
    * 在途防重入由 markingDeduction 承担。
    */
   async function handleToggleDeduction() {
@@ -243,7 +243,7 @@ export default function OutlineDetail({ nodeId }: { nodeId: string }) {
         action={
           <>
             {/* 写正文（卡 12.5）：仅章节点（正文只挂章，卷/场景 → 端点 400，不留必定失败的入口）；
-                入口指向写作页 #/writing/:id，`Button href` 渲染成 `<a>` ⇒ 保住导航链接语义（同章视图写正文按钮） */}
+                入口指向写作页 #/writing/:id，`Button href` 渲染成 `<a>` ⇒ 保住导航链接语义（同大纲树写作入口的链接写法） */}
             {node?.type === "chapter" && (
               <Button href={`#/writing/${node.id}`}>写正文</Button>
             )}

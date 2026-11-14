@@ -21,7 +21,6 @@ import Timeline from "./pages/Timeline";
 import TimelineDetail from "./pages/TimelineDetail";
 import ReferenceList from "./pages/ReferenceList";
 import ReferenceDetail from "./pages/ReferenceDetail";
-import Manuscript from "./pages/Manuscript";
 import Writing from "./pages/Writing";
 import WritingStats from "./pages/WritingStats";
 import AuthorIntro from "./pages/AuthorIntro";
@@ -40,6 +39,14 @@ import "./index.css";
 function RedirectTo({ to }: { to: string }) {
   useEffect(() => {
     navigate(to);
+  }, [to]);
+  return null;
+}
+
+/** 旧书签重定向：与 RedirectTo 的差别 = `location.replace`（替换当前历史条目，后退不回到旧 hash） */
+function ReplaceTo({ to }: { to: string }) {
+  useEffect(() => {
+    window.location.replace(`#${to}`);
   }, [to]);
   return null;
 }
@@ -146,13 +153,12 @@ function renderPage(route: Route): ReactNode {
         <RedirectTo to="/writing" />
       );
     case "manuscript":
-      // 旧章正文页（卡 12.5）：#/manuscript/:chapterId——缺章 id 或多余段归一回大纲页。
-      // 写正文入口已改指 #/writing/:chapterId；本段保留可用（旧书签），重定向留待后续卡
-      // （key = chapterId 变化强制卸载重挂：正文按章重置、在途自动保存 flush）
+      // 旧书签 → 写作页（replace，不留历史）：#/manuscript/:chapterId → #/writing/:chapterId；
+      // 缺章 id 或多余段 → #/outline（大纲页是唯一的章结构入口）
       return second !== undefined && third === undefined ? (
-        <Manuscript key={second} chapterId={second} />
+        <ReplaceTo to={`/writing/${second}`} />
       ) : (
-        <RedirectTo to="/outline" />
+        <ReplaceTo to="/outline" />
       );
     case "stats":
       // 码字统计（小说工作区专属；练习工作区的反向守卫在 workspace-route-guard）

@@ -119,6 +119,8 @@ describe("小说工作区的反向守卫（kind = novel）", () => {
       "#/references",
       "#/stats",
       "#/trash",
+      // 旧章正文段保留允许：main.tsx 的 `ReplaceTo` 要在渲染后把它 replace 成 `#/writing/:id`，
+      // 被守卫拦在这里就再也走不到重定向（旧书签失效）
       "#/manuscript/ch-1",
     ]) {
       expect(workspaceRedirectPath("novel", route(hash)), hash).toBeNull();

@@ -62,7 +62,7 @@ export function createAutosave({
 }
 
 /**
- * 章在阅读序里的相邻章（上一章 / 下一章）：阅读序 = 卷序 → 卷内章序，即 `numberOutline` 的章视图行序
+ * 章在阅读序里的相邻章（上一章 / 下一章）：阅读序 = 卷序 → 卷内章序，即 `numberOutline` 的 `chapterRows` 顺序
  * （同一份纯函数，不在本页另算一遍章序）；章不在树上（已软删/已 purge）→ 两侧皆 null。
  */
 export function chapterNeighbors(
