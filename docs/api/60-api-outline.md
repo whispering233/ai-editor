@@ -44,7 +44,7 @@
 >
 > **节点 `metadata.textLength`（2026-09）**：仅 `with_metadata=true` 时返回的**章**统计——正文字数（= `document_records.content_text` 长度），大纲树与写作页卷章导航栏据此展示「已写 / 字数」而**不拉取正文全文**。与既有 `metadata.charCount`（关联角色数）不是同一字段，勿混用。
 >
-> **节点 `metadata.documentUpdatedAt`（2026-11）**：仅 `with_metadata=true` 时返回的**章**统计——该章正文行 `document_records.updated_at`（最近一次保存的服务端时刻）；**无正文 = 字段缺省**（不是空串 / 0）。写作页用它解析「最近编辑的章」（`#/writing` 无 id 时取最大值并 `location.replace`），**不是** `project.json.current_position`（阅读进度），也不新增客户端存储。`PUT /manuscript/:id` 返回的 `updatedAt` 与它是同一个值。
+> **节点 `metadata.documentUpdatedAt`（2026-11）**：仅 `with_metadata=true` 时返回的**章**统计——该章正文行 `document_records.updated_at`（最近一次保存的服务端时刻）；**无正文 = 字段缺省**（不是空串 / 0）。写作页 `#/writing` 的**回退**导航用它：优先 localStorage 最近打开，命中不了才取 `documentUpdatedAt` 最大值并 `location.replace`；**不是** `project.json.current_position`（阅读进度），不新增服务端字段 / 表。`PUT /manuscript/:id` 返回的 `updatedAt` 与它是同一个值。
 
 ### POST /api/v1/outline
 
