@@ -35,13 +35,16 @@
     charCount?: number;          // 关联角色数（appears_in 指向该节点的关系数）
     deltaCount?: number;         // 此节点触发的 Delta 数
     textLength?: number;         // （章，2026-09）正文字数 = document_records.content_text 长度；无正文 = 0
+    documentUpdatedAt?: string;  // （章，2026-11）最近一次正文保存的服务端时刻 = document_records.updated_at；无正文 = 字段缺省
   };
 }
 ```
 
 > **节点 `data`（2026-08 新增）**：按层级 schema（`OUTLINE_NODE_DATA_SCHEMAS`，shared 单一来源）校验——scene：`goal`/`conflict_levels`/`value_from`/`value_to`；chapter：`reversal`/`climax_scene`；volume：`climax_scene`/`inciting_scene`。引用字段（`climax_scene`/`inciting_scene`）宽松校验（任意场景节点 id），MVP 不校验引用范围。编辑 data 不自动生成 Delta。
 >
-> **节点 `metadata.textLength`（2026-09）**：仅 `with_metadata=true` 时返回的**章**统计——正文字数（= `document_records.content_text` 长度），大纲页/章视图据此展示「已写 / 字数」而**不拉取正文全文**。与既有 `metadata.charCount`（关联角色数）不是同一字段，勿混用。
+> **节点 `metadata.textLength`（2026-09）**：仅 `with_metadata=true` 时返回的**章**统计——正文字数（= `document_records.content_text` 长度），大纲树与写作页卷章导航栏据此展示「已写 / 字数」而**不拉取正文全文**。与既有 `metadata.charCount`（关联角色数）不是同一字段，勿混用。
+>
+> **节点 `metadata.documentUpdatedAt`（2026-11）**：仅 `with_metadata=true` 时返回的**章**统计——该章正文行 `document_records.updated_at`（最近一次保存的服务端时刻）；**无正文 = 字段缺省**（不是空串 / 0）。写作页用它解析「最近编辑的章」（`#/writing` 无 id 时取最大值并 `location.replace`），**不是** `project.json.current_position`（阅读进度），也不新增客户端存储。`PUT /manuscript/:id` 返回的 `updatedAt` 与它是同一个值。
 
 ### POST /api/v1/outline
 

@@ -79,7 +79,9 @@ chapterNodeId: string;
 
 ### 与大纲接口的关系
 
-`GET /api/v1/outline?with_metadata=true`（见 [60-api-outline.md](./60-api-outline.md)）的章节点 `metadata` 增 `textLength`（= `document_records.content_text` 长度；无文档 = 0）——大纲页/章视图据此显示「已写 / 字数」，**不读取正文全文**。
+`GET /api/v1/outline?with_metadata=true`（见 [60-api-outline.md](./60-api-outline.md)）的章节点 `metadata` 增 `textLength`（= `document_records.content_text` 长度；无文档 = 0）与 `documentUpdatedAt`（= `document_records.updated_at`；无文档 = 字段缺省）——大纲树与写作页卷章导航栏据此显示「已写 / 字数」，写作页据此解析最近编辑的章，**不读取正文全文**。
+
+**与写作页「最近编辑」的关系**：`PUT` 返回的 `updatedAt`（本次写入后的 `document_records.updated_at`）同时是 `documentUpdatedAt` 的取值；客户端保存成功后用它更新本地大纲镜像，`#/writing` 的最近编辑指针因此立即生效（不重拉大纲树）。
 
 ### 导入导出（无端点）
 
