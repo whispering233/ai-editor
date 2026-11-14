@@ -11,11 +11,14 @@ const days = new Map([
   ["2026-11-15", 500],
 ]);
 
-function renderCalendar(selectedDate: string): string {
+function renderCalendar(
+  selectedDate: string,
+  { year = 2026, monthIndex = 10 }: { year?: number; monthIndex?: number } = {},
+): string {
   return renderToString(
     <MonthCalendar
-      year={2026}
-      monthIndex={10}
+      year={year}
+      monthIndex={monthIndex}
       charsByDate={days}
       today="2026-11-15"
       selectedDate={selectedDate}
@@ -23,6 +26,10 @@ function renderCalendar(selectedDate: string): string {
       onSelectDate={() => undefined}
     />,
   ).replace(/<!--[^>]*-->/g, "");
+}
+
+function countOccurrences(html: string, needle: string): number {
+  return html.split(needle).length - 1;
 }
 
 describe("码字日历（月历）", () => {
@@ -68,5 +75,23 @@ describe("码字日历（月历）", () => {
     const html = renderCalendar("2026-11-06");
     expect(html).toContain('aria-label="11月6日 · 100 字" aria-pressed="true"');
     expect(html).toContain(">100<");
+  });
+
+  it("固定 6 周栅格：4 周月份（2027-02）尾部补足 14 个空位", () => {
+    const html = renderCalendar("2027-02-01", { year: 2027, monthIndex: 1 });
+    const placeholders = countOccurrences(html, 'class="h-10"');
+    const dayCells = countOccurrences(html, "aria-pressed=");
+    expect(dayCells).toBe(28); // 2027-02 = 28 天、恰好 4 整行（周一起始）
+    expect(placeholders).toBe(14); // 42 − 28：尾部补足
+    expect(dayCells + placeholders).toBe(42);
+  });
+
+  it("固定 6 周栅格：6 周月份（2026-11）前导 6 + 尾部 6 共 12 个空位", () => {
+    const html = renderCalendar("2026-11-01");
+    const placeholders = countOccurrences(html, 'class="h-10"');
+    const dayCells = countOccurrences(html, "aria-pressed=");
+    expect(dayCells).toBe(30);
+    expect(placeholders).toBe(12);
+    expect(dayCells + placeholders).toBe(42);
   });
 });
