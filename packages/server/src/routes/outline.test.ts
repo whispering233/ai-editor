@@ -241,9 +241,9 @@ describe("GET /outline 整树", () => {
   it("with_metadata=true：章 textLength = 正文投影长度（无文档 = 0；仅章节点有该字段）", async () => {
     const app = buildApp();
     const { vol, ch } = await seedTree(app);
-    await app.request("/api/v1/outline", {
+    const ch2 = (await (await app.request("/api/v1/outline", {
       method: "POST", headers: HOST_HEADERS, body: JSON.stringify({ type: "chapter", title: "第二章", parent_id: vol }),
-    }); // 第二个章（无正文 → textLength 0）
+    })).json()).data.id; // 第二个章（无正文 → textLength 0）
  // 只给第一章写正文（只读 content_text 投影，不解析块 JSON）
     upsertDocument(getCurrentProject()!.db, {
       ownerKind: "chapter", ownerId: ch, content: "[]", contentText: "正文两字", now: T0,
@@ -255,6 +255,27 @@ describe("GET /outline 整树", () => {
     expect(volNode.children[1].metadata.textLength).toBe(0); // 无文档 = 0
     expect(volNode.metadata.textLength).toBeUndefined(); // 卷无正文字段
     expect(volNode.children[0].children[0].metadata.textLength).toBeUndefined(); // 场景无正文字段
+
+    // documentUpdatedAt = 正文行 updated_at（= PUT /manuscript 返回的 updatedAt）；无文档 = 字段缺省
+    expect(volNode.children[0].metadata.documentUpdatedAt).toBe(T0);
+    expect(volNode.children[1].metadata.documentUpdatedAt).toBeUndefined(); // 无正文的章
+    expect(volNode.metadata.documentUpdatedAt).toBeUndefined(); // 卷
+    expect(volNode.children[0].children[0].metadata.documentUpdatedAt).toBeUndefined(); // 场景
+
+    // 批量口径：第二份文档也用自己行的时间戳（不串到第一章）
+    const later = "2026-08-02T10:00:00Z";
+    upsertDocument(getCurrentProject()!.db, {
+      ownerKind: "chapter", ownerId: ch2, content: "[]", contentText: "后一章", now: later,
+    });
+    const again = (await (await app.request("/api/v1/outline?with_metadata=true", { headers: HOST_HEADERS })).json()).data;
+    expect(again.children[0].children[0].metadata.documentUpdatedAt).toBe(T0);
+    expect(again.children[0].children[1].metadata.documentUpdatedAt).toBe(later);
+    // reference 行不串入 chapter（owner_kind 隔离）
+    upsertDocument(getCurrentProject()!.db, {
+      ownerKind: "reference", ownerId: "ref-1", content: "[]", contentText: "参考", now: later,
+    });
+    const withRef = (await (await app.request("/api/v1/outline?with_metadata=true", { headers: HOST_HEADERS })).json()).data;
+    expect(withRef.children[0].children[1].metadata.documentUpdatedAt).toBe(later);
   });
 });
 

@@ -771,6 +771,7 @@ export const outlineNodeSchema: z.ZodTypeAny = z.lazy(() =>
         charCount: z.number().int().optional(),
         deltaCount: z.number().int().optional(),
         textLength: z.number().int().optional(), // 章节点正文字数（content_text 长度；无文档 = 0；仅章节点返回）
+        documentUpdatedAt: z.string().optional(), // 章节点正文最近保存时刻（updated_at；无文档 = 字段缺省）
       })
       .optional(), // 仅 with_metadata=true 时返回
   }),

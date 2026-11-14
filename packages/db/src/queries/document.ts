@@ -132,3 +132,21 @@ export function getDocumentTextLengths(
 ): Map<string, number> {
   return new Map([...getDocumentTexts(db, ownerKind, ownerIds)].map(([ownerId, text]) => [ownerId, text.length]));
 }
+
+/**
+ * 批量取多个 owner 的 `updated_at`（供 `GET /outline?with_metadata=true` 的章 `metadata.documentUpdatedAt`）。
+ * 一次查询，**不读 content / content_text**；无行不出现（调用方按「字段缺省」处理）。
+ */
+export function getDocumentUpdatedAts(
+  db: Db,
+  ownerKind: DocumentOwnerKind,
+  ownerIds: readonly string[],
+): Map<string, string> {
+  if (ownerIds.length === 0) return new Map();
+  const rows = queryDb(db)
+    .select({ ownerId: documentRecords.owner_id, updatedAt: documentRecords.updated_at })
+    .from(documentRecords)
+    .where(and(eq(documentRecords.owner_kind, ownerKind), inArray(documentRecords.owner_id, [...ownerIds])))
+    .all();
+  return new Map(rows.map((row) => [row.ownerId, row.updatedAt]));
+}

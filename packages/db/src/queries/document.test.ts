@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { closeDatabase, openDatabase, type Db } from "../connection.js";
-import { deleteDocumentsByOwner, getDocument, getDocumentTextLengths, getDocumentTexts, upsertDocument } from "./document.js";
+import { deleteDocumentsByOwner, getDocument, getDocumentTextLengths, getDocumentTexts, getDocumentUpdatedAts, upsertDocument } from "./document.js";
 
 const T1 = "2026-10-01T10:00:00Z";
 const T2 = "2026-10-01T10:05:00Z";
@@ -137,5 +137,23 @@ describe("getDocumentTextLengths（大纲章 textLength 的批量来源）", () 
       ["ch-2", 0],
     ]); // ch-404 无行不出现；ch-3 是 reference 行，不混入
     expect(getDocumentTextLengths(db, "chapter", []).size).toBe(0);
+  });
+});
+
+describe("getDocumentUpdatedAts（大纲章 documentUpdatedAt 的批量来源）", () => {
+  it("一次查询多 owner：命中行给 updated_at、无行不出现、跨 kind 不混入、空集返回空 Map", () => {
+    upsertDocument(db, { ownerKind: "chapter", ownerId: "ch-1", content: "[]", contentText: "一", now: T1 });
+    upsertDocument(db, { ownerKind: "chapter", ownerId: "ch-2", content: "[]", contentText: "二", now: T2 });
+    upsertDocument(db, { ownerKind: "reference", ownerId: "ch-3", content: "[]", contentText: "不混入", now: T2 });
+
+    const updatedAts = getDocumentUpdatedAts(db, "chapter", ["ch-1", "ch-2", "ch-404"]);
+    expect([...updatedAts]).toEqual([
+      ["ch-1", T1],
+      ["ch-2", T2], // 多 owner 各取各的时间戳
+    ]); // ch-404 无行不出现；ch-3 是 reference 行，不混入
+    expect(getDocumentUpdatedAts(db, "chapter", []).size).toBe(0);
+    // 覆盖写推进 updated_at（与 PUT /manuscript 的返回值同源）
+    upsertDocument(db, { ownerKind: "chapter", ownerId: "ch-1", content: "[]", contentText: "一", now: T2 });
+    expect(getDocumentUpdatedAts(db, "chapter", ["ch-1"]).get("ch-1")).toBe(T2);
   });
 });

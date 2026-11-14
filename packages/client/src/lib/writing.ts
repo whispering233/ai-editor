@@ -84,3 +84,95 @@ export function buildWritingRailRows(outline: OutlineTree | null): WritingRailRo
   }
   return rows;
 }
+
+// ============ 最近导航（`#/writing` 无 id 时的目标解析）============
+
+/** 最近打开章的 localStorage key（per-book 映射；唯一 key，勿手抄字面量） */
+export const LAST_OPENED_CHAPTERS_KEY = "ai-editor:writing-last-opened";
+
+/** 解析 per-book 映射：坏 JSON / null / 数组 / 非对象 → {}；只保留 value 为非空 string 的条目（不抛错） */
+export function parseLastOpenedChapters(raw: string | null): Record<string, string> {
+  if (raw === null) return {};
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    return {};
+  }
+  if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) return {};
+  const result: Record<string, string> = {};
+  for (const [key, value] of Object.entries(parsed)) {
+    if (typeof value === "string" && value !== "") result[key] = value;
+  }
+  return result;
+}
+
+/** 读某本书的最近打开章 id（无项目 / 无记录 / 存储不可用 → null；读写尝试都静默失败） */
+export function readLastOpenedChapter(projectId: string | null): string | null {
+  if (projectId === null || typeof localStorage === "undefined") return null;
+  try {
+    const map = parseLastOpenedChapters(localStorage.getItem(LAST_OPENED_CHAPTERS_KEY));
+    return map[projectId] ?? null;
+  } catch {
+    return null;
+  }
+}
+
+/** 写某本书的最近打开章 id（合并进 per-book 映射；只存 id，不存正文） */
+export function writeLastOpenedChapter(projectId: string | null, chapterId: string): void {
+  if (projectId === null || typeof localStorage === "undefined") return;
+  try {
+    const map = parseLastOpenedChapters(localStorage.getItem(LAST_OPENED_CHAPTERS_KEY));
+    map[projectId] = chapterId;
+    localStorage.setItem(LAST_OPENED_CHAPTERS_KEY, JSON.stringify(map));
+  } catch {
+    // 隐私模式 / 配额满：导航记录是便利功能，不打断写作
+  }
+}
+
+/**
+ * 服务端回退：按 **outline.children 文件序**收集可见章（跳软删；存量根级章原位；卷内只章），
+ * 取 `metadata.documentUpdatedAt` 字符串最大者；平局取先序第一个；无时间戳 → null。
+ * **不是** `current_position`（那是阅读进度）。
+ */
+export function pickRecentChapter(outline: OutlineTree | null): string | null {
+  if (outline === null) return null;
+  const chapters: OutlineChapter[] = [];
+  const collect = (nodes: OutlineTree["children"]): void => {
+    for (const node of nodes) {
+      if (node.deleted === true) continue;
+      if (node.type === "chapter") {
+        chapters.push(node);
+        continue;
+      }
+      for (const child of node.children ?? []) {
+        if (child.deleted !== true && child.type === "chapter") chapters.push(child);
+      }
+    }
+  };
+  collect(outline.children);
+  let bestId: string | null = null;
+  let bestUpdatedAt: string | null = null;
+  for (const chapter of chapters) {
+    const updatedAt = chapter.metadata?.documentUpdatedAt;
+    if (updatedAt === undefined || updatedAt === "") continue;
+    // 严格大于 ⇒ 平局保留先序第一个
+    if (bestUpdatedAt === null || updatedAt > bestUpdatedAt) {
+      bestId = chapter.id;
+      bestUpdatedAt = updatedAt;
+    }
+  }
+  return bestId;
+}
+
+/** 最近打开仍在该书可见大纲 → 用它；否则回退 `pickRecentChapter`；大纲未加载 → null */
+export function resolveWritingTarget(outline: OutlineTree | null, lastOpenedId: string | null): string | null {
+  if (outline === null) return null;
+  if (lastOpenedId !== null) {
+    const visible = buildWritingRailRows(outline).some(
+      (row) => row.kind === "chapter" && row.id === lastOpenedId,
+    );
+    if (visible) return lastOpenedId;
+  }
+  return pickRecentChapter(outline);
+}

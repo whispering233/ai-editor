@@ -22,12 +22,16 @@ vi.mock("../hooks/use-media-query", () => ({
   useMediaQuery: () => media.desktop,
 }));
 
-const chapter = (id: string, title: string, textLength?: number): OutlineChapter => ({
+const chapter = (
+  id: string,
+  title: string,
+  metadata?: { textLength?: number; documentUpdatedAt?: string },
+): OutlineChapter => ({
   id,
   type: "chapter",
   title,
   updatedAt: "t",
-  ...(textLength === undefined ? {} : { metadata: { textLength } }),
+  ...(metadata === undefined ? {} : { metadata }),
 });
 const volume = (id: string, title: string, children: OutlineChapter[]): OutlineVolume => ({
   id,
@@ -44,7 +48,7 @@ const OUTLINE: OutlineTree = {
   schemaVersion: 1,
   children: [
     volume("vol-1", "第一卷", [
-      chapter("ch-1", "雪夜出走", 1200),
+      chapter("ch-1", "雪夜出走", { textLength: 1200 }),
       chapter("ch-2", "旧盟友"),
     ]),
     volume("vol-2", "第二卷", [chapter("ch-3", "入城")]),
@@ -111,6 +115,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  vi.unstubAllGlobals();
   media.desktop = true;
   Object.assign(useProjectStore.getInitialState(), {
     config: null,
@@ -177,6 +182,45 @@ describe("写作页 · 桌面（rail + 正文列）", () => {
     expect(html).toContain("上一章");
     expect(html).toContain("下一章");
     expect(html).toContain("h-5"); // 正文加载骨架（SSR 不跑 effect，拿不到正文）
+    expect(html).not.toContain("从左侧选择一章开始写作");
+  });
+});
+
+describe("写作页 · 最近导航（`#/writing` 无 id）", () => {
+  it("有保存过的正文（documentUpdatedAt）：解析出目标 → 正文列骨架，不闪空态", () => {
+    const html = render({
+      outline: {
+        id: "root",
+        type: "root",
+        schemaVersion: 1,
+        children: [
+          volume("vol-1", "第一卷", [
+            chapter("ch-1", "雪夜出走", { documentUpdatedAt: "2026-11-01T10:00:00Z" }),
+            chapter("ch-2", "旧盟友", { documentUpdatedAt: "2026-11-02T10:00:00Z" }),
+          ]),
+        ],
+      },
+    });
+    expect(html).toContain("animate-pulse");
+    expect(html).not.toContain("从左侧选择一章开始写作");
+    expect(html).not.toContain("还没有章节");
+  });
+
+  it("无最近打开且无已保存正文 → 空态不跳第一章", () => {
+    const html = render();
+    expect(html).toContain("从左侧选择一章开始写作");
+    expect(html).toContain(">写作<");
+    expect(html).not.toContain("animate-pulse");
+  });
+
+  it("最近打开（localStorage per-book 命中）同样进待 replace 骨架（不是空态）", () => {
+    vi.stubGlobal("localStorage", {
+      getItem: (key: string) =>
+        key === "ai-editor:writing-last-opened" ? JSON.stringify({ "p-1": "ch-2" }) : null,
+      setItem: () => {},
+    });
+    const html = render();
+    expect(html).toContain("animate-pulse");
     expect(html).not.toContain("从左侧选择一章开始写作");
   });
 });

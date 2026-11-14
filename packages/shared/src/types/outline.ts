@@ -15,6 +15,8 @@ export interface OutlineNodeMetadata {
   deltaCount?: number;
  /** 章节点正文字数（document_records.content_text 长度；无文档 = 0；仅章节点返回，见 docs/api/110-api-manuscript.md） */
   textLength?: number;
+ /** 章节点正文最近保存时刻（document_records.updated_at；无文档 = 字段缺省；仅章节点返回） */
+  documentUpdatedAt?: string;
 }
 
 /** 大纲节点公共字段（API 形态 camelCase） */

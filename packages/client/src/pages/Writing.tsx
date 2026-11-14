@@ -9,7 +9,7 @@
 //
 // 响应式（<1024px）= 两级互斥（同人物工作台）：`#/writing` 只显示 rail 全宽（无正文）；
 // `#/writing/:id` 只显示正文全宽 + 顶部「章节目录」返回条。专注模式隐藏 rail 与返回条。
-import { useCallback, useMemo, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import { Button } from "antd";
 import { ArrowLeftOutlined } from "@ant-design/icons";
 import { ChapterEditor } from "../components/manuscript/chapter-editor";
@@ -20,13 +20,17 @@ import { useMediaQuery } from "../hooks/use-media-query";
 import { useOutlineLoader } from "../hooks/use-outline-loader";
 import { errorBannerClass, skeletonClass } from "../lib/styles";
 import { cn } from "../lib/utils";
-import { buildWritingRailRows } from "../lib/writing";
+import { buildWritingRailRows, readLastOpenedChapter, resolveWritingTarget, writeLastOpenedChapter } from "../lib/writing";
 import { useProjectStore } from "../stores/project";
 import { useUiStore } from "../stores/ui";
 
 export default function Writing({ chapterId }: { chapterId?: string }) {
   const outline = useProjectStore((s) => s.outline);
   const outlineError = useProjectStore((s) => s.outlineError);
+  const config = useProjectStore((s) => s.config);
+  const configLoading = useProjectStore((s) => s.configLoading);
+  const patchChapterMetadata = useProjectStore((s) => s.patchChapterMetadata);
+  const projectId = config?.id ?? null;
   // 大纲按页加载（页壳持有加载生命周期；编辑器面板不自行拉树）
   const { retry } = useOutlineLoader({ withMetadata: true });
   const isDesktop = useMediaQuery("(min-width: 1024px)");
@@ -52,6 +56,35 @@ export default function Writing({ chapterId }: { chapterId?: string }) {
   // 大纲加载失败（以 store 的错误标记为准：首帧 / 加载中 outlineError 为 null，不误报失败）。
   // 错误提示在正文列（桌面）；窄屏目录页没有正文列，错误与重试挂在 rail 内。
   const outlineFailed = outline === null && outlineError !== null;
+
+  // ============ 最近导航（`#/writing` 无 id 且桌面）============
+  // 目标**同步计算**（SSR 不跑 effect）：最近打开（localStorage per-book）仍在可见大纲则用它，
+  // 否则回退服务端最近编辑（`metadata.documentUpdatedAt` 最大）；两者皆无 → 空态（不跳第一章）。
+  // `current_position` 是阅读进度，绝不复用。
+  const lastOpenedId = readLastOpenedChapter(projectId);
+  const writingTarget =
+    chapterId !== undefined || !isDesktop || configLoading
+      ? null
+      : resolveWritingTarget(outline, lastOpenedId);
+  // 目标未定（大纲未就绪 / 配置加载中 / 待 replace）→ 正文列骨架，不闪空态
+  const targetPending = outline === null || configLoading || writingTarget !== null;
+
+  // `#/writing/:id` 命中可见章时记下最近打开（**窄屏也写**；invalid id / 无项目不写）
+  useEffect(() => {
+    if (chapterId === undefined || !chapterExists || projectId === null) return;
+    writeLastOpenedChapter(projectId, chapterId);
+  }, [chapterId, chapterExists, projectId]);
+
+  // 有目标 → `location.replace`（replace 不入历史，避免「写作 ↔ 大纲」后退打转；
+  // `navigate` 是 push 不能用）。以「当前 hash 是否已是目标」作幂等守卫：StrictMode 第二次
+  // effect 自然跳过；从 `#/writing/:id` 再点「写作」回到无 id 形时也能重新解析（不能用一次性 ref，
+  // 否则同一实例里第二次进入会永久停在骨架）。窄屏不自动跳。
+  useEffect(() => {
+    if (chapterId !== undefined || !isDesktop || writingTarget === null) return;
+    const targetHash = `#/writing/${writingTarget}`;
+    if (window.location.hash === targetHash) return;
+    window.location.replace(targetHash);
+  }, [chapterId, isDesktop, writingTarget]);
 
   // rail：桌面恒有；窄屏只在无 id（目录页）时有。专注模式两者都不渲染。
   const rail =
@@ -80,6 +113,18 @@ export default function Writing({ chapterId }: { chapterId?: string }) {
   );
 
   let bodyContent: ReactNode = null;
+  // 正文列骨架（大纲未就绪 / 目标解析中；写作页与编辑面板共用同一形状）
+  const bodySkeleton = (
+    <div className="space-y-2 rounded-md border border-border p-3">
+      {Array.from({ length: 5 }, (_, i) => (
+        <div
+          key={i}
+          className={cn(skeletonClass, "h-5")}
+          style={{ width: `${92 - i * 12}%` }}
+        />
+      ))}
+    </div>
+  );
   if (chapterId !== undefined) {
     if (outline === null) {
       // 大纲未就绪：先给正文骨架，**不先挂 ChapterEditor**——否则坏 chapterId 会先发一次
@@ -91,15 +136,7 @@ export default function Writing({ chapterId }: { chapterId?: string }) {
             {outlineFailed ? (
               outlineFailureBanner
             ) : (
-              <div className="space-y-2 rounded-md border border-border p-3">
-                {Array.from({ length: 5 }, (_, i) => (
-                  <div
-                    key={i}
-                    className={cn(skeletonClass, "h-5")}
-                    style={{ width: `${92 - i * 12}%` }}
-                  />
-                ))}
-              </div>
+              bodySkeleton
             )}
           </div>
         </section>
@@ -123,6 +160,9 @@ export default function Writing({ chapterId }: { chapterId?: string }) {
             outline={outline}
             chapterId={chapterId}
             basePath="/writing"
+            onSaved={({ charCount, updatedAt }) =>
+              patchChapterMetadata(chapterId, { textLength: charCount, documentUpdatedAt: updatedAt })
+            }
           />
         </div>
       );
@@ -133,7 +173,9 @@ export default function Writing({ chapterId }: { chapterId?: string }) {
         <PageHeader title="写作" />
         <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">
           {outline === null ? (
-            outlineFailed && outlineFailureBanner
+            outlineFailed ? outlineFailureBanner : bodySkeleton
+          ) : targetPending ? (
+            bodySkeleton
           ) : !hasChapterRows ? (
             <EmptyState action={<Button href="#/outline">去大纲新建第一卷</Button>}>
               还没有章节

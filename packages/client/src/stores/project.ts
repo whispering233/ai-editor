@@ -3,8 +3,10 @@
 import { create } from "zustand";
 import { WORKSPACE_DIRS } from "@whispering233/ai-editor-shared";
 import type {
+  OutlineChapter,
   OutlineNode,
   OutlineTree,
+  OutlineVolume,
   ProjectAgents,
   ProjectConfig,
   WorkspaceKind,
@@ -57,6 +59,9 @@ interface ProjectState {
  /** 更新配置（PUT /project/config，请求体 snake_case）；成功后重新拉取最新配置 */
   updateConfig: (patch: UpdateProjectConfigBody) => Promise<void>;
   loadOutline: (options?: { withMetadata?: boolean }) => Promise<void>;
+ /** 保存成功后不可变补丁该章的 `metadata.textLength` + `metadata.documentUpdatedAt`（不重拉大纲树）；
+  * 未命中 / 无树 → 不动 store */
+  patchChapterMetadata: (chapterId: string, patch: { textLength: number; documentUpdatedAt: string }) => void;
  /** 刷新书架（GET /project/list）；失败记录 bookshelfError */
   loadBookshelf: () => Promise<void>;
  /** 打开项目（POST /project/open）：成功刷新 config/outline；rebuilt 时 toast 提示 */
@@ -140,6 +145,20 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
     } finally {
       set({ outlineLoading: false });
     }
+  },
+
+  patchChapterMetadata: (chapterId, patch) => {
+    const outline = get().outline;
+    if (outline === null) return;
+    let changed = false;
+    const children = outline.children.map((node) => {
+      const patched = patchChapterNode(node, chapterId, patch);
+      if (patched === null) return node; // 未命中分支保持原引用
+      changed = true;
+      return patched as OutlineVolume | OutlineChapter;
+    });
+    if (!changed) return; // 未命中：不动 store（不换根引用）
+    set({ outline: { ...outline, children } });
   },
 
   loadBookshelf: async () => {
@@ -242,6 +261,30 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
     });
   },
 }));
+
+/**
+ * 不可变补丁章 metadata：命中 → 新节点（合并 metadata）；未命中 → null（调用方保持原引用）。
+ * 祖先链只在子孙变化时浅拷贝，未变化分支保持原引用。
+ */
+function patchChapterNode(
+  node: OutlineNode,
+  chapterId: string,
+  patch: { textLength: number; documentUpdatedAt: string },
+): OutlineNode | null {
+  if (node.type === "chapter" && node.id === chapterId) {
+    return { ...node, metadata: { ...node.metadata, ...patch } };
+  }
+  const children = (node as { children?: OutlineNode[] }).children;
+  if (children === undefined) return null;
+  let changed = false;
+  const next = children.map((child) => {
+    const patched = patchChapterNode(child, chapterId, patch);
+    if (patched === null) return child;
+    changed = true;
+    return patched;
+  });
+  return changed ? ({ ...node, children: next } as OutlineNode) : null;
+}
 
 /** 在大纲树中按 id 递归查找节点（null = 未找到） */
 function findNodeInTree(node: OutlineNode, id: string): OutlineNode | null {

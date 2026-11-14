@@ -88,9 +88,11 @@ export interface ChapterEditorProps {
   chapterId: string;
   /** 上一/下一章链接的路由前缀：`#/manuscript/:id` 或 `#/writing/:id` */
   basePath: "/manuscript" | "/writing";
+  /** 保存成功（自动 / 手动 / 409 覆盖）后回调：写作页据此不可变补丁 store 的章统计（不重拉大纲） */
+  onSaved?: (info: { charCount: number; updatedAt: string }) => void;
 }
 
-export function ChapterEditor({ outline, chapterId, basePath }: ChapterEditorProps) {
+export function ChapterEditor({ outline, chapterId, basePath, onSaved }: ChapterEditorProps) {
   // 正文：content 为 null = 尚未取到（加载中 / 加载失败）；loadError 非 null = 加载失败（码 + 文案）
   const [content, setContent] = useState<string | null>(null);
   const [loadError, setLoadError] = useState<LoadFailure | null>(null);
@@ -165,6 +167,7 @@ export function ChapterEditor({ outline, chapterId, basePath }: ChapterEditorPro
       setSaveError(null);
       setSaveState("saved");
       setSavedAt(new Date()); // 「已保存 · HH:MM」的时刻基准 = 这次保存完成的时刻
+      onSaved?.({ charCount: res.charCount, updatedAt: res.updatedAt });
       return true;
     } catch (err) {
       const failure = toLoadFailure(err);

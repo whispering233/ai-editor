@@ -3,7 +3,7 @@
 // + loadAgents/saveAgents（加载/保存 + 外部修改检测）
 // mock lib/api 模块（保留 ApiError 类真实实现）
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { ProjectConfig } from "@whispering233/ai-editor-shared";
+import type { OutlineTree, OutlineVolume, ProjectConfig } from "@whispering233/ai-editor-shared";
 import { ApiError } from "../lib/api";
 
 // 部分 mock：端点函数全部替换，ApiError 类保持真实
@@ -177,6 +177,93 @@ describe("loadOutline 的 withMetadata 口径（卡 12.5：统计按页开启）
     expect(useProjectStore.getState().outlineError).toBeNull();
     resolveOutline(emptyTree);
     await loading;
+  });
+});
+
+describe("patchChapterMetadata（保存后不可变补丁，不重拉大纲）", () => {
+  // 卷1（ch-1、ch-2）+ 根级章 ch-root + 卷2（ch-3）
+  const makeTree = (): OutlineTree => ({
+    id: "root",
+    type: "root",
+    schemaVersion: 1,
+    children: [
+      {
+        id: "vol-1",
+        type: "volume",
+        title: "第一卷",
+        updatedAt: "t",
+        children: [
+          { id: "ch-1", type: "chapter", title: "甲", updatedAt: "t", metadata: { textLength: 10 } },
+          { id: "ch-2", type: "chapter", title: "乙", updatedAt: "t" },
+        ],
+      },
+      { id: "ch-root", type: "chapter", title: "根级章", updatedAt: "t" },
+    ],
+  });
+
+  it("命中章：换该章 / 其卷 / 根引用，合并 metadata（不改原树、不动 outlineWithMetadata）", () => {
+    mocked.getOutline.mockClear();
+    const outline = makeTree();
+    const vol1 = outline.children[0];
+    const untouchedRootChapter = outline.children[1];
+    useProjectStore.setState({ outline, outlineWithMetadata: true });
+
+    useProjectStore.getState().patchChapterMetadata("ch-1", {
+      textLength: 42,
+      documentUpdatedAt: "2026-11-01T10:00:00Z",
+    });
+
+    const next = useProjectStore.getState().outline!;
+    expect(next).not.toBe(outline);
+    expect(next.children[0]).not.toBe(vol1); // 祖先链浅拷贝
+    expect((next.children[0] as OutlineVolume).children![0].metadata).toEqual({
+      textLength: 42,
+      documentUpdatedAt: "2026-11-01T10:00:00Z",
+    });
+    expect(next.children[1]).toBe(untouchedRootChapter); // 未变化分支保持原引用
+    expect(outline.children[0]).toBe(vol1); // 原树未被修改
+    expect((vol1 as OutlineVolume).children![0].metadata).toEqual({ textLength: 10 });
+    expect(useProjectStore.getState().outlineWithMetadata).toBe(true);
+    expect(mocked.getOutline).not.toHaveBeenCalled(); // 补丁不触发重拉
+  });
+
+  it("无 metadata 的章也补上；根级章命中同样生效", () => {
+    useProjectStore.setState({ outline: makeTree() });
+    useProjectStore.getState().patchChapterMetadata("ch-2", {
+      textLength: 7,
+      documentUpdatedAt: "2026-11-02T10:00:00Z",
+    });
+    const vol = useProjectStore.getState().outline!.children[0] as OutlineVolume;
+    expect(vol.children![1].metadata).toEqual({
+      textLength: 7,
+      documentUpdatedAt: "2026-11-02T10:00:00Z",
+    });
+
+    useProjectStore.getState().patchChapterMetadata("ch-root", {
+      textLength: 1,
+      documentUpdatedAt: "2026-11-03T10:00:00Z",
+    });
+    const rootChapter = useProjectStore.getState().outline!.children[1];
+    expect(rootChapter.metadata?.documentUpdatedAt).toBe("2026-11-03T10:00:00Z");
+  });
+
+  it("未命中 / 无树：根引用与 store 不变", () => {
+    const outline = makeTree();
+    useProjectStore.setState({ outline });
+    useProjectStore.getState().patchChapterMetadata("ch-404", {
+      textLength: 1,
+      documentUpdatedAt: "2026-11-01T10:00:00Z",
+    });
+    expect(useProjectStore.getState().outline).toBe(outline);
+
+    useProjectStore.setState({ outline: null });
+    expect(() =>
+      useProjectStore.getState().patchChapterMetadata("ch-1", {
+        textLength: 1,
+        documentUpdatedAt: "2026-11-01T10:00:00Z",
+      }),
+    ).not.toThrow();
+    expect(useProjectStore.getState().outline).toBeNull();
   });
 });
 

@@ -21,7 +21,7 @@
 - db：`queries/document.ts` 新增批量取 `owner_id + updated_at`（一次查询、空数组短路，风格同 `getDocumentTextLengths`）；`document.test.ts` 覆盖有/无行、多 owner。
 - server：`routes/outline.ts` 的 `attachMetadata` 复用 `chapterIds` 批量取时间戳，**仅 chapter** 写 `metadata.documentUpdatedAt`；**无文档行 = 字段缺省**。`outline.test.ts` 覆盖仅章、无文档缺省、批量。
 - `lib/writing.ts`：`parseLastOpenedChapters` / `readLastOpenedChapter(projectId)` / `writeLastOpenedChapter(projectId, chapterId)`（key `ai-editor:writing-last-opened`，per-book `{ [projectId]: chapterId }`；只存 id；坏 JSON / 非对象 / 非字符串值 → 空表；写失败静默）；`pickRecentChapter(outline)`（文件序可见章中最大 `documentUpdatedAt`，平局取先序第一个，无则 null）；`resolveWritingTarget(outline, lastOpenedId)` = 最近打开仍在**可见大纲**则用它，否则回退 `pickRecentChapter`；测试覆盖 per-book 隔离、脏值、最近打开优先、失效回退、平局、软删、根级章。
-- `pages/Writing.tsx`：`#/writing/:id` 命中可见章时写最近打开（窄屏也写）；`#/writing` 无 id 且桌面端 → effect 里 `resolveWritingTarget`，有目标 `window.location.replace("#/writing/" + id)`，无目标空态；解析中骨架；一次性 ref 防重复 replace；**窄屏不自动跳**。
+- `pages/Writing.tsx`：`#/writing/:id` 命中可见章时写最近打开（窄屏也写）；`#/writing` 无 id 且桌面端 → effect 里 `resolveWritingTarget`，有目标 `window.location.replace("#/writing/" + id)`，无目标空态；解析中骨架；**以当前 hash 是否已是目标作幂等守卫**（StrictMode 第二次 effect 跳过；从 `#/writing/:id` 再点「写作」可重新解析）；**窄屏不自动跳**。
 - `stores/project.ts`：新增 `patchChapterMetadata(chapterId, { textLength, documentUpdatedAt })`——不可变递归更新 `outline`（未命中分支保持原引用），不改 `outlineWithMetadata` 标志；`project.test.ts` 断言不可变与未命中不换根。
 - `ChapterEditor`：保存成功（自动 / 手动，含 409 覆盖分支）后调用 `onSaved({ charCount, updatedAt })`；`Writing` 传入并 patch store。**不重拉大纲树**。
 - 先 `pnpm -r build` 再跑下游（shared/db 改了 src）。
