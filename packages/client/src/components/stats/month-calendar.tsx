@@ -1,5 +1,5 @@
 // 码字日历（月历，DESIGN.md「码字统计页」→「码字日历（月历）」）：
-// 7 列、周一起始；每格 = 日号 + 仅正字数时显示当日字数；点格选中日期；标题行 = 翻月 + 今天。
+// 7 列、周一起始；每格 = 日号 + 仅正字数时显示当日字数；点格选中日期；标题行 = 今天，下一行 = 翻月导航。
 // 月矩阵 / 月合计 / 千分位全部取 `lib/writing-stats.ts`（阈值与派生不在组件里手写）。
 import { Button } from "antd";
 import { LeftOutlined, RightOutlined } from "@ant-design/icons";
@@ -58,32 +58,33 @@ export function MonthCalendar({
     <SectionCard
       title="码字日历"
       action={
-        <span className="flex items-center gap-1">
-          <Button
-            size="small"
-            color="default"
-            variant="text"
-            icon={<LeftOutlined />}
-            aria-label="上个月"
-            title="上个月"
-            onClick={() => shiftMonth(-1)}
-          />
-          <span className="text-sm whitespace-nowrap tabular-nums">{monthLabel(year, monthIndex)}</span>
-          <Button
-            size="small"
-            color="default"
-            variant="text"
-            icon={<RightOutlined />}
-            aria-label="下个月"
-            title="下个月"
-            onClick={() => shiftMonth(1)}
-          />
-          <Button size="small" onClick={() => onSelectDate(today)}>
-            今天
-          </Button>
-        </span>
+        <Button size="small" onClick={() => onSelectDate(today)}>
+          今天
+        </Button>
       }
     >
+      <div className="mb-2 flex items-center justify-between">
+        <Button
+          size="small"
+          color="default"
+          variant="text"
+          icon={<LeftOutlined />}
+          aria-label="上个月"
+          title="上个月"
+          onClick={() => shiftMonth(-1)}
+        />
+        <span className="text-sm whitespace-nowrap tabular-nums">{monthLabel(year, monthIndex)}</span>
+        <Button
+          size="small"
+          color="default"
+          variant="text"
+          icon={<RightOutlined />}
+          aria-label="下个月"
+          title="下个月"
+          onClick={() => shiftMonth(1)}
+        />
+      </div>
+
       <div className="grid grid-cols-7 gap-1">
         {WRITING_STATS_WEEKDAYS.map((weekday) => (
           <div key={weekday} className="text-center text-xs text-muted-foreground">

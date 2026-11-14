@@ -1,6 +1,6 @@
 // 码字日历 SSR 走查（仓内无 jsdom/@testing-library，用 `react-dom/server` 直渲染）。
 // 契约依据 = DESIGN.md「码字统计页」→「码字日历（月历）」：7 列星期头、日号 + 仅正字数时显示字数、
-// 选中日详情三格（选中日字数 / 当月累计 / 当月活跃天数）、翻月 + 今天按钮。
+// 选中日详情三格（选中日字数 / 当月累计 / 当月活跃天数）、两行头部（标题 + 今天 / 翻月导航 + 月份）。
 import { renderToString } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import { MonthCalendar } from "./month-calendar";
@@ -31,10 +31,18 @@ describe("码字日历（月历）", () => {
     for (const weekday of ["一", "二", "三", "四", "五", "六", "日"]) {
       expect(html).toContain(`>${weekday}<`);
     }
+    expect(html).toContain("码字日历");
     expect(html).toContain("2026年11月");
     expect(html).toContain('aria-label="上个月"');
     expect(html).toContain('aria-label="下个月"');
     expect(html).toContain("今 天"); // antd Button 的两个汉字间插入空格（自动加空格规则）
+    // 两行头部：标题行（标题 + 今天）在前，翻月导航行（上/下个月 + 月份）在后
+    const titleAt = html.indexOf("码字日历");
+    const todayAt = html.indexOf("今 天");
+    const prevAt = html.indexOf('aria-label="上个月"');
+    expect(titleAt).toBeGreaterThanOrEqual(0);
+    expect(todayAt).toBeGreaterThan(titleAt);
+    expect(prevAt).toBeGreaterThan(todayAt);
   });
 
   it("正字数才渲染当日字数（千分位），0 字日只有日号", () => {
