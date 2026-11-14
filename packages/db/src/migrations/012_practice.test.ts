@@ -64,7 +64,7 @@ afterEach(() => {
 });
 
 describe("迁移 012（v11 → v12：练习两表）", () => {
-  it("v11 库跑 012：两表按旧形状建出且可写可读、版本推进到 12；SCHEMA_VERSION 已越到 13", () => {
+  it("v11 库跑 012：两表按旧形状建出且可写可读、版本推进到 12；SCHEMA_VERSION 已越到 14", () => {
     db = createV11Db(dbPath);
     for (const table of LEGACY_TABLES) {
       expect(columnNames(db, table), `${table} 迁移前应不存在`).toEqual([]);
@@ -73,7 +73,7 @@ describe("迁移 012（v11 → v12：练习两表）", () => {
     const { applied } = runMigrations(db, { migrations: [migration012], dbPath });
     expect(applied.map((m) => m.version)).toEqual([12]);
     expect(getUserVersion(db)).toBe(12);
-    expect(SCHEMA_VERSION).toBe(13); // 当前版本已越过 012（练习模型重建）
+    expect(SCHEMA_VERSION).toBe(14); // 当前版本已越过 012（练习模型重建 + 码字日统计）
 
  // 旧形状逐列核对（013 的拆除目标即它们）
     expect(columnNames(db, "practice_targets")).toEqual(["id", "name", "observation", "created_at", "updated_at"]);

@@ -131,6 +131,7 @@ const NOVEL_GROUP_PROBES: { group: string; method: string; path: string; body?: 
   { group: "entity", method: "GET", path: "/api/v1/entity/character", novelStatus: 200 },
   { group: "outline", method: "GET", path: "/api/v1/outline", novelStatus: 200 },
   { group: "manuscript", method: "GET", path: "/api/v1/manuscript/ch-1", novelStatus: 200 },
+  { group: "writing-stats", method: "GET", path: "/api/v1/writing-stats", novelStatus: 200 },
   { group: "relation", method: "GET", path: "/api/v1/relation?depth=1", novelStatus: 200 },
   { group: "delta", method: "GET", path: "/api/v1/delta/node/ch-1", novelStatus: 200 },
   { group: "trash", method: "GET", path: "/api/v1/trash", novelStatus: 200 },

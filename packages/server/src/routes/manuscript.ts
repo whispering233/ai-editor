@@ -8,15 +8,19 @@
 // - `base_updated_at` 仅在携带时比对（不一致 → 409 DOCUMENT_STALE）；省略 = 覆盖保存（导入路径）；
 // - `content_text` 由服务端用 shared `blocksToPlainMd` 派生（其内部 try/catch 兜底、绝不抛错 ⇒
 //   派生失败也不阻断保存），`charCount = content_text.length`；
+// - **码字日统计**：保存前后 `content_text.length` 的正差累加到服务端本地日（只加不扣）；
+//   统计写入是 best-effort——失败只记日志，不回滚正文、不改变 200（唯一写入点，见
+//   docs/api/130-api-writing-stats.md）；
 // - 保存正文**不产生 Delta、不推进 current_position**（内容不是状态事实）。
 import { Hono } from "hono";
-import { findOutlineNode, getDocument, readOutlineFile, upsertDocument } from "@whispering233/ai-editor-db";
+import { findOutlineNode, getDocument, readOutlineFile, upsertDocument, addWritingChars } from "@whispering233/ai-editor-db";
 import type { OutlineFileNode } from "@whispering233/ai-editor-shared";
 import { blocksToPlainMd, isBlockArray } from "@whispering233/ai-editor-shared";
 import { manuscriptPutReqSchema } from "@whispering233/ai-editor-shared/schemas";
 import { nowIso } from "@whispering233/ai-editor-db";
 import { HttpError, ok } from "../middleware/error.js";
 import { requireCurrentProject, type ProjectContext } from "../middleware/project.js";
+import { localDateKey } from "../local-date.js";
 
 /** 章正文路由（挂载于 /api/v1/manuscript，index.ts） */
 export const manuscriptRoutes = new Hono();
@@ -81,6 +85,8 @@ manuscriptRoutes.put("/:chapterNodeId", async (c) => {
     throw new HttpError(409, "DOCUMENT_STALE", "正文已被其他窗口修改");
   }
   const contentText = blocksToPlainMd(blocks); // 容错投影（绝不抛错）；失败退化为尽力抽取的文本
+ // 正增量：保存前后 content_text 长度的正差（缩短 / 清空 / 覆盖为空 不扣减）
+  const statsDelta = contentText.length - (existing?.content_text.length ?? 0);
   const { updatedAt } = upsertDocument(project.db, {
     ownerKind: "chapter",
     ownerId: nodeId,
@@ -88,5 +94,12 @@ manuscriptRoutes.put("/:chapterNodeId", async (c) => {
     contentText,
     now: nowIso(),
   });
+  if (statsDelta > 0) {
+    try {
+      addWritingChars(project.db, localDateKey(), statsDelta, updatedAt);
+    } catch (err) {
+      console.error("[stats] 码字统计写入失败（正文已保存）:", err); // best-effort：不回滚、不改 200
+    }
+  }
   return c.json(ok({ updated: true as const, updatedAt, charCount: contentText.length }));
 });

@@ -36,8 +36,10 @@ import { CREATE_TABLES_SQL } from "./tables.js";
  * （含 `idx_practice_samples_target`）→ 建 `practice_samples` 新形状 / `practice_free_pieces` /
  * `practice_style_packs` 三表（一位预置作家 = 一个工作区，旧目标模型被整体替换；
  * 纯 DDL 无数据搬移，migrations/013_author_practice.ts）。
+ * v13 → v14（码字日统计，2026-11）：新增 `writing_stats_daily` 表（按作品、按天累计正文
+ * 新增正字数；纯 DDL 无数据搬移——旧项目没有历史统计，migrations/014_writing_stats.ts）。
  */
-export const SCHEMA_VERSION = 13; // +练习三表（013 重建：旧两表 DROP，纯 DDL）
+export const SCHEMA_VERSION = 14; // +码字日统计表（014，纯 DDL）
 
 /**
  * 建表：执行全部 DDL（CREATE TABLE/INDEX IF NOT EXISTS，定义于 tables.ts），幂等，可重复调用。

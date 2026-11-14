@@ -295,9 +295,9 @@ describe("迁移 008（v7 → v8：document_records 块文档表）", () => {
     setUserVersion(db, 7);
 
     const { applied } = runMigrations(db, { dbPath });
-    expect(applied.map((m) => m.version)).toEqual([8, 9, 10, 11, 12, 13]); // v8 建块文档表 + v9/v10 拆解两表与并发列 + v11 移除两表 + v12 练习两表 + v13 练习模型重建（链到 SCHEMA_VERSION）
+    expect(applied.map((m) => m.version)).toEqual([8, 9, 10, 11, 12, 13, 14]); // v8 建块文档表 + v9/v10 拆解两表与并发列 + v11 移除两表 + v12 练习两表 + v13 练习模型重建 + v14 码字日统计表（链到 SCHEMA_VERSION）
     expect(getUserVersion(db)).toBe(SCHEMA_VERSION);
-    expect(getUserVersion(db)).toBe(13);
+    expect(getUserVersion(db)).toBe(14);
  // 新表已建且可用（直插 + 计数，验证列齐全）
     insertDocument(db, "ch-1");
     expect(countDocuments(db)).toBe(1);
@@ -335,7 +335,7 @@ describe("迁移 011（v10 → v11：移除拆解两表）", () => {
     expect(tableNames(db)).toEqual(expect.arrayContaining(["decompose_jobs", "decompose_batches"])); // 前置：v10 结构确实有两表
 
     const { applied } = runMigrations(db, { dbPath });
-    expect(applied.map((m) => m.version)).toEqual([11, 12, 13]); // 009/010 已由 seedV10 跑过（011 移除两表后继续 012 练习两表 + 013 练习模型重建：链到 SCHEMA_VERSION）
+    expect(applied.map((m) => m.version)).toEqual([11, 12, 13, 14]); // 009/010 已由 seedV10 跑过（011 移除两表后继续 012 练习两表 + 013 练习模型重建 + 014 码字日统计表：链到 SCHEMA_VERSION）
     expect(getUserVersion(db)).toBe(SCHEMA_VERSION);
     expect(tableNames(db)).not.toContain("decompose_jobs");
     expect(tableNames(db)).not.toContain("decompose_batches");
@@ -362,6 +362,7 @@ describe("迁移 011（v10 → v11：移除拆解两表）", () => {
         "practice_samples",
         "practice_style_packs",
         "relation_records",
+        "writing_stats_daily",
       ],
     );
     const { db: active, result } = ensureSchemaCompatible(db, dir, dbPath);
@@ -390,6 +391,7 @@ describe("ensureSchemaCompatible 旧版本有迁移路径", () => {
       { version: 11, up: (d: Db) => d.exec("ALTER TABLE entities ADD COLUMN eleventh TEXT") },
       { version: 12, up: (d: Db) => d.exec("ALTER TABLE entities ADD COLUMN twelfth TEXT") },
       { version: 13, up: (d: Db) => d.exec("ALTER TABLE entities ADD COLUMN thirteenth TEXT") },
+      { version: 14, up: (d: Db) => d.exec("ALTER TABLE entities ADD COLUMN fourteenth TEXT") },
     ];
     insertOldEntity(db, "char-1");
     writeOutlineFile(dir, oldTree());
@@ -451,6 +453,7 @@ describe("ensureSchemaCompatible 旧版本有迁移路径", () => {
       { version: 11, up: (d: Db) => d.exec("ALTER TABLE entities ADD COLUMN eleventh TEXT") },
       { version: 12, up: (d: Db) => d.exec("ALTER TABLE entities ADD COLUMN twelfth TEXT") },
       { version: 13, up: (d: Db) => d.exec("ALTER TABLE entities ADD COLUMN thirteenth TEXT") },
+      { version: 14, up: (d: Db) => d.exec("ALTER TABLE entities ADD COLUMN fourteenth TEXT") },
     ];
     insertOldEntity(db, "char-1");
 

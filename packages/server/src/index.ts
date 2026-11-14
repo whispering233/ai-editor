@@ -44,6 +44,7 @@ import { projectRoutes, setProjectRoot } from "./routes/project.js";
 import { readLastProject } from "./last-project.js";
 import { outlineRoutes } from "./routes/outline.js";
 import { manuscriptRoutes } from "./routes/manuscript.js"; // 章正文（块文档，卡 12.4）
+import { writingStatsRoutes } from "./routes/writing-stats.js"; // 码字日统计（只读）
 import { initCloudState } from "./cloud/state.js";
 import { cloudRoutes } from "./routes/cloud.js";
 import { namesRoutes } from "./routes/names.js"; // 批量名称解析（工具调用人类可读化）
@@ -245,6 +246,10 @@ export async function startServer(projectRoot: string, options: StartServerOptio
  // 章正文路由（卡 12.4）：GET/PUT /api/v1/manuscript/:chapterNodeId（块文档进 data.db）
   app.use("/api/v1/manuscript/*", requireKind("novel"));
   app.route("/api/v1/manuscript", manuscriptRoutes);
+
+ // 码字统计路由（stats-1）：GET /api/v1/writing-stats（只读；数据来源 = 章正文 PUT 的正增量）
+  app.use("/api/v1/writing-stats/*", requireKind("novel"));
+  app.route("/api/v1/writing-stats", writingStatsRoutes);
 
  // 名称解析路由：POST /api/v1/names/resolve 批量名称解析（工具调用展示人类可读化）
   app.use("/api/v1/names/*", requireKind("novel"));

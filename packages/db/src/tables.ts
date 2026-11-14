@@ -141,6 +141,21 @@ export const practiceStylePacks = sqliteTable("practice_style_packs", {
 });
 
 /**
+ * writing_stats_daily：码字日统计（小说工作区专属，2026-11）——按作品、按天累计正文新增正字数。
+ * 一个 data.db = 一部作品 = 一份统计；无外键 / 无软删 / 无索引（主键即日期，范围查询走主键）。
+ * `chars > 0` 是表级 CHECK：只加正增量，空日不建行。
+ */
+export const writingStatsDaily = sqliteTable(
+  "writing_stats_daily",
+  {
+    stat_date: text("stat_date").primaryKey(), // 服务端本地日 YYYY-MM-DD（不带时区）
+    chars: integer("chars").notNull(), // 当日累计新增正文字数（只加正增量）
+    updated_at: text("updated_at").notNull(), // 最后一次累计写入时刻（ISO 8601）
+  },
+  (t) => [check("writing_stats_chars_check", sql`${t.chars} > 0`)],
+);
+
+/**
  * 全部业务表 + 索引的建表 SQL（幂等：CREATE TABLE/INDEX IF NOT EXISTS）——建表执行的事实来源。
  * 与上方 sqliteTable 定义必须同步（schema.test.ts 对齐断言覆盖）。
  */
@@ -232,6 +247,13 @@ CREATE TABLE IF NOT EXISTS practice_style_packs (
   author_id  TEXT PRIMARY KEY,            -- 预置作家 id（shared AUTHOR_CATALOG 的键）
   content    TEXT NOT NULL,               -- 用户对作家风格说明的覆盖（上限 = 常量 MAX_PRACTICE_STYLE_PACK_CHARS）
   updated_at TEXT NOT NULL                -- 无覆盖 = 无行（读侧回退 shared 常量里的预置文本）
+);
+
+-- writing_stats_daily：码字日统计（小说工作区专属，2026-11）
+CREATE TABLE IF NOT EXISTS writing_stats_daily (
+  stat_date  TEXT PRIMARY KEY,   -- 服务端本地日 YYYY-MM-DD（不带时区）
+  chars      INTEGER NOT NULL CHECK (chars > 0),  -- 当日累计新增正文字数（只加正增量）
+  updated_at TEXT NOT NULL       -- 最后一次累计写入时刻（ISO 8601）
 );
 
 `;

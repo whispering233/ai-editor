@@ -46,7 +46,7 @@ describe("connection.ts openDatabase", () => {
     expect(db.pragma("synchronous", { simple: true })).toBe(2);
   });
 
-  it("打开后自动建表（7 张业务表已存在；对话历史已出库为 sessions/*.jsonl）", () => {
+  it("打开后自动建表（8 张业务表已存在；对话历史已出库为 sessions/*.jsonl）", () => {
     const tables = db
       .prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%'")
       .all() as Array<{ name: string }>;
@@ -59,6 +59,7 @@ describe("connection.ts openDatabase", () => {
         "practice_samples",
         "practice_style_packs",
         "relation_records",
+        "writing_stats_daily",
       ].sort(),
     );
   });

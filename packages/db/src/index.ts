@@ -19,3 +19,4 @@ export * from "./queries/compute-state.js";
 export * from "./queries/trash.js";
 export * from "./queries/document.js";
 export * from "./queries/practice.js";
+export * from "./queries/writing-stats.js";

@@ -173,8 +173,8 @@ describe("迁移 013（v12 → v13：练习模型重建）", () => {
       }
 
       const { applied } = runMigrations(db, { dbPath: migratedPath });
-      expect(applied.map((m) => m.version)).toEqual([13]);
-      expect(getUserVersion(db)).toBe(13);
+      expect(applied.map((m) => m.version)).toEqual([13, 14]); // 013 练习重建 + 014 码字日统计表
+      expect(getUserVersion(db)).toBe(SCHEMA_VERSION);
 
  // 旧结构拆除：旧目标表不存在、样本表换为新形状（旧索引随之消失）
       expect(tableNames(db)).not.toContain("practice_targets");
@@ -254,7 +254,7 @@ describe("迁移 013（v12 → v13：练习模型重建）", () => {
     expect(runMigrations(db, { dbPath: migratedPath }).applied).toEqual([]);
     setUserVersion(db, 12);
     expect(() => runMigrations(db, { dbPath: migratedPath })).not.toThrow();
-    expect(getUserVersion(db)).toBe(13);
+    expect(getUserVersion(db)).toBe(SCHEMA_VERSION);
     expect(PRACTICE_TABLES.map((table) => tableStructure(db, table))).toEqual(afterFirst);
     expect((db.prepare("SELECT COUNT(*) AS c FROM practice_samples").get() as { c: number }).c).toBe(0);
   });
@@ -270,7 +270,7 @@ describe("迁移 013（v12 → v13：练习模型重建）", () => {
     expect(result.backups).toEqual([]);
     expect(active).toBe(db); // 连接原样（未重建）
     expect(getUserVersion(active)).toBe(SCHEMA_VERSION);
-    expect(SCHEMA_VERSION).toBe(13);
+    expect(SCHEMA_VERSION).toBe(14);
     expect(readOutlineFile(dir)).toEqual(outlineBefore); // 大纲未被重置
     expect(readdirSync(dir).filter((f) => f.endsWith(".bak"))).toEqual([]);
  // 三表已由建库路径就位（无需迁移参与），旧两表不在

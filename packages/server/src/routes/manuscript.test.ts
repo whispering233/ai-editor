@@ -1,11 +1,12 @@
 // 卡 12.4 章正文路由测试：GET/PUT /api/v1/manuscript/:chapterNodeId
 // 覆盖：首写/读取（空文档语义）、覆盖写版本戳推进、非章 400、不存在/软删 404、坏 content 400、
 // 409 DOCUMENT_STALE、省略 base 即覆盖、空块数组合法（charCount 0）、
-// charCount 与派生投影一致（直查 SQLite）、保存无 Delta 副作用、purge 级联删正文行。
+// charCount 与派生投影一致（直查 SQLite）、保存无 Delta 副作用、purge 级联删正文行；
+// 以及 stats-1 的码字日统计副作用（正差累加 / 缩短不扣 / best-effort 失败仍 200）。
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { Hono } from "hono";
 import { readProjectFile } from "@whispering233/ai-editor-db";
 import { errorHandler } from "../middleware/error.js";
@@ -18,11 +19,38 @@ import {
   setCurrentProject,
 } from "../middleware/project.js";
 import { manuscriptRoutes } from "./manuscript.js";
+import { localDateKey } from "../local-date.js";
 import { outlineRoutes } from "./outline.js";
 import { trashRoutes } from "./trash.js";
 
 const HOST_HEADERS = { host: "127.0.0.1:3456" };
 const JSON_HEADERS = { ...HOST_HEADERS, "content-type": "application/json" };
+
+/**
+ * 统计写入的探测开关（vi.hoisted：提升到 import 之前，供 vi.mock 工厂引用）：
+ * 默认透传真实 `addWritingChars` 并记账；`fail` = 打开后模拟统计写入抛错（best-effort 用例）。
+ */
+const statsProbe = vi.hoisted(() => ({
+  fail: false,
+  calls: [] as Array<{ date: string; chars: number }>,
+}));
+
+vi.mock("@whispering233/ai-editor-db", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@whispering233/ai-editor-db")>();
+  return {
+    ...actual,
+    addWritingChars: (
+      db: Parameters<typeof actual.addWritingChars>[0],
+      date: string,
+      chars: number,
+      now: string,
+    ) => {
+      if (statsProbe.fail) throw new Error("stats boom");
+      statsProbe.calls.push({ date, chars });
+      actual.addWritingChars(db, date, chars, now);
+    },
+  };
+});
 
 /** 测试块数组（真相载荷）+ 其投影（literal 期望值——不调 blocksToPlainMd，避免自证） */
 const BLOCKS = [
@@ -84,6 +112,18 @@ function putBody(app: Hono, ch: string, body: Record<string, unknown>): Promise<
   });
 }
 
+/** 单段正文的块数组 JSON（投影 = 文本本身，字面长度可直接比） */
+function textBlocks(text: string): string {
+  return JSON.stringify([{ id: "b1", type: "paragraph", content: [{ type: "text", text }] }]);
+}
+
+/** 直查统计行（按日升序；验证副作用落在 writing_stats_daily） */
+function statsRows(): Array<{ date: string; chars: number }> {
+  return getCurrentProject()!
+    .db.prepare("SELECT stat_date AS date, chars FROM writing_stats_daily ORDER BY stat_date")
+    .all() as Array<{ date: string; chars: number }>;
+}
+
 /** 直查正文行（绕过端点自说自话） */
 function docRow(ch: string): { content: string; content_text: string; created_at: string; updated_at: string } | undefined {
   return getCurrentProject()!
@@ -94,6 +134,8 @@ function docRow(ch: string): { content: string; content_text: string; created_at
 beforeEach(() => {
   tmpRoot = mkdtempSync(join(tmpdir(), "ai-editor-manuscript-"));
   setCurrentProject(null);
+  statsProbe.fail = false;
+  statsProbe.calls.length = 0;
 });
 
 afterEach(() => {
@@ -305,8 +347,84 @@ describe("PUT /manuscript/:chapterNodeId", () => {
   });
 });
 
-// ============ purge 级联 ============
+// ============ 码字日统计副作用（stats-1） ============
 
+describe("PUT /manuscript 的码字日统计（正差累加，best-effort）", () => {
+  it("首次保存：正文字数计入今天一行（日键 = 服务端本地日）", async () => {
+    const app = buildApp();
+    openProject();
+    const { ch } = await seedChapter(app);
+
+    const res = await putBody(app, ch, { content: textBlocks("码字统计") });
+    expect(res.status).toBe(200);
+    expect(statsRows()).toEqual([{ date: localDateKey(), chars: 4 }]);
+    expect(statsProbe.calls).toEqual([{ date: localDateKey(), chars: 4 }]);
+  });
+
+  it("按差值累加：同章增长计差额、不同章同日合并一行（不按整篇重复计）", async () => {
+    const app = buildApp();
+    openProject();
+    const { vol, ch } = await seedChapter(app);
+    const ch2 = (await (await app.request("/api/v1/outline", {
+      method: "POST",
+      headers: JSON_HEADERS,
+      body: JSON.stringify({ type: "chapter", title: "第二章", parent_id: vol }),
+    })).json()).data;
+
+    await putBody(app, ch, { content: textBlocks("一二三") });
+    await putBody(app, ch, { content: textBlocks("一二三四五六") }); // 差值 3
+    await putBody(app, ch2.id, { content: textBlocks("四五") }); // 另一章 +2
+
+    expect(statsRows()).toEqual([{ date: localDateKey(), chars: 8 }]);
+    expect(statsProbe.calls.map((c) => c.chars)).toEqual([3, 3, 2]);
+  });
+
+  it("缩短 / 清空不扣减（只累加正差）", async () => {
+    const app = buildApp();
+    openProject();
+    const { ch } = await seedChapter(app);
+
+    await putBody(app, ch, { content: textBlocks("一二三四五") });
+    await putBody(app, ch, { content: textBlocks("一二") }); // 缩短
+    await putBody(app, ch, { content: "[]" }); // 清空
+
+    expect(statsRows()).toEqual([{ date: localDateKey(), chars: 5 }]);
+    expect(statsProbe.calls).toEqual([{ date: localDateKey(), chars: 5 }]);
+  });
+
+  it("覆盖保存（省略 base_updated_at）按净正差计入", async () => {
+    const app = buildApp();
+    openProject();
+    const { ch } = await seedChapter(app);
+
+    await putBody(app, ch, { content: textBlocks("初始") });
+    await putBody(app, ch, { content: textBlocks("初始扩张内容") }); // 覆盖保存，净正差 4
+
+    expect(statsRows()).toEqual([{ date: localDateKey(), chars: 6 }]);
+    expect(statsProbe.calls.map((c) => c.chars)).toEqual([2, 4]);
+  });
+
+  it("统计写入抛错：PUT 仍 200、正文已保存、错误只记日志（不回滚）", async () => {
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    try {
+      const app = buildApp();
+      openProject();
+      const { ch } = await seedChapter(app);
+      statsProbe.fail = true;
+
+      const res = await putBody(app, ch, { content: textBlocks("仍然保存") });
+      expect(res.status).toBe(200);
+      expect((await res.json()).data.charCount).toBe(4);
+      expect(docRow(ch)!.content_text).toBe("仍然保存"); // 正文主数据不受影响
+      expect(statsRows()).toEqual([]); // 统计未写入（最坏少记一次）
+      expect(errorSpy).toHaveBeenCalledWith(expect.stringContaining("[stats]"), expect.any(Error));
+    } finally {
+      errorSpy.mockRestore();
+    }
+  });
+});
+
+// ============ purge 级联 ============
 describe("purge 级联删正文行", () => {
   it("软删后 purge 单章 → document_records 行物理删（purge 前行仍在）", async () => {
     const app = buildApp();

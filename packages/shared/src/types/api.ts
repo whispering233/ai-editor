@@ -957,6 +957,26 @@ export type ManuscriptGetRes = z.infer<typeof manuscriptGetResSchema>;
 export type ManuscriptPutReq = z.infer<typeof manuscriptPutReqSchema>;
 export type ManuscriptPutRes = z.infer<typeof manuscriptPutResSchema>;
 
+// ============ writing-stats 端点（「码字统计（按天）」，docs/api/130-api-writing-stats.md） ============
+//
+// 小说工作区专属**只读**端点：数据来源 = `PUT /manuscript/:chapterNodeId` 的正文字数正增量，
+// 表与不变式见 docs/db/schema.md「writing_stats_daily」。无查询参数、无分页、无写 / 删 / 重算端点；
+// `today` 与 `days[].date` 都是**服务端本地日** YYYY-MM-DD（客户端只展示，不自行生成日键）。
+
+// GET /api/v1/writing-stats（当前小说的全部按天统计行）
+export const writingStatsResSchema = z.object({
+  today: z.string(), // 服务端本地日 YYYY-MM-DD（页面「今日」与日键口径的权威值）
+  totalChars: z.number().int(), // 全部行 chars 之和
+  totalDays: z.number().int(), // 行数 = 有码字记录的天数
+  days: z.array(
+    z.object({
+      date: z.string(), // YYYY-MM-DD（服务端本地日）
+      chars: z.number().int(), // 当日累计新增正文字数；恒 > 0
+    }),
+  ), // 按 date 升序；不含 0 字日期
+});
+export type WritingStatsRes = z.infer<typeof writingStatsResSchema>;
+
 // ============ chat 端点（「AI 对话」，持久化） ============
 
 // POST /api/v1/chat（POST + SSE；消息落项目目录 sessions/<session_id>.jsonl）
