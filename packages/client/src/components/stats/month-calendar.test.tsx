@@ -79,16 +79,20 @@ describe("码字日历（月历）", () => {
 
   it("固定 6 周栅格：4 周月份（2027-02）尾部补足 14 个空位", () => {
     const html = renderCalendar("2027-02-01", { year: 2027, monthIndex: 1 });
-    const placeholders = countOccurrences(html, 'class="h-10"');
+    const placeholders = countOccurrences(html, 'class="h-10" aria-hidden="true"');
     const dayCells = countOccurrences(html, "aria-pressed=");
     expect(dayCells).toBe(28); // 2027-02 = 28 天、恰好 4 整行（周一起始）
     expect(placeholders).toBe(14); // 42 − 28：尾部补足
     expect(dayCells + placeholders).toBe(42);
+    // 空位必须在最后一个日格之后，而不是前插
+    expect(html.lastIndexOf('class="h-10" aria-hidden="true"')).toBeGreaterThan(
+      html.lastIndexOf('aria-label="2月28日'),
+    );
   });
 
   it("固定 6 周栅格：6 周月份（2026-11）前导 6 + 尾部 6 共 12 个空位", () => {
     const html = renderCalendar("2026-11-01");
-    const placeholders = countOccurrences(html, 'class="h-10"');
+    const placeholders = countOccurrences(html, 'class="h-10" aria-hidden="true"');
     const dayCells = countOccurrences(html, "aria-pressed=");
     expect(dayCells).toBe(30);
     expect(placeholders).toBe(12);

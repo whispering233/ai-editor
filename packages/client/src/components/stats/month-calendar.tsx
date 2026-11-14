@@ -1,7 +1,7 @@
 // 码字日历（月历，DESIGN.md「码字统计页」→「码字日历（月历）」）：
 // 7 列、周一起始；每格 = 日号 + 仅正字数时显示当日字数；点格选中日期；标题行 = 今天，下一行 = 翻月导航。
-// 栅格固定 6 周（`MONTH_CALENDAR_WEEKS`）：`monthMatrix` 返回 4–6 行，尾部补空位到满 42 格，翻月时卡高不变。
-// 月矩阵 / 月合计 / 千分位全部取 `lib/writing-stats.ts`（阈值与派生不在组件里手写）。
+// 栅格固定 `MONTH_CALENDAR_WEEKS` 周：`monthMatrix` 返回 4–6 行，尾部补空位到 `MONTH_CALENDAR_WEEKS × WRITING_STATS_WEEKDAYS.length` 格，翻月时卡高不变。
+// 月矩阵 / 千分位取 `lib/writing-stats.ts`；月合计 / 活跃天数按真实日格累计。
 import { Button } from "antd";
 import { LeftOutlined, RightOutlined } from "@ant-design/icons";
 import { cn } from "../../lib/utils";
@@ -16,7 +16,7 @@ import {
   WRITING_STATS_WEEKDAYS,
 } from "../../lib/writing-stats";
 
-/** 月历固定周数（DESIGN.md：高度恒 443px，4/5/6 周月份翻月时下方年度热力不跳动） */
+/** 月历固定周数（DESIGN.md：高度恒定，4/5/6 周月份翻月时下方年度热力不跳动） */
 const MONTH_CALENDAR_WEEKS = 6;
 
 export interface MonthCalendarProps {
@@ -107,7 +107,8 @@ export function MonthCalendar({
 
       <div className="mt-1 grid grid-cols-7 gap-1">
         {gridCells.map((cell, index) => {
-          if (cell === null) return <div key={`empty-${index}`} className="h-10" />;
+          if (cell === null)
+            return <div key={`empty-${index}`} className="h-10" aria-hidden="true" />;
           const chars = charsByDate.get(cell) ?? 0;
           const selected = cell === selectedDate;
           return (
