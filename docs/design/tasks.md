@@ -32,7 +32,7 @@
 
 **状态**：待执行
 **依赖**：writing-0
-**范围**：client 导航/路由/页面壳；本卡不建 rail（writing-2）、不做最近编辑（writing-3）。
+**范围**：client 导航/路由/页面壳；本卡不建 rail（writing-2）、不做最近导航（writing-3）。
 
 **改动**
 - `components/nav/nav-items.tsx`：小说 items 在 `/outline` **之前**插入 `{ key: "/writing", icon: <EditOutlined />, label: "写作" }`（补 import；图标用 Outlined 纪律）。练习项集不动。
@@ -52,49 +52,73 @@
 
 **状态**：待执行
 **依赖**：writing-1
-**范围**：新建 `components/writing/chapter-rail.tsx` + `pages/Writing.tsx` 的 rail / 窄屏 / 专注接线；不改服务端、不改大纲页。
+**范围**：新建 `components/writing/chapter-rail.tsx`、`lib/writing.ts`（本卡只放 rail 行派生）；`pages/Writing.tsx` 的 rail / 窄屏 / 专注接线；不改服务端、不改大纲页；**本卡 rail 固定 240px，宽度拖拽 / 收起在 writing-2b**。
 
 **改动**
-- 从 `outline` 派生 rail 行：按 `outline.children` **文件序**遍历（卷行 → 卷内章行；**存量根级章在顶层就地**；跳过 `deleted`；0 章卷保留；不按 `chapterRows` 重组，避免根级章被挪位）。徽标文案一律查 `numberOutline(outline).labels.get(node.id)`，**不复制编号规则**；卷行右侧 `N章` = 可见章子节点数。
-- rail 行几何 / 选中 / 折叠 / 字数严格按 `DESIGN.md` §数据展示 `writing-page`：32px 行高、24px 折叠箭头盒（无子卷同几何空占位）、`min-w-14` 编号徽标、`truncate` 标题、字数 `formatTextLength`（`textLength > 0` 才渲染）、选中 `bg-accent` + `aria-current="page"`。折叠 state 放 `Writing`（session，不写 localStorage），换章后选中行 `scrollIntoView({ block: "nearest" })`。
-- 桌面：rail 240px + 正文列；窄屏（`useMediaQuery("(min-width: 1024px)")`）：`#/writing` rail 全宽、`#/writing/:id` 正文全宽 + 顶部 32px「章节目录」返回条（`ArrowLeftOutlined`，仅窄屏）。
-- 专注：`useUiStore(s => s.focusMode)` 为真时隐藏 rail 与窄屏返回条（正文列仍按现有高度链铺满）。
-- 空/加载/错误态按 `DESIGN.md` `writing-page`：rail 骨架、无章空态、大纲失败重试。
-- 测试：新增 `components/writing/chapter-rail.test.tsx`（renderToString：卷行 `N章`、章行字数/0 不显示、根级章顶层、0 章卷、选中 `aria-current`、折叠箭头）；`pages/writing.test.tsx` 增窄屏/空态断言；**否定契约**：rail 不渲染新建/改名/删除按钮。
+- `lib/writing.ts`：`buildWritingRailRows(outline)` 按 `outline.children` 文件序遍历（卷行 → 卷内章行；存量根级章顶层就地；跳过 `deleted`；0 章卷保留；不按 `chapterRows` 重组），徽标一律查 `numberOutline(outline).labels`，卷行 `N章` = 可见章子节点数；测试覆盖卷 / 根级章 / 0 章卷 / 软删 / 徽标。
+- `chapter-rail.tsx`：顶部 header 40px（`px-3 py-2`、`section-title`「卷章」，本卡**无收起按钮**——2b 加）；行区 `p-2`；行几何 / 选中 / 折叠 / 字数严格按 `DESIGN.md`（32px、24px 折叠盒、`min-w-14`、`truncate`、`formatTextLength` 仅 `textLength > 0`、`bg-accent` + `aria-current="page"`）；**本卡无拖拽手柄**。卷折叠 state 在 `Writing`（session），换章后选中行 `scrollIntoView({ block: "nearest" })`。
+- 桌面：rail 240px + 正文列；正文列 `flex min-h-0 min-w-0 flex-1 flex-col p-6`，窄屏返回条是列内 `shrink-0` 一行，下面 `min-h-0 flex-1` 包 `ChapterEditor`。
+- 窄屏（`useMediaQuery("(min-width: 1024px)")`）：`#/writing` rail 全宽、无正文；`#/writing/:id` 正文全宽 + 32px「章节目录」返回条（`ArrowLeftOutlined`）。专注：`useUiStore(s => s.focusMode)` 为真时隐藏 rail 与返回条。
+- 空 / 加载 / 错误态按 `DESIGN.md`：rail 骨架、无章空态、有章无选中提示、大纲失败重试、显式坏 `chapterId` 错误条 + 返回目录（不自动回退）。
+- 测试：`components/writing/chapter-rail.test.tsx`（renderToString：卷行 `N章`、章行字数 / 0 不显示、根级章顶层、0 章卷、选中 `aria-current`、折叠箭头）；`pages/writing.test.tsx` 增窄屏 / 空态；**否定契约**：rail 不渲染新建 / 改名 / 删除按钮，也不渲染拖拽手柄 / 收起按钮（2b 才加）。
 
 **硬完成判据**
-- 1920/1440/760：rail 240、正文吸收剩余；点章直接进正文（页面无「写正文」按钮）；折叠/展开、选中滚动可见；窄屏两级 + 返回条可用；专注隐藏 rail。
+- 1920/1440：rail 240、正文吸收剩余；点章直接进正文（页面无「写正文」按钮）；折叠 / 展开、选中滚动可见；**无拖拽手柄 / 收起按钮**（2b 才加）。
+- 760：两级互斥 + 「章节目录」返回条可用；无横向溢出。
+- 专注模式 rail / 返回条都不渲染；正文吸收剩余宽度。
 - `pnpm --filter @whispering233/ai-editor-client test`、`pnpm typecheck`、`pnpm lint` 全绿。
-- 浏览器验收（独立 `ui-verifier`，≤8 项）：桌面 rail 几何、点章进正文、折叠、选中滚动、窄屏两级、专注；无横向溢出。
+- 浏览器验收（独立 `ui-verifier`，≤6 项）：rail 几何、点章进正文、折叠、选中滚动、窄屏两级、专注。
 - 新 commit + `git status` 干净；汇报 hash/输出。
 
-### writing-3-recent-chapter — 最近编辑与保存后即时字数
+### writing-3-recent-chapter — 最近打开优先、服务端回退与保存后即时字数
 
 **状态**：待执行
 **依赖**：writing-2
-**范围**：shared 类型/zod、db 批量查询、server outline metadata、client `lib/writing.ts` / store 补丁 / `Writing` 重定向 / 保存回调；**不新增表、不新增端点**。
+**范围**：shared 类型/zod、db 批量查询、server outline metadata、client `lib/writing.ts` 的最近导航纯函数 / `Writing` 解析 / 保存回调 / store 补丁；**不新增表、不新增端点**。
 
 **改动**
-- shared：`packages/shared/src/types/outline.ts` 的 `OutlineNodeMetadata` 加 `documentUpdatedAt?: string`；`packages/shared/src/types/api.ts` 对应 zod 加 `documentUpdatedAt: z.string().optional()`（与 `textLength` 同块）。
-- db：`packages/db/src/queries/document.ts` 新增批量取 `owner_id + updated_at` 的函数（一次查询、空数组短路，风格同 `getDocumentTextLengths`）；`document.test.ts` 覆盖有/无行、多 owner。
-- server：`routes/outline.ts` 的 `attachMetadata` 复用已收集的 `chapterIds` 批量取时间戳，**仅 chapter** 写 `metadata.documentUpdatedAt`；**无文档行 = 字段缺省**（不写空串/0）。`outline.test.ts` 覆盖仅章、无文档缺省、批量。
-- client：新增 `lib/writing.ts` 的 `pickRecentChapter(outline): string | null`——按树文件序遍历未软删章，取最大 `documentUpdatedAt`（平局取先序第一个；无则 null）；`lib/writing.test.ts` 覆盖无文档、根级章、平局、软删。
-- `pages/Writing.tsx`：`#/writing` 且桌面端 → effect 里 `window.location.replace("#/writing/" + id)`；无最近章 → 空态；窄屏不跳；用一次性 ref 防重复 replace。
-- `stores/project.ts`：新增 `patchChapterMetadata(chapterId, { textLength, documentUpdatedAt })`——**不可变**递归更新 `outline`（未命中分支保持原引用），不改 `outlineWithMetadata` 标志；`project.test.ts` 断言不可变与未命中不换根。
-- `ChapterEditor`：保存成功（自动/手动，含 409 覆盖分支）后调用 `onSaved({ charCount, updatedAt })`；`Writing` 传入并 patch store。**不重拉大纲树**。
+- shared：`OutlineNodeMetadata` 加 `documentUpdatedAt?: string`；`types/api.ts` 对应 zod 加 `documentUpdatedAt: z.string().optional()`（与 `textLength` 同块）。
+- db：`queries/document.ts` 新增批量取 `owner_id + updated_at`（一次查询、空数组短路，风格同 `getDocumentTextLengths`）；`document.test.ts` 覆盖有/无行、多 owner。
+- server：`routes/outline.ts` 的 `attachMetadata` 复用 `chapterIds` 批量取时间戳，**仅 chapter** 写 `metadata.documentUpdatedAt`；**无文档行 = 字段缺省**。`outline.test.ts` 覆盖仅章、无文档缺省、批量。
+- `lib/writing.ts`：`parseLastOpenedChapters` / `readLastOpenedChapter(projectId)` / `writeLastOpenedChapter(projectId, chapterId)`（key `ai-editor:writing-last-opened`，per-book `{ [projectId]: chapterId }`；只存 id；坏 JSON / 非对象 / 非字符串值 → 空表；写失败静默）；`pickRecentChapter(outline)`（文件序可见章中最大 `documentUpdatedAt`，平局取先序第一个，无则 null）；`resolveWritingTarget(outline, lastOpenedId)` = 最近打开仍在**可见大纲**则用它，否则回退 `pickRecentChapter`；测试覆盖 per-book 隔离、脏值、最近打开优先、失效回退、平局、软删、根级章。
+- `pages/Writing.tsx`：`#/writing/:id` 命中可见章时写最近打开（窄屏也写）；`#/writing` 无 id 且桌面端 → effect 里 `resolveWritingTarget`，有目标 `window.location.replace("#/writing/" + id)`，无目标空态；解析中骨架；一次性 ref 防重复 replace；**窄屏不自动跳**。
+- `stores/project.ts`：新增 `patchChapterMetadata(chapterId, { textLength, documentUpdatedAt })`——不可变递归更新 `outline`（未命中分支保持原引用），不改 `outlineWithMetadata` 标志；`project.test.ts` 断言不可变与未命中不换根。
+- `ChapterEditor`：保存成功（自动 / 手动，含 409 覆盖分支）后调用 `onSaved({ charCount, updatedAt })`；`Writing` 传入并 patch store。**不重拉大纲树**。
 - 先 `pnpm -r build` 再跑下游（shared/db 改了 src）。
 
 **硬完成判据**
-- 只打开一章不保存 → `#/writing` 目标不变；保存 A 再保存 B → 进 B；B 软删后 → 回退 A。
-- 保存后 rail 字数立即更新，网络里没有新的 `GET /outline`。
-- `pnpm -r build`、`pnpm --filter @whispering233/ai-editor-client test`、`pnpm --filter @whispering233/ai-editor-db test`、`pnpm --filter @whispering233/ai-editor-server test`、`pnpm typecheck`、`pnpm lint` 全绿。
-- 浏览器验收（独立 `ui-verifier`，≤5 项）：保存后 `#/writing` 落到该章、字数即时、软删回退。
+- 打开 A 不保存 → 再进写作回 A（localStorage 优先）；保存 B → 进 B；B 软删 → 回退 A（`documentUpdatedAt` 最大）；切书再回各回各的。
+- 无最近打开且无已保存正文 → 空态，不跳「第一章」；窄屏 `#/writing` 不自动跳。
+- 保存后 rail 字数立即更新，网络里没有新的 `GET /outline`；`documentUpdatedAt` 随 PUT `updatedAt` 更新。
+- `pnpm -r build`、client / db / server 单包测试、`pnpm typecheck`、`pnpm lint` 全绿。
+- 浏览器验收（独立 `ui-verifier`，≤6 项）：打开 A 不保存回 A、保存 B 回 B、软删回退、切书隔离、无目标空态、字数即时。
+- 新 commit + `git status` 干净；汇报 hash/输出。
+
+### writing-2b-rail-resize — 卷章导航栏宽度拖拽与收起
+
+**状态**：待执行
+**依赖**：writing-2；排期在 writing-3 之后（同改 `Writing.tsx`）
+**范围**：抽 `AppShell` 的 `ResizeHandle` / `CollapseStrip` 到 `components/ui/`；新建 `hooks/use-writing-rail.ts`；`chapter-rail.tsx` header 加收起、右侧加手柄；`Writing.tsx` 接 `railWidth` / `collapsed`；**不改选章 / 折叠 / 窄屏 / 专注语义**，不改服务端。
+
+**改动**
+- 抽 `AppShell.tsx` 的 `ResizeHandle` / `CollapseStrip` 到 `components/ui/resize-handle.tsx` / `collapse-strip.tsx` 并参数化（手柄 `label` / `active` / `onStart` / `onMove` / `onEnd`，窄条 `side: "left" | "right"` / `label` / `onExpand`）；`AppShell` 两处改用，视觉不变；写作页复用同一对。
+- `hooks/use-writing-rail.ts`：默认 240、区间 200–480（复用 `use-panels.ts` 的 `clampPanelWidth`）、`collapsed`；`localStorage` `ai-editor:writing-rail` `{ width, collapsed }`（全局一份）；拖动只改内存、`pointerup` 一次写，收起 / 展开立即写；坏值整体回默认、`collapsed` 仅严格 `true`；导出纯函数 `defaultWritingRailLayout` / `parseWritingRailLayout`。
+- `chapter-rail.tsx`：header 右侧加收起 `icon-button` `DoubleLeftOutlined`；右侧 6px 手柄（`role="separator"` + `aria-label`，1px 中线常显、hover / 拖拽高亮）；拖拽中页面 `select-none`；**收起态不渲染手柄**。
+- `Writing.tsx`：桌面展开 = `railWidth` + 手柄 + 正文列；收起 = 32px `CollapseStrip`（`DoubleRightOutlined`、`bg-sidebar`、右边线）+ 正文列；宽度保留、展开恢复原宽；窄屏（<1024）无手柄 / 收起，rail 全宽；专注模式不渲染 rail / 窄条。
+- 测试：`hooks/use-writing-rail.test.ts`（纯函数 `defaultWritingRailLayout` / `parseWritingRailLayout` / `clampPanelWidth` 的默认、夹取、坏值、`collapsed` 严格 `true`；hook 本体依赖 window，node 环境不渲染，同 `use-panels.test.ts`）；`pages/writing.test.tsx` 增「收起态渲染窄条 / 展开态渲染手柄与收起按钮」；**否定契约**：窄屏不渲染手柄 / 收起，专注不渲染 rail / 窄条。
+
+**硬完成判据**
+- 1920/1440：默认 240；可拖到 200/480 并夹取；收起为 32px 窄条、展开恢复原宽；刷新后宽度 / 收起态保留；无横向溢出。
+- 760：无手柄 / 收起，rail 全宽。
+- 专注模式 rail / 窄条都不渲染；正文吸收剩余宽度。
+- `pnpm --filter @whispering233/ai-editor-client test`、`pnpm typecheck`、`pnpm lint` 全绿。
+- 浏览器验收（独立 `ui-verifier`，≤6 项）：默认 240、拖到 200/480、收起 / 展开 / 刷新保留、窄屏无手柄、专注。
 - 新 commit + `git status` 干净；汇报 hash/输出。
 
 ### writing-4-remove-chapter-view — 删章视图与旧路由收口
 
 **状态**：待执行
-**依赖**：writing-3
+**依赖**：writing-2b、writing-3
 **范围**：删旧章视图/视图持久化，旧路由 `replace`；**不改契约文档**（已在本次 docs commit 落好，发现漂移先停）。
 
 **改动**
