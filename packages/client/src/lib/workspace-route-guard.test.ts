@@ -58,6 +58,7 @@ describe("练习工作区的允许清单（kind = practice）", () => {
       "#/manuscript/ch-1",
       "#/trash",
       "#/references",
+      "#/stats",
     ]) {
       expect(workspaceRedirectPath("practice", route(hash)), hash).toBe(PRACTICE_REDIRECT_PATH);
     }
@@ -91,13 +92,13 @@ describe("小说工作区的反向守卫（kind = novel）", () => {
     expect(workspaceRedirectPath("novel", route("#/practice/x/y"))).toBe(NOVEL_REDIRECT_PATH);
   });
 
-  it("小说路由与两个 kind 共有的路由都放行（不误伤：八项一级导航 + `#/`、`#/preferences`、`#/overview`）", () => {
+  it("小说路由与两个 kind 共有的路由都放行（不误伤：九项一级导航 + `#/`、`#/preferences`、`#/overview`）", () => {
     for (const hash of [
       "",
       "#/",
       "#/preferences",
       "#/overview",
-      // 左栏小说态八项一级导航（components/nav/nav-items.tsx）+ 各详情段
+      // 左栏小说态九项一级导航（components/nav/nav-items.tsx）+ 各详情段
       "#/outline",
       "#/outline/ch-1",
       "#/characters",
@@ -112,6 +113,7 @@ describe("小说工作区的反向守卫（kind = novel）", () => {
       "#/timeline/ev-1",
       "#/relations",
       "#/references",
+      "#/stats",
       "#/trash",
       "#/manuscript/ch-1",
     ]) {

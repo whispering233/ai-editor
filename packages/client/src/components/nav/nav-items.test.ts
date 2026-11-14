@@ -17,7 +17,7 @@ describe("NAV_RAIL_BY_KIND（kind → 左栏形态的唯一定义处）", () => 
     expect(Object.keys(NAV_RAIL_BY_KIND).sort()).toEqual([...WORKSPACE_KINDS].sort());
   });
 
-  it("小说：八项一级导航 + 回收站 + 书名按钮（与现状一致）", () => {
+  it("小说：九项一级导航 + 回收站 + 书名按钮（「码字统计」在参考资料之后）", () => {
     const novel = NAV_RAIL_BY_KIND.novel;
     expect(novel.items.map((item) => item.key)).toEqual([
       "/outline",
@@ -28,6 +28,7 @@ describe("NAV_RAIL_BY_KIND（kind → 左栏形态的唯一定义处）", () => 
       "/timeline",
       "/relations",
       "/references",
+      "/stats",
     ]);
     // 「概览」不占一级导航位（入口 = 书名按钮）
     expect(novel.items.map((item) => item.key)).not.toContain("/overview");

@@ -35,6 +35,7 @@ import type {
   ProjectLanguage,
   ProjectListBook,
   WorkspaceKind,
+  WritingStatsRes,
 } from "@whispering233/ai-editor-shared";
 import type { EntityType } from "@whispering233/ai-editor-shared";
 import type { FocusContext } from "./focus";
@@ -319,6 +320,13 @@ export interface ManuscriptRes {
 /** 读取章正文（404 OUTLINE_NODE_NOT_FOUND = 章不存在/已软删；400 VALIDATION_ERROR = 非章节点） */
 export function getManuscript(chapterNodeId: string): Promise<ManuscriptRes> {
   return apiFetch<ManuscriptRes>(`/manuscript/${chapterNodeId}`);
+}
+
+// ============ 码字统计（docs/api/130-api-writing-stats.md） ============
+
+/** GET /api/v1/writing-stats（当前小说全部按天统计行；空库 → totalChars 0 / totalDays 0 / days []） */
+export function getWritingStats(): Promise<WritingStatsRes> {
+  return apiFetch<WritingStatsRes>("/writing-stats");
 }
 
 /** PUT /api/v1/manuscript/:chapterNodeId 响应 */

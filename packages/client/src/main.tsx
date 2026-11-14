@@ -22,6 +22,7 @@ import TimelineDetail from "./pages/TimelineDetail";
 import ReferenceList from "./pages/ReferenceList";
 import ReferenceDetail from "./pages/ReferenceDetail";
 import Manuscript from "./pages/Manuscript";
+import WritingStats from "./pages/WritingStats";
 import AuthorIntro from "./pages/AuthorIntro";
 import Works from "./pages/Works";
 import StyleNotes from "./pages/StyleNotes";
@@ -141,6 +142,9 @@ function renderPage(route: Route): ReactNode {
       ) : (
         <RedirectTo to="/outline" />
       );
+    case "stats":
+      // 码字统计（小说工作区专属；练习工作区的反向守卫在 workspace-route-guard）
+      return <WritingStats />;
     case "trash":
       return <Trash />;
     case "author":

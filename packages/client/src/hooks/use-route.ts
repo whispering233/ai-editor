@@ -2,7 +2,7 @@
 // 解析 location.hash（形如 "#/outline"、"#/characters/char-abc"）为结构化路由。
 // 路由表见 （10 路由，一级化）：#/、#/overview、#/outline、#/outline/:nodeId、
 // #/characters[/:id]、#/setting[/:id]、#/locations[/:id]、#/relations、#/hooks[/:id]、
-// #/timeline、#/timeline/:id、#/timepoints/:id、#/references[/:id]、#/manuscript/:chapterId、
+// #/timeline、#/timeline/:id、#/timepoints/:id、#/references[/:id]、#/manuscript/:chapterId、#/stats、
 // #/trash、#/preferences、
 // 练习工作区五页：#/author、#/works、#/style、#/practice[/:sampleId]、#/free[/:pieceId]
 // （工作区类型路由守卫见 lib/workspace-route-guard.ts——它由 main.tsx 在渲染前判定）
@@ -35,6 +35,7 @@ export const KNOWN_ROUTE_SEGMENTS = [
   "timepoints",
   "references",
   "manuscript",
+  "stats",
   "trash",
   "settings",
   "preferences",

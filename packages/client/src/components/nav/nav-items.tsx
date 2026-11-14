@@ -7,6 +7,7 @@
 import type { ReactNode } from "react";
 import {
   ApartmentOutlined,
+  BarChartOutlined,
   BulbOutlined,
   DeleteOutlined,
   EditOutlined,
@@ -57,6 +58,7 @@ export const NAV_RAIL_BY_KIND: Record<WorkspaceKind, NavRailSpec> = {
       { key: "/timeline", icon: <FieldTimeOutlined />, label: "时间轴" },
       { key: "/relations", icon: <ShareAltOutlined />, label: "关联" },
       { key: "/references", icon: <ReadOutlined />, label: "参考资料" },
+      { key: "/stats", icon: <BarChartOutlined />, label: "码字统计" },
     ],
     trash: true,
     projectOverview: true,
