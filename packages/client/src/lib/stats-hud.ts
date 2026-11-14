@@ -6,9 +6,9 @@ export const STATS_PANEL_STORAGE_KEY = "ai-editor:stats-panel";
 export const STATS_PANEL_WIDTH = 240;
 /** 与中栏边缘的最小间距（px） */
 export const STATS_PANEL_MARGIN = 8;
-/** 默认槽位：入口贴在「问 AI」正上方（AI 高 48 + 16 底距 + 8 间距） */
+/** 默认槽位：入口贴在「问 AI」正上方（AI 高 40 + 16 底距 + 8 间距） */
 export const STATS_PANEL_ENTRY_INSET_END = 16;
-export const STATS_PANEL_ENTRY_BOTTOM = 72;
+export const STATS_PANEL_ENTRY_BOTTOM = 64;
 
 export interface StatsPanelPosition {
   left: number;
@@ -37,14 +37,17 @@ export function parseStatsPanelPosition(raw: string | null): StatsPanelPosition 
   }
 }
 
-/** 收敛到宿主内（四周 `STATS_PANEL_MARGIN`）；宿主比面板还小时贴左上边距 */
+/** 收敛到宿主内（四周 `STATS_PANEL_MARGIN`；底部预留「问 AI」槽位，避免拖到右下时被 AI 盖住） */
 export function clampStatsPanelPosition(
   position: StatsPanelPosition,
   bounds: StatsPanelBox,
   size: StatsPanelBox,
 ): StatsPanelPosition {
   const maxLeft = Math.max(STATS_PANEL_MARGIN, bounds.width - size.width - STATS_PANEL_MARGIN);
-  const maxTop = Math.max(STATS_PANEL_MARGIN, bounds.height - size.height - STATS_PANEL_MARGIN);
+  const maxTop = Math.max(
+    STATS_PANEL_MARGIN,
+    bounds.height - size.height - STATS_PANEL_ENTRY_BOTTOM,
+  );
   return {
     left: Math.min(Math.max(position.left, STATS_PANEL_MARGIN), maxLeft),
     top: Math.min(Math.max(position.top, STATS_PANEL_MARGIN), maxTop),
@@ -80,7 +83,7 @@ export function resolveStatsPanelPosition(
     saved.left >= STATS_PANEL_MARGIN &&
     saved.top >= STATS_PANEL_MARGIN &&
     saved.left <= bounds.width - size.width - STATS_PANEL_MARGIN &&
-    saved.top <= bounds.height - size.height - STATS_PANEL_MARGIN;
+    saved.top <= bounds.height - size.height - STATS_PANEL_ENTRY_BOTTOM;
   return inside ? saved : defaultStatsPanelPosition(bounds, size);
 }
 

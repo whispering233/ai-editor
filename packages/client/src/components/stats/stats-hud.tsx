@@ -2,8 +2,9 @@
 //
 // 宿主 = MainPanel 的 `<main>`：本组件是**绝对定位直接子元素**（`absolute inset-0`），不能放进
 // `overflow-y-auto` 内容区（否则随正文滚动）。入口固定在中栏右下「问 AI」正上方（z 20 < AI 的 30）。
-// 渲染条件 = 小说工作区 + 已打开项目 + 非专注模式；练习 / 书架 / 专注都不渲染，
-// 但**追踪器与归零照常**（组件始终挂载 ⇒ syncProject effect 始终执行；专注期间数字继续累计）。
+// 渲染条件 = 小说工作区 + 已打开项目 + 非专注模式；练习 / 无项目 / 专注都不渲染，
+// 书架 / 概览等仍在已打开项目内的页面照常显示（应用级）；但**追踪器与归零照常**
+// （组件始终挂载 ⇒ syncProject effect 始终执行；专注期间数字继续累计）。
 //
 // 数字全部来自 `stores/writing-session` 内存态（不落库 / 不落 localStorage / 不发请求）；
 // 只有面板**位置**持久化（lib/stats-hud）。计时：只在面板可见时秒级刷新。
@@ -25,9 +26,10 @@ import {
   writeStatsPanelPosition,
   STATS_PANEL_ENTRY_BOTTOM,
   STATS_PANEL_ENTRY_INSET_END,
+  STATS_PANEL_WIDTH,
   type StatsPanelPosition,
 } from "../../lib/stats-hud";
-import { displayTypingMs, formatDuration, formatRate } from "../../lib/writing-session";
+import { formatDuration, formatRate } from "../../lib/writing-session";
 import { formatChars } from "../../lib/writing-stats";
 import { cn } from "../../lib/utils";
 
@@ -65,13 +67,13 @@ export function StatsHud({ focusMode }: { focusMode: boolean }) {
     syncProject(projectId);
   }, [projectId, syncProject]);
 
-  // 空闲时间秒级刷新：只在面板可见时跑 interval（隐藏 / 卸载即清理）
+  // 空闲时间秒级刷新：只在面板可见时跑 interval（隐藏 / 专注 / 卸载即清理）
   useEffect(() => {
-    if (!visible) return;
+    if (!visible || focusMode) return;
     setNow(Date.now());
     const timer = setInterval(() => setNow(Date.now()), 1000);
     return () => clearInterval(timer);
-  }, [visible]);
+  }, [visible, focusMode]);
 
   // 首次显示 / 中栏尺寸变化：把位置收敛进宿主矩形（保存位置 → 否则默认槽位）
   useLayoutEffect(() => {
@@ -151,8 +153,6 @@ export function StatsHud({ focusMode }: { focusMode: boolean }) {
   // 练习工作区 / 无项目 / 专注模式：不渲染（syncProject 仍在上面的 effect 里执行）
   if (config === null || config.kind === "practice" || focusMode) return null;
 
-  const numbers = { chars, typingMs, lastEditAt };
-  const typing = displayTypingMs(numbers, now);
   const idle = lastEditAt === null ? 0 : now - lastEditAt;
 
   return (
@@ -182,19 +182,23 @@ export function StatsHud({ focusMode }: { focusMode: boolean }) {
           onPointerUp={handlePointerUp}
           onPointerCancel={handlePointerUp}
           className={cn(
-            "pointer-events-auto absolute w-60 touch-none rounded-lg bg-popover p-3 shadow-md ring-1 ring-foreground/10",
+            "pointer-events-auto absolute touch-none rounded-lg bg-popover p-3 shadow-md ring-1 ring-foreground/10",
             dragging ? "cursor-grabbing" : "cursor-grab",
           )}
           style={
             position === null
-              ? { insetInlineEnd: STATS_PANEL_ENTRY_INSET_END, bottom: STATS_PANEL_ENTRY_BOTTOM }
-              : { left: position.left, top: position.top }
+              ? {
+                  width: STATS_PANEL_WIDTH,
+                  insetInlineEnd: STATS_PANEL_ENTRY_INSET_END,
+                  bottom: STATS_PANEL_ENTRY_BOTTOM,
+                }
+              : { width: STATS_PANEL_WIDTH, left: position.left, top: position.top }
           }
         >
           <div className="flex items-start justify-between gap-2">
             <div className="min-w-0">
               <Typography.Title level={5}>码字统计 · 本次</Typography.Title>
-              <div className="text-xs text-muted-foreground">拖动标题栏移动</div>
+              <div className="text-xs text-muted-foreground">拖动面板移动</div>
             </div>
             <Button
               size="small"
@@ -209,8 +213,8 @@ export function StatsHud({ focusMode }: { focusMode: boolean }) {
           </div>
           <div className="mt-3 grid grid-cols-2 gap-3">
             <Metric label="本次码字" value={formatChars(chars)} />
-            <Metric label="码字速率（字/时）" value={formatRate(chars, typing)} />
-            <Metric label="码字时间" value={formatDuration(typing)} />
+            <Metric label="码字速率（字/时）" value={formatRate(chars, typingMs)} />
+            <Metric label="码字时间" value={formatDuration(typingMs)} />
             <Metric label="空闲时间" value={formatDuration(idle)} />
           </div>
         </div>

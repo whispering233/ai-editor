@@ -49,10 +49,10 @@ describe("parseStatsPanelPosition", () => {
 describe("clampStatsPanelPosition", () => {
   const bounds = { width: 800, height: 600 };
 
-  it("越界收敛到 8px 边距以内（右下 / 左上两侧）", () => {
+  it("越界收敛到左/上 8px、底部预留 AI 槽位（右下 / 左上两侧）", () => {
     expect(clampStatsPanelPosition({ left: 5_000, top: 5_000 }, bounds, size)).toEqual({
       left: 800 - STATS_PANEL_WIDTH - STATS_PANEL_MARGIN,
-      top: 600 - 200 - STATS_PANEL_MARGIN,
+      top: 600 - 200 - STATS_PANEL_ENTRY_BOTTOM,
     });
     expect(clampStatsPanelPosition({ left: -50, top: -50 }, bounds, size)).toEqual({
       left: STATS_PANEL_MARGIN,
@@ -64,7 +64,7 @@ describe("clampStatsPanelPosition", () => {
     const saved = { left: 700, top: 500 };
     expect(clampStatsPanelPosition(saved, { width: 600, height: 400 }, size)).toEqual({
       left: 600 - STATS_PANEL_WIDTH - STATS_PANEL_MARGIN,
-      top: 400 - 200 - STATS_PANEL_MARGIN,
+      top: 400 - 200 - STATS_PANEL_ENTRY_BOTTOM,
     });
   });
 
@@ -102,6 +102,12 @@ describe("resolveStatsPanelPosition（首次放置）", () => {
       defaultStatsPanelPosition({ width: 600, height: 400 }, size),
     );
     expect(resolveStatsPanelPosition(null, bounds, size)).toEqual(
+      defaultStatsPanelPosition(bounds, size),
+    );
+  });
+
+  it("保存位置贴近底部（旧 8px 口径）也回落默认槽位，避免被 AI 覆盖", () => {
+    expect(resolveStatsPanelPosition({ left: 100, top: 600 - 200 - 8 }, bounds, size)).toEqual(
       defaultStatsPanelPosition(bounds, size),
     );
   });

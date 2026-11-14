@@ -3,7 +3,6 @@
 import { describe, expect, it } from "vitest";
 import {
   applyActivity,
-  displayTypingMs,
   formatDuration,
   formatRate,
   MIN_RATE_WINDOW_MS,
@@ -47,23 +46,6 @@ describe("applyActivity", () => {
   it("时钟回拨（now 小于上次时刻）不计负间隔", () => {
     const state = applyActivity({ chars: 5, typingMs: 700, lastEditAt: 2_000 }, 1, 1_500);
     expect(state.typingMs).toBe(700);
-  });
-});
-
-describe("displayTypingMs", () => {
-  it("未超阈值的尾段计入显示（刚打完字时数字继续走）", () => {
-    expect(displayTypingMs({ chars: 1, typingMs: 1_000, lastEditAt: 1_000 }, 4_000)).toBe(4_000);
-  });
-
-  it("尾段 = 阈值计入；超阈值与 0 不计", () => {
-    const state: WritingSessionNumbers = { chars: 1, typingMs: 1_000, lastEditAt: 1_000 };
-    expect(displayTypingMs(state, 1_000 + TYPING_ACTIVE_GAP_MS)).toBe(1_000 + TYPING_ACTIVE_GAP_MS);
-    expect(displayTypingMs(state, 1_000 + TYPING_ACTIVE_GAP_MS + 1)).toBe(1_000);
-    expect(displayTypingMs(state, 1_000)).toBe(1_000);
-  });
-
-  it("无编辑 → 原样返回", () => {
-    expect(displayTypingMs(idle, 9_999)).toBe(0);
   });
 });
 

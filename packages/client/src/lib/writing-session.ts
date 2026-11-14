@@ -28,13 +28,6 @@ export function applyActivity(
   return { chars: state.chars + Math.max(0, delta), typingMs, lastEditAt: now };
 }
 
-/** 展示用码字时间：最后一段若仍未超阈值也计入（否则刚打完字时数字停住不动） */
-export function displayTypingMs(state: WritingSessionNumbers, now: number): number {
-  if (state.lastEditAt === null) return state.typingMs;
-  const tail = now - state.lastEditAt;
-  return tail > 0 && tail <= TYPING_ACTIVE_GAP_MS ? state.typingMs + tail : state.typingMs;
-}
-
 /** `HH:MM:SS`（负数按 0 处理；小时可超过两位） */
 export function formatDuration(ms: number): string {
   const totalSeconds = Math.max(0, Math.floor(ms / 1000));
