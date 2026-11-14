@@ -6,12 +6,6 @@
 // <1024px 小屏不渲染手柄/收起条，三栏回退默认百分比类（右栏抽屉行为不变，开关在 InfoBar 右侧，
 // 抽屉渲染在 ChatPanel；open 状态在此持有）
 import { useEffect, useState, type ReactNode } from "react";
-import { Button } from "antd";
-import {
-  DoubleLeftOutlined,
-  DoubleRightOutlined,
-  HolderOutlined,
-} from "@ant-design/icons";
 import type { Route } from "../hooks/use-route";
 import { usePanels } from "../hooks/use-panels";
 import { useCloudStore } from "../stores/cloud";
@@ -26,74 +20,8 @@ import { CloudPullConfirm } from "./settings/cloud-pull-confirm";
 import { CloudStaleBackupDialog } from "./settings/cloud-stale-backup-dialog";
 import { MainPanel } from "./main-panel/MainPanel";
 import { NavRail } from "./nav/NavRail";
-
-/** 拖拽手柄（桌面态、对应栏展开时渲染）：6px 垂直细条，hover 高亮 + GripVertical 提示；
- * pointer capture 实现拖拽——down 捕获指针后 move/up 持续由本手柄接收（移出窗口也不丢事件） */
-function ResizeHandle({
-  side,
-  active,
-  onStart,
-  onMove,
-  onEnd,
-}: {
-  side: "sidebar" | "chat";
-  /** 当前拖拽是否发生在本手柄（决定拖拽态高亮） */
-  active: boolean;
-  onStart: (side: "sidebar" | "chat", clientX: number) => void;
-  onMove: (side: "sidebar" | "chat", clientX: number) => void;
-  onEnd: () => void;
-}) {
-  return (
-    <div
-      role="separator"
-      aria-orientation="vertical"
-      aria-label={side === "sidebar" ? "调整左栏宽度" : "调整右栏宽度"}
-      title={side === "sidebar" ? "拖动调整左栏宽度" : "拖动调整右栏宽度"}
-      onPointerDown={(e) => {
-        // preventDefault 防文本选择起点；capture 保证拖出窗口后指针事件仍路由到手柄
-        e.preventDefault();
-        e.currentTarget.setPointerCapture(e.pointerId);
-        onStart(side, e.clientX);
-      }}
-      onPointerMove={(e) => onMove(side, e.clientX)}
-      onPointerUp={onEnd}
-      onPointerCancel={onEnd}
-      className={cn(
-        "group relative z-10 h-full w-1.5 shrink-0 cursor-col-resize touch-none bg-transparent transition-colors hover:bg-border",
-        active && "bg-border",
-      )}
-    >
-      {/* 常显细线延续栏间分隔视觉；hover/拖拽中高亮为主色提示 */}
-      <div className="absolute inset-y-0 left-1/2 w-px -translate-x-1/2 bg-border/60 transition-colors group-hover:bg-primary/70" />
-      <HolderOutlined className="absolute inset-y-0 left-1/2 text-base -translate-x-1/2 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100" />
-    </div>
-  );
-}
-
-/** 收起窄条（栏收起后替代主体渲染）：32px 窄条 + 展开按钮（点击恢复原宽）；
- * 图标 = 与对应栏收起按钮同一族镜像对（DESIGN.md `icon-button`）：左栏展开 = `»`、右栏展开 = `«` */
-function CollapseStrip({ side, onExpand }: { side: "sidebar" | "chat"; onExpand: () => void }) {
-  const isSidebar = side === "sidebar";
-  const ExpandIcon = isSidebar ? DoubleRightOutlined : DoubleLeftOutlined;
-  return (
-    <div
-      className={cn(
-        "flex h-full w-8 shrink-0 flex-col items-center bg-sidebar",
-        isSidebar ? "border-r border-border" : "border-l border-border",
-      )}
-    >
-      <Button
-        color="default" variant="text"
-        size="middle"
-        className="mt-3"
-        onClick={onExpand}
-        aria-label={isSidebar ? "展开左栏" : "展开右栏"}
-        title={isSidebar ? "展开左栏" : "展开右栏"}
-        icon={<ExpandIcon className="text-base" />}
-      />
-    </div>
-  );
-}
+import { CollapseStrip } from "./ui/collapse-strip";
+import { ResizeHandle } from "./ui/resize-handle";
 
 export function AppShell({ route, children }: { route: Route; children: ReactNode }) {
   // 小屏抽屉开关状态（桌面态恒显示静态右栏，该状态不生效）
@@ -132,7 +60,7 @@ export function AppShell({ route, children }: { route: Route; children: ReactNod
           {/* 左栏：收起 → 窄条；展开 → Sidebar（桌面传像素宽度覆盖默认 10%，小屏不传走默认百分比）；
               收起按钮（PanelLeftClose）渲染在产品标识行右侧（Sidebar 内部，仅桌面态传入回调时出现） */}
           {isDesktop && layout.collapsedSidebar ? (
-            <CollapseStrip side="sidebar" onExpand={() => toggleCollapse("sidebar")} />
+            <CollapseStrip side="left" label="展开左栏" onExpand={() => toggleCollapse("sidebar")} />
           ) : (
             <NavRail
               width={isDesktop ? layout.sidebarWidth : undefined}
@@ -142,10 +70,10 @@ export function AppShell({ route, children }: { route: Route; children: ReactNod
           {/* 左|中拖拽手柄：仅桌面 + 左栏展开时渲染（收起态隐藏，拖拽与收起互斥） */}
           {isDesktop && !layout.collapsedSidebar && (
             <ResizeHandle
-              side="sidebar"
+              label="调整左栏宽度"
               active={dragSide === "sidebar"}
-              onStart={startResize}
-              onMove={moveResize}
+              onStart={(clientX) => startResize("sidebar", clientX)}
+              onMove={(clientX) => moveResize("sidebar", clientX)}
               onEnd={endResize}
             />
           )}
@@ -179,17 +107,17 @@ export function AppShell({ route, children }: { route: Route; children: ReactNod
           {/* 中|右拖拽手柄：仅桌面 + 右栏展开时渲染 */}
           {isDesktop && !layout.collapsedChat && (
             <ResizeHandle
-              side="chat"
+              label="调整右栏宽度"
               active={dragSide === "chat"}
-              onStart={startResize}
-              onMove={moveResize}
+              onStart={(clientX) => startResize("chat", clientX)}
+              onMove={(clientX) => moveResize("chat", clientX)}
               onEnd={endResize}
             />
           )}
           {/* 右栏：收起 → 窄条；展开 → ChatPanel（桌面传像素宽度 + 收起按钮；小屏抽屉行为不变——
               open/onClose 仅小屏生效，收起按钮不渲染） */}
           {isDesktop && layout.collapsedChat ? (
-            <CollapseStrip side="chat" onExpand={() => toggleCollapse("chat")} />
+            <CollapseStrip side="right" label="展开右栏" onExpand={() => toggleCollapse("chat")} />
           ) : (
             <ChatPanel
               open={chatOpen}

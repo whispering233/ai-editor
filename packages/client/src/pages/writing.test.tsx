@@ -128,18 +128,20 @@ afterEach(() => {
 });
 
 describe("写作页 · 桌面（rail + 正文列）", () => {
-  it("全高分栏外壳（抵消中栏 p-6）+ rail 240px + 正文列吸收剩余宽度", () => {
+  it("全高分栏外壳（抵消中栏 p-6）+ rail 240px + 右边界手柄与收起按钮 + 正文列吸收剩余宽度", () => {
     const html = render();
     expect(html).toContain("-m-6 flex h-[calc(100%+3rem)] min-h-0 overflow-hidden");
     expect(html).toContain("flex min-h-0 min-w-0 flex-1 flex-col p-6");
-    expect(html).toContain("w-60");
+    expect(html).toContain("width:240px");
     expect(html).toContain(">卷章<");
     expect(html).toContain("第1卷");
     expect(html).toContain("第1章");
     expect(html).toContain("2章");
-    // 2b 才加宽度手柄 / 收起按钮
-    expect(html).not.toContain("调整卷章导航栏宽度");
-    expect(html).not.toContain('aria-label="收起"');
+    // 2b：展开态 = 右边界 6px 手柄 + header 收起按钮（窄条只在收起态）
+    expect(html).toContain('aria-label="调整卷章导航栏宽度"');
+    expect(html).toContain('role="separator"');
+    expect(html).toContain('aria-label="收起卷章导航栏"');
+    expect(html).not.toContain('aria-label="展开卷章导航栏"');
   });
 
   it("无 id：page-title「写作」+「从左侧选择一章开始写作」（不落空态）", () => {
@@ -226,31 +228,84 @@ describe("写作页 · 最近导航（`#/writing` 无 id）", () => {
 });
 
 describe("写作页 · 窄屏两级互斥（<1024px）", () => {
-  it("无 id：只渲染 rail 全宽（无正文、无「写作」页头）", () => {
+  it("无 id：只渲染 rail 全宽（无正文、无「写作」页头；窄屏无手柄 / 收起）", () => {
     const html = render({ desktop: false });
     expect(html).toContain("w-full");
-    expect(html).toContain("border-r-0");
+    // 分栏线只在桌面展开态由手柄中线承担；rail 不自带右边线（否则双线）
+    expect(html).not.toContain("border-r border-border");
     expect(html).toContain(">卷章<");
     expect(html).not.toContain(">写作<");
     expect(html).not.toContain("从左侧选择一章开始写作");
     expect(html).not.toContain("章节目录");
+    expect(html).not.toContain('aria-label="调整卷章导航栏宽度"');
+    expect(html).not.toContain('aria-label="收起卷章导航栏"');
   });
 
-  it("有 id：正文全宽 + 顶部「章节目录」返回条（无 rail）", () => {
+  it("有 id：正文全宽 + 顶部「章节目录」返回条（无 rail / 窄条 / 手柄）", () => {
     const html = render({ desktop: false, chapterId: "ch-1" });
     expect(html).not.toContain(">卷章<");
-    expect(html).not.toContain("w-60");
+    expect(html).not.toContain("width:240px");
+    expect(html).not.toContain('aria-label="调整卷章导航栏宽度"');
+    expect(html).not.toContain('aria-label="展开卷章导航栏"');
     expect(html).toContain("章节目录");
     expect(html).toContain('href="#/writing"');
     expect(html).toContain(">雪夜出走</");
   });
 });
 
+describe("写作页 · 卷章导航栏宽度与收起（2b）", () => {
+  /** hook 初始 state 在 SSR 读一次 localStorage（`typeof window` 守卫）⇒ 用 window stub 预置 */
+  function stubRailStorage(layout: { width: number; collapsed: boolean }) {
+    vi.stubGlobal("window", {
+      localStorage: {
+        getItem: (key: string) =>
+          key === "ai-editor:writing-rail" ? JSON.stringify(layout) : null,
+        setItem: () => {},
+      },
+    });
+  }
+
+  it("持久化宽度生效（内联 width；越界收敛到 [200, 480]）", () => {
+    stubRailStorage({ width: 333, collapsed: false });
+    const html = render();
+    expect(html).toContain("width:333px");
+    expect(html).not.toContain("width:240px");
+
+    stubRailStorage({ width: 9999, collapsed: false });
+    expect(render()).toContain("width:480px");
+
+    stubRailStorage({ width: 120, collapsed: false });
+    expect(render()).toContain("width:200px");
+  });
+
+  it("桌面收起态：32px 窄条 + 展开按钮，不渲染 rail / 手柄 / 收起按钮；正文列仍在（宽度保留）", () => {
+    stubRailStorage({ width: 333, collapsed: true });
+    const html = render({ chapterId: "ch-1" });
+    expect(html).toContain('aria-label="展开卷章导航栏"');
+    expect(html).toContain("w-8");
+    expect(html).not.toContain(">卷章<");
+    expect(html).not.toContain('aria-label="调整卷章导航栏宽度"');
+    expect(html).not.toContain('aria-label="收起卷章导航栏"');
+    expect(html).toContain("上一章");
+  });
+
+  it("窄屏无收起：存储的 collapsed 不生效，rail 全宽无窄条 / 手柄", () => {
+    stubRailStorage({ width: 240, collapsed: true });
+    const html = render({ desktop: false });
+    expect(html).toContain("w-full");
+    expect(html).not.toContain('aria-label="展开卷章导航栏"');
+    expect(html).not.toContain('aria-label="调整卷章导航栏宽度"');
+  });
+});
+
 describe("写作页 · 专注模式", () => {
-  it("桌面：rail 不渲染，正文独占（无「章节目录」返回条）", () => {
+  it("桌面：rail / 窄条 / 手柄都不渲染，正文独占（无「章节目录」返回条）", () => {
     const html = render({ focusMode: true, chapterId: "ch-1" });
     expect(html).not.toContain(">卷章<");
     expect(html).not.toContain('aria-label="卷章导航栏"');
+    expect(html).not.toContain('aria-label="调整卷章导航栏宽度"');
+    expect(html).not.toContain('aria-label="展开卷章导航栏"');
+    expect(html).not.toContain('aria-label="收起卷章导航栏"');
     expect(html).not.toContain("章节目录");
     expect(html).toContain("h-5");
   });

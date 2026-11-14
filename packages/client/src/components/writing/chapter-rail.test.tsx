@@ -64,13 +64,16 @@ function chapterTag(html: string, id: string): string {
 }
 
 describe("ChapterRail · 几何与行内容", () => {
-  it("固定 240px + 右边线 + header「卷章」；行区独立滚动", () => {
-    const html = render();
-    expect(html).toContain("w-60");
-    expect(html).toContain("border-r border-border");
+  it("宽度由 width prop 决定（仅传入时内联）+ 不自带右边线 + header「卷章」；行区独立滚动", () => {
+    const html = render({ width: 240 });
+    expect(html).toContain("width:240px");
+    // 分栏线由右侧手柄的 1px 中线承担（DESIGN.md `writing-page`「宽度与收起」）；rail 自带 border 会成双线
+    expect(html).not.toContain("border-r border-border");
     expect(html).toContain(">卷章<");
     expect(html).toContain("h-10");
     expect(html).toContain("overflow-y-auto");
+    // 不传 width：不写内联宽（窄屏全宽走 className，同属性后者胜）
+    expect(render()).not.toContain("width:240px");
   });
 
   it("卷行：编号徽标 + 卷名 + N章（0 章也计数）", () => {
@@ -154,7 +157,7 @@ describe("ChapterRail · 选中与折叠", () => {
 });
 
 describe("ChapterRail · 否定契约（rail 不是第二个大纲页）", () => {
-  it("无新建 / 改名 / 删除 / 写正文入口，无宽度手柄、无收起按钮、无结构拖拽", () => {
+  it("无新建 / 改名 / 删除 / 写正文入口、无结构拖拽；手柄由页面作兄弟渲染，rail 自身不含手柄", () => {
     const html = render();
     expect(html).not.toContain("新建");
     expect(html).not.toContain("改名");
@@ -162,7 +165,11 @@ describe("ChapterRail · 否定契约（rail 不是第二个大纲页）", () =>
     expect(html).not.toContain("写正文");
     expect(html).not.toContain('aria-label="调整卷章导航栏宽度"');
     expect(html).not.toContain('role="separator"');
-    expect(html).not.toContain('aria-label="收起"');
     expect(html).not.toContain("draggable");
+  });
+
+  it("收起按钮只在传入 onCollapse 时渲染（窄屏无收起）", () => {
+    expect(render({ onCollapse: () => {} })).toContain('aria-label="收起卷章导航栏"');
+    expect(render()).not.toContain('aria-label="收起卷章导航栏"');
   });
 });

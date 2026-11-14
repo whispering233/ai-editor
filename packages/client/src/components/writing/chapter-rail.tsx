@@ -2,21 +2,19 @@
 //
 // **纯 presenter**：行数据由页面经 `lib/writing.ts` 派生，折叠 state 也由页面持有；本组件不发请求、
 // 不做结构编辑（无新建 / 改名 / 删除 / 拖拽 / 右键菜单——结构编辑唯一入口仍是大纲树）。
-// 本卡 rail 固定 240px（宽度拖拽 / 收起窄条在 writing-2b，当前**没有**手柄与收起按钮）。
+// 宽度 / 收起态由页面持有（hooks/use-writing-rail）：本组件只消费 width / onCollapse；右侧拖拽手柄
+// 由页面作为兄弟渲染（不塞进 rail 宽度内，见 DESIGN.md `writing-page`「宽度与收起」）。
 //
 // 行几何与大纲树同密度：32px 行高、24px 折叠箭头盒、编号徽标 `min-w-14`（对齐口径见 DESIGN.md
 // §大纲页「缩进列对齐」）；章行是 `<a href="#/writing/:id">`，点击直接进正文，不渲染「写正文」按钮。
 import { useEffect, useRef } from "react";
 import { Button, Typography } from "antd";
-import { RightOutlined } from "@ant-design/icons";
+import { DoubleLeftOutlined, RightOutlined } from "@ant-design/icons";
 import { formatTextLength } from "../../lib/manuscript";
 import { errorBannerClass, skeletonClass } from "../../lib/styles";
 import { cn } from "../../lib/utils";
 import type { WritingRailRow } from "../../lib/writing";
 import { TypeChip } from "../ui/tag-chip";
-
-/** 左栏宽度（DESIGN 登记档：240px；2b 才做拖拽区间） */
-export const WRITING_RAIL_WIDTH_CLASS = "w-60";
 
 export interface ChapterRailProps {
   /** `buildWritingRailRows` 的扁平行（卷行 + 其章行 / 根级章原位） */
@@ -32,8 +30,12 @@ export interface ChapterRailProps {
   /** 窄屏目录页的大纲错误（桌面错误在正文列，rail 保持骨架） */
   error?: string | null;
   onRetry?: () => void;
-  /** 覆盖类（窄屏两级导航时全宽：`w-full border-r-0`——`cn` 用 twMerge，同属性后者胜） */
+  /** 覆盖类（窄屏两级导航时全宽：`w-full`——`cn` 用 twMerge，同属性后者胜） */
   className?: string;
+  /** 展开态宽度（px）；不传 = 不设内联宽（窄屏全宽走 className） */
+  width?: number;
+  /** 桌面态收起入口；不传 = 不渲染收起按钮（窄屏无收起） */
+  onCollapse?: () => void;
 }
 
 export function ChapterRail({
@@ -45,6 +47,8 @@ export function ChapterRail({
   error = null,
   onRetry,
   className,
+  width,
+  onCollapse,
 }: ChapterRailProps) {
   // 换章后把选中行滚进可视区（`nearest`：已在视野内则不跳）。SSR 不跑 effect。
   const selectedRef = useRef<HTMLAnchorElement | null>(null);
@@ -60,17 +64,27 @@ export function ChapterRail({
   return (
     <aside
       aria-label="卷章导航栏"
-      className={cn(
-        "flex shrink-0 flex-col border-r border-border",
-        WRITING_RAIL_WIDTH_CLASS,
-        className,
-      )}
+      style={width === undefined ? undefined : { width }}
+      // 不自带右边线：桌面展开态的分栏线由右侧 6px 拖拽手柄的 1px 中线承担
+      //（DESIGN.md `writing-page`「宽度与收起」——两者并存会出现双竖线）；窄屏全宽无邻居，也不需要线
+      className={cn("flex shrink-0 flex-col", className)}
     >
-      {/* header 40px（本卡无收起按钮——2b 才加） */}
-      <div className="flex h-10 shrink-0 items-center border-b border-border px-3 py-2">
-        <Typography.Title level={5} className="min-w-0 truncate">
+      {/* header 40px：标题 + 收起按钮（仅桌面态传入 onCollapse） */}
+      <div className="flex h-10 shrink-0 items-center gap-2 border-b border-border px-3 py-2">
+        <Typography.Title level={5} className="min-w-0 flex-1 truncate">
           卷章
         </Typography.Title>
+        {onCollapse !== undefined && (
+          <Button
+            color="default" variant="text"
+            size="small"
+            className="shrink-0"
+            onClick={onCollapse}
+            aria-label="收起卷章导航栏"
+            title="收起卷章导航栏"
+            icon={<DoubleLeftOutlined />}
+          />
+        )}
       </div>
 
       {/* 行区：独立纵向滚动；p-2 = 8px */}

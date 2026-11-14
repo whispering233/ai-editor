@@ -14,10 +14,13 @@ import { Button } from "antd";
 import { ArrowLeftOutlined } from "@ant-design/icons";
 import { ChapterEditor } from "../components/manuscript/chapter-editor";
 import { ChapterRail } from "../components/writing/chapter-rail";
+import { CollapseStrip } from "../components/ui/collapse-strip";
 import { EmptyState } from "../components/ui/empty-state";
 import { PageHeader } from "../components/ui/page-header";
+import { ResizeHandle } from "../components/ui/resize-handle";
 import { useMediaQuery } from "../hooks/use-media-query";
 import { useOutlineLoader } from "../hooks/use-outline-loader";
+import { useWritingRail } from "../hooks/use-writing-rail";
 import { errorBannerClass, skeletonClass } from "../lib/styles";
 import { cn } from "../lib/utils";
 import { buildWritingRailRows, readLastOpenedChapter, resolveWritingTarget, writeLastOpenedChapter } from "../lib/writing";
@@ -35,6 +38,15 @@ export default function Writing({ chapterId }: { chapterId?: string }) {
   const { retry } = useOutlineLoader({ withMetadata: true });
   const isDesktop = useMediaQuery("(min-width: 1024px)");
   const focusMode = useUiStore((s) => s.focusMode);
+  // 卷章导航栏宽度 / 收起态（全局一份，localStorage；拖动只改内存，pointerup 一次写）
+  const {
+    layout: railLayout,
+    resizing,
+    startResize,
+    moveResize,
+    endResize,
+    toggleCollapse: toggleRailCollapse,
+  } = useWritingRail(isDesktop);
 
   // 卷折叠 state = 页面 state（session；不写 localStorage，刷新复位、切章不重置）
   const [collapsed, setCollapsed] = useState<Set<string>>(() => new Set());
@@ -86,9 +98,10 @@ export default function Writing({ chapterId }: { chapterId?: string }) {
     window.location.replace(targetHash);
   }, [chapterId, isDesktop, writingTarget]);
 
-  // rail：桌面恒有；窄屏只在无 id（目录页）时有。专注模式两者都不渲染。
+  // rail：桌面展开态有；窄屏只在无 id（目录页）时有；桌面收起态换成窄条。专注模式两者都不渲染。
+  const railCollapsed = isDesktop && railLayout.collapsed;
   const rail =
-    !focusMode && (isDesktop || chapterId === undefined) ? (
+    !focusMode && (isDesktop || chapterId === undefined) && !railCollapsed ? (
       <ChapterRail
         rows={rows}
         selectedId={chapterId ?? null}
@@ -99,7 +112,9 @@ export default function Writing({ chapterId }: { chapterId?: string }) {
         loading={outline === null}
         error={!isDesktop && outlineFailed ? "大纲加载失败，章节目录暂不可用" : null}
         onRetry={retry}
-        className={isDesktop ? undefined : "w-full border-r-0"}
+        width={isDesktop ? railLayout.width : undefined}
+        onCollapse={isDesktop ? toggleRailCollapse : undefined}
+        className={isDesktop ? undefined : "w-full"}
       />
     ) : null;
 
@@ -191,8 +206,28 @@ export default function Writing({ chapterId }: { chapterId?: string }) {
   return (
     // -m-6 / h-[calc(100%+3rem)]：抵消中栏内容区的 p-6（同人物工作台的写作页外壳，见
     // DESIGN.md §Layout「写作页的中栏内分栏」）。正文列内补回同一内边距。
-    <section className="-m-6 flex h-[calc(100%+3rem)] min-h-0 overflow-hidden">
+    // 拖拽期间根容器禁文本选中（指针已 capture 在手柄上，兜底防边缘选中）。
+    <section
+      className={cn(
+        "-m-6 flex h-[calc(100%+3rem)] min-h-0 overflow-hidden",
+        resizing && "select-none",
+      )}
+    >
       {rail}
+      {/* 桌面收起态：32px 窄条（宽度保留，展开恢复原宽）；窄屏 / 专注不渲染 */}
+      {!focusMode && railCollapsed && (
+        <CollapseStrip side="left" label="展开卷章导航栏" onExpand={toggleRailCollapse} />
+      )}
+      {/* 桌面展开态右边界 6px 拖拽手柄；收起态不渲染（拖拽与收起互斥） */}
+      {!focusMode && isDesktop && !railCollapsed && (
+        <ResizeHandle
+          label="调整卷章导航栏宽度"
+          active={resizing}
+          onStart={startResize}
+          onMove={moveResize}
+          onEnd={endResize}
+        />
+      )}
       {bodyContent !== null && (
         <div className="flex min-h-0 min-w-0 flex-1 flex-col p-6">
           {/* 窄屏「章节目录」返回条（32px，滚动区之外；专注模式不渲染） */}
