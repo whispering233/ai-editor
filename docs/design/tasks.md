@@ -10,44 +10,6 @@
 
 ## 当前任务卡
 
-### writing-0-extract-editor-panel — 拆出无路由的章正文编辑面板
-
-**状态**：待执行
-**依赖**：无
-**范围**：仅 `packages/client/src/pages/Manuscript.tsx`（变薄）、新建 `packages/client/src/components/manuscript/chapter-editor.tsx`；不改路由行为、不改样式、不改保存逻辑、不动 `lib/manuscript.ts`。
-
-**改动**
-- 把现页面主体整体搬进 `ChapterEditor`：props = `{ outline: OutlineTree | null, chapterId: string, basePath: "/manuscript" | "/writing" }`（`basePath` 供上一/下一章链接派生目标）。正文加载、自动保存、409 `DOCUMENT_STALE`、404、导入导出、专注模式、页头、工具条、字数/保存态一律原样搬入，**行为零变化**。
-- `Manuscript` 变薄壳：`useProjectStore(s => s.outline)` + `useOutlineLoader({ withMetadata: false })`（**保持现状**）→ 加载/错误态 → `<ChapterEditor key={chapterId} outline={outline} chapterId={chapterId} basePath="/manuscript" />`；壳不再持有正文状态。
-- 页面高度链不变：壳仍为 `section flex h-full min-h-0 flex-col` + 内层滚动容器；`ChapterEditor` 不自建滚动容器、不改 `p-6`。
-- 不做：不拆 rail、不加路由、不改 `#/manuscript`、不改 CSS、不改测试语义。
-
-**硬完成判据**
-- `Manuscript.tsx` 不再包含正文加载/保存逻辑；`ChapterEditor.tsx` 无 `useParams` / 路由依赖，只接 props。
-- `pnpm --filter @whispering233/ai-editor-client test`、`pnpm typecheck`、`pnpm lint` 全绿。
-- 浏览器冒烟（独立 `ui-verifier`，≤6 项）：`#/manuscript/:id` 打开、编辑后 1.5s 自动保存、手动保存、上一/下一章、专注模式、导入导出，与改前一致。
-- 新 commit + `git status` 干净；汇报 commit hash 与命令输出。
-
-### writing-1-nav-route-shell — 写作一级页、路由与写正文入口
-
-**状态**：待执行
-**依赖**：writing-0
-**范围**：client 导航/路由/页面壳；本卡不建 rail（writing-2）、不做最近导航（writing-3）。
-
-**改动**
-- `components/nav/nav-items.tsx`：小说 items 在 `/outline` **之前**插入 `{ key: "/writing", icon: <EditOutlined />, label: "写作" }`（补 import；图标用 Outlined 纪律）。练习项集不动。
-- `hooks/use-route.ts`：`KNOWN_ROUTE_SEGMENTS` 加 `"writing"`；`#/writing` 与 `#/writing/:id` 都能解析。
-- 新建 `pages/Writing.tsx`：`useOutlineLoader({ withMetadata: true })` + store `outline`；全高分栏外壳（`-m-6 flex h-[calc(100%+3rem)] min-h-0 overflow-hidden`）+ 正文列（`min-h-0 min-w-0 flex-1 p-6`）。有 id → `<ChapterEditor key={chapterId} outline={outline} chapterId={chapterId} basePath="/writing" />`；无 id → `page-title`「写作」+ 空态（去大纲）。本卡 rail 位置留空/占满，不做折叠树。
-- `main.tsx`：`case "writing"` 渲染 `<Writing chapterId={...} />`；**页面不挂 key**（只有编辑器子树挂），`#/writing` 无 id 合法。旧 `manuscript` case 保持可用（P1 才改重定向）。
-- 所有「写正文」/章跳转改指 `#/writing/:id`：`components/outline/chapter-view.tsx`（P1 会删，本卡先改）、`pages/OutlineDetail.tsx` 的 `navigate("/manuscript/"+id)`、`ChapterEditor` 的上一/下一章 `basePath`。
-- 不写 `workspace-route-guard.ts`：小说侧默认放行、练习侧允许清单本就不含 `writing` ⇒ 自动挡回 `/practice`，只补测试。
-- 测试：`nav-items.test.ts`（十项 + 写作在大纲前）、`use-route.test.ts`（解析两态）、`workspace-route-guard.test.ts`（练习区 `#/writing` 挡回）、`pages/outline.test.tsx`（写正文链接）、新增 `pages/writing.test.tsx`（SSR：无 id 空态、有 id 渲染编辑面板占位）。
-
-**硬完成判据**
-- 1920/1440：左栏「写作」在第一项且与「大纲」互斥高亮；`#/writing/:id` 可编辑保存；`#/writing` 空态不崩；旧 `#/manuscript/:id` 仍可编辑。
-- 760：写作页不横向溢出（rail 未建，允许正文占满）。
-- 命令全绿；新 commit + `git status` 干净；汇报 hash/输出。
-
 ### writing-2-chapter-rail — 卷章导航栏与全高布局
 
 **状态**：待执行
