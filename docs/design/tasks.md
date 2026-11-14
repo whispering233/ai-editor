@@ -10,28 +10,6 @@
 
 ## 当前任务卡
 
-### writing-2-chapter-rail — 卷章导航栏与全高布局
-
-**状态**：待执行
-**依赖**：writing-1
-**范围**：新建 `components/writing/chapter-rail.tsx`、`lib/writing.ts`（本卡只放 rail 行派生）；`pages/Writing.tsx` 的 rail / 窄屏 / 专注接线；不改服务端、不改大纲页；**本卡 rail 固定 240px，宽度拖拽 / 收起在 writing-2b**。
-
-**改动**
-- `lib/writing.ts`：`buildWritingRailRows(outline)` 按 `outline.children` 文件序遍历（卷行 → 卷内章行；存量根级章顶层就地；跳过 `deleted`；0 章卷保留；不按 `chapterRows` 重组），徽标一律查 `numberOutline(outline).labels`，卷行 `N章` = 可见章子节点数；测试覆盖卷 / 根级章 / 0 章卷 / 软删 / 徽标。
-- `chapter-rail.tsx`：顶部 header 40px（`px-3 py-2`、`section-title`「卷章」，本卡**无收起按钮**——2b 加）；行区 `p-2`；行几何 / 选中 / 折叠 / 字数严格按 `DESIGN.md`（32px、24px 折叠盒、`min-w-14`、`truncate`、`formatTextLength` 仅 `textLength > 0`、`bg-accent` + `aria-current="page"`）；**本卡无拖拽手柄**。卷折叠 state 在 `Writing`（session），换章后选中行 `scrollIntoView({ block: "nearest" })`。
-- 桌面：rail 240px + 正文列；正文列 `flex min-h-0 min-w-0 flex-1 flex-col p-6`，窄屏返回条是列内 `shrink-0` 一行，下面 `min-h-0 flex-1` 包 `ChapterEditor`。
-- 窄屏（`useMediaQuery("(min-width: 1024px)")`）：`#/writing` rail 全宽、无正文；`#/writing/:id` 正文全宽 + 32px「章节目录」返回条（`ArrowLeftOutlined`）。专注：`useUiStore(s => s.focusMode)` 为真时隐藏 rail 与返回条。
-- 空 / 加载 / 错误态按 `DESIGN.md`：rail 骨架、无章空态、有章无选中提示、大纲失败重试、显式坏 `chapterId` 错误条 + 返回目录（不自动回退）。
-- 测试：`components/writing/chapter-rail.test.tsx`（renderToString：卷行 `N章`、章行字数 / 0 不显示、根级章顶层、0 章卷、选中 `aria-current`、折叠箭头）；`pages/writing.test.tsx` 增窄屏 / 空态；**否定契约**：rail 不渲染新建 / 改名 / 删除按钮，也不渲染拖拽手柄 / 收起按钮（2b 才加）。
-
-**硬完成判据**
-- 1920/1440：rail 240、正文吸收剩余；点章直接进正文（页面无「写正文」按钮）；折叠 / 展开、选中滚动可见；**无拖拽手柄 / 收起按钮**（2b 才加）。
-- 760：两级互斥 + 「章节目录」返回条可用；无横向溢出。
-- 专注模式 rail / 返回条都不渲染；正文吸收剩余宽度。
-- `pnpm --filter @whispering233/ai-editor-client test`、`pnpm typecheck`、`pnpm lint` 全绿。
-- 浏览器验收（独立 `ui-verifier`，≤6 项）：rail 几何、点章进正文、折叠、选中滚动、窄屏两级、专注。
-- 新 commit + `git status` 干净；汇报 hash/输出。
-
 ### writing-3-recent-chapter — 最近打开优先、服务端回退与保存后即时字数
 
 **状态**：待执行
