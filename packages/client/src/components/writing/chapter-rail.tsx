@@ -78,18 +78,21 @@ export function ChapterRail({
         </Typography.Title>
       </div>
 
-      {/* 收起圆钮：骑在右边线中线上（外偏 8px，内探部分落在行区 p-2 内边距里，不压章名 / 字数）。
-          绝对定位 + z 高于拖拽手柄 ⇒ 点它不会触发宽度拖拽。 */}
+      {/* 收起圆钮：骑在右边线正中间（内外各 12px；内探的一半落在行区 p-2 + 行 px-2 的 16px 内边距里，不压章名 / 字数）。
+          定位必须挂包裹层：antd `.ant-btn` 自带 `position: relative`（与 Tailwind `.absolute` 同特异性、
+          但 antd 的 style 注入更晚）⇒ 直接给 Button 加 `absolute` 会被压回 relative 而贴在左边。
+          z 高于拖拽手柄 ⇒ 点它不会触发宽度拖拽。 */}
       {onCollapse !== undefined && (
-        <Button
-          color="default" variant="outlined" shape="circle"
-          size="small"
-          className="absolute top-1/2 -right-2 z-20 -translate-y-1/2"
-          onClick={onCollapse}
-          aria-label="收起卷章导航栏"
-          title="收起卷章导航栏"
-          icon={<LeftOutlined className="text-xs" />}
-        />
+        <div className="absolute top-1/2 -right-3 z-20 -translate-y-1/2">
+          <Button
+            color="default" variant="outlined" shape="circle"
+            size="small"
+            onClick={onCollapse}
+            aria-label="收起卷章导航栏"
+            title="收起卷章导航栏"
+            icon={<LeftOutlined className="text-xs" />}
+          />
+        </div>
       )}
 
       {/* 行区：独立纵向滚动；p-2 = 8px */}
