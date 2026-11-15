@@ -193,6 +193,8 @@
 
 ## 前端 / UI
 
+- **antd 组件上的 `absolute` 定位（2026-11 写作页圆钮实测）** — 现状：antd 会给 `.ant-btn` 等组件注入 `position: relative`，与 Tailwind 的 `.absolute` 同特异性但注入更晚 ⇒ 直接写在 antd 组件的 `className` 上会被压回 `relative`，元素静默贴到错误位置（类型检查与单测全绿，只有像素能发现）。当前靠约定：定位一律挂外层 `div`（写作页卷章栏圆钮即此写法，代码注释已记）。触发条件：同类缺陷再现一次 ⇒ 在 `design-discipline.test.ts` 加源码扫描规则（antd 组件的 `className` 里出现 `absolute` / `fixed` / `sticky`）。
+
 - **码字悬浮面板的两处观感短板（2026-11 UI 实测登记，P3）**
   - 现状：面板四指标标签复用全局 12px `text-muted-foreground`，浅色主题实测对比度 4.42:1（低于 WCAG AA 4.5）；深色主题的 `shadow-md` 在近黑底几乎不可见，层级只靠 1px `ring`。两处都是全局 caption / 浮层口径，不是面板独有。
   - 触发条件：做全站对比度或浮层层级收口时。
