@@ -1,6 +1,7 @@
 // 栏间拖拽手柄（桌面态、对应栏展开时渲染）：6px 垂直细条，hover 高亮 + GripVertical 提示；
 // pointer capture 实现拖拽——down 捕获指针后 move/up 持续由本手柄接收（移出窗口也不丢事件）。
 // 唯一实现点：AppShell 左右栏与写作页卷章导航栏共用（视觉 / 行为单源）。
+// 手柄不画线，分栏线归面板（DESIGN.md §Layout「分栏边线单所有权」）。
 import { HolderOutlined } from "@ant-design/icons";
 import { cn } from "../../lib/utils";
 
@@ -35,8 +36,6 @@ export function ResizeHandle({ label, active, onStart, onMove, onEnd }: ResizeHa
         active && "bg-border",
       )}
     >
-      {/* 常显细线延续栏间分隔视觉；hover/拖拽中高亮为主色提示 */}
-      <div className="absolute inset-y-0 left-1/2 w-px -translate-x-1/2 bg-border/60 transition-colors group-hover:bg-primary/70" />
       <HolderOutlined className="absolute inset-y-0 left-1/2 text-base -translate-x-1/2 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100" />
     </div>
   );

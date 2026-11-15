@@ -133,6 +133,8 @@ describe("写作页 · 桌面（rail + 正文列）", () => {
     expect(html).toContain("-m-6 flex h-[calc(100%+3rem)] min-h-0 overflow-hidden");
     expect(html).toContain("flex min-h-0 min-w-0 flex-1 flex-col p-6");
     expect(html).toContain("width:240px");
+    // 分栏线归 rail 自己的 border-r（手柄不再画线，DESIGN.md §Layout「分栏边线单所有权」）
+    expect(html).toContain("border-r border-border");
     expect(html).toContain(">卷章<");
     expect(html).toContain("第1卷");
     expect(html).toContain("第1章");
@@ -231,7 +233,8 @@ describe("写作页 · 窄屏两级互斥（<1024px）", () => {
   it("无 id：只渲染 rail 全宽（无正文、无「写作」页头；窄屏无手柄 / 收起）", () => {
     const html = render({ desktop: false });
     expect(html).toContain("w-full");
-    // 分栏线只在桌面展开态由手柄中线承担；rail 不自带右边线（否则双线）
+    // 窄屏全宽无邻居：页面传 `border-r-0` 抹掉 rail 自带的右边线（DESIGN.md §Layout「分栏边线单所有权」）
+    expect(html).toContain("border-r-0");
     expect(html).not.toContain("border-r border-border");
     expect(html).toContain(">卷章<");
     expect(html).not.toContain(">写作<");

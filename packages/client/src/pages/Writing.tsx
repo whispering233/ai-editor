@@ -114,7 +114,7 @@ export default function Writing({ chapterId }: { chapterId?: string }) {
         onRetry={retry}
         width={isDesktop ? railLayout.width : undefined}
         onCollapse={isDesktop ? toggleRailCollapse : undefined}
-        className={isDesktop ? undefined : "w-full"}
+        className={isDesktop ? undefined : "w-full border-r-0"}
       />
     ) : null;
 

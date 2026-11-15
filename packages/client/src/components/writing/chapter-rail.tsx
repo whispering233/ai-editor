@@ -30,7 +30,7 @@ export interface ChapterRailProps {
   /** 窄屏目录页的大纲错误（桌面错误在正文列，rail 保持骨架） */
   error?: string | null;
   onRetry?: () => void;
-  /** 覆盖类（窄屏两级导航时全宽：`w-full`——`cn` 用 twMerge，同属性后者胜） */
+  /** 覆盖类（窄屏两级导航时全宽且不留右边线：`w-full border-r-0`——`cn` 用 twMerge，同属性后者胜） */
   className?: string;
   /** 展开态宽度（px）；不传 = 不设内联宽（窄屏全宽走 className） */
   width?: number;
@@ -65,9 +65,9 @@ export function ChapterRail({
     <aside
       aria-label="卷章导航栏"
       style={width === undefined ? undefined : { width }}
-      // 不自带右边线：桌面展开态的分栏线由右侧 6px 拖拽手柄的 1px 中线承担
-      //（DESIGN.md `writing-page`「宽度与收起」——两者并存会出现双竖线）；窄屏全宽无邻居，也不需要线
-      className={cn("flex shrink-0 flex-col", className)}
+      // 桌面展开态分栏线归本栏；窄屏全宽由页面传 `border-r-0`
+      //（DESIGN.md §Layout「分栏边线单所有权」——手柄不画线，只有面板边线能覆盖抽屉 / 窄屏 / 窄条）
+      className={cn("flex shrink-0 flex-col border-r border-border", className)}
     >
       {/* header 40px：标题 + 收起按钮（仅桌面态传入 onCollapse） */}
       <div className="flex h-10 shrink-0 items-center gap-2 border-b border-border px-3 py-2">
