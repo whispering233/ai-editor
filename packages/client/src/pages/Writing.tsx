@@ -216,7 +216,7 @@ export default function Writing({ chapterId }: { chapterId?: string }) {
       {rail}
       {/* 桌面收起态：32px 窄条（宽度保留，展开恢复原宽）；窄屏 / 专注不渲染 */}
       {!focusMode && railCollapsed && (
-        <CollapseStrip side="left" label="展开卷章导航栏" onExpand={toggleRailCollapse} />
+        <CollapseStrip side="left" variant="grip" label="展开卷章导航栏" onExpand={toggleRailCollapse} />
       )}
       {/* 桌面展开态右边界 6px 拖拽手柄；收起态不渲染（拖拽与收起互斥） */}
       {!focusMode && isDesktop && !railCollapsed && (

@@ -4,12 +4,14 @@
 // 不做结构编辑（无新建 / 改名 / 删除 / 拖拽 / 右键菜单——结构编辑唯一入口仍是大纲树）。
 // 宽度 / 收起态由页面持有（hooks/use-writing-rail）：本组件只消费 width / onCollapse；右侧拖拽手柄
 // 由页面作为兄弟渲染（不塞进 rail 宽度内，见 DESIGN.md `writing-page`「宽度与收起」）。
+// 收起入口 = 骑在右边线中线上的单箭头圆钮（面板内子栏专用，与整栏的双箭头镜像对不互串，
+// 见 DESIGN.md §Components `icon-button`「位移例外」）。
 //
 // 行几何与大纲树同密度：32px 行高、24px 折叠箭头盒、编号徽标 `min-w-14`（对齐口径见 DESIGN.md
 // §大纲页「缩进列对齐」）；章行是 `<a href="#/writing/:id">`，点击直接进正文，不渲染「写正文」按钮。
 import { useEffect, useRef } from "react";
 import { Button, Typography } from "antd";
-import { DoubleLeftOutlined, RightOutlined } from "@ant-design/icons";
+import { LeftOutlined, RightOutlined } from "@ant-design/icons";
 import { formatTextLength } from "../../lib/manuscript";
 import { errorBannerClass, skeletonClass } from "../../lib/styles";
 import { cn } from "../../lib/utils";
@@ -67,25 +69,28 @@ export function ChapterRail({
       style={width === undefined ? undefined : { width }}
       // 桌面展开态分栏线归本栏；窄屏全宽由页面传 `border-r-0`
       //（DESIGN.md §Layout「分栏边线单所有权」——手柄不画线，只有面板边线能覆盖抽屉 / 窄屏 / 窄条）
-      className={cn("flex shrink-0 flex-col border-r border-border", className)}
+      className={cn("relative flex shrink-0 flex-col border-r border-border", className)}
     >
-      {/* header 40px：标题 + 收起按钮（仅桌面态传入 onCollapse） */}
+      {/* header 40px：只留标题（收起入口是右边界中线的圆钮，不占 header） */}
       <div className="flex h-10 shrink-0 items-center gap-2 border-b border-border px-3 py-2">
         <Typography.Title level={5} className="min-w-0 flex-1 truncate">
           卷章
         </Typography.Title>
-        {onCollapse !== undefined && (
-          <Button
-            color="default" variant="text"
-            size="small"
-            className="shrink-0"
-            onClick={onCollapse}
-            aria-label="收起卷章导航栏"
-            title="收起卷章导航栏"
-            icon={<DoubleLeftOutlined />}
-          />
-        )}
       </div>
+
+      {/* 收起圆钮：骑在右边线中线上（外偏 8px，内探部分落在行区 p-2 内边距里，不压章名 / 字数）。
+          绝对定位 + z 高于拖拽手柄 ⇒ 点它不会触发宽度拖拽。 */}
+      {onCollapse !== undefined && (
+        <Button
+          color="default" variant="outlined" shape="circle"
+          size="small"
+          className="absolute top-1/2 -right-2 z-20 -translate-y-1/2"
+          onClick={onCollapse}
+          aria-label="收起卷章导航栏"
+          title="收起卷章导航栏"
+          icon={<LeftOutlined className="text-xs" />}
+        />
+      )}
 
       {/* 行区：独立纵向滚动；p-2 = 8px */}
       <div className="min-h-0 flex-1 overflow-y-auto p-2">

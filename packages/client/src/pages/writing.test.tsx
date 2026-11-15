@@ -139,11 +139,14 @@ describe("写作页 · 桌面（rail + 正文列）", () => {
     expect(html).toContain("第1卷");
     expect(html).toContain("第1章");
     expect(html).toContain("2章");
-    // 2b：展开态 = 右边界 6px 手柄 + header 收起按钮（窄条只在收起态）
+    // 2b：展开态 = 右边界 6px 手柄 + 右边界中线上的收起圆钮（窄条只在收起态）
     expect(html).toContain('aria-label="调整卷章导航栏宽度"');
     expect(html).toContain('role="separator"');
     expect(html).toContain('aria-label="收起卷章导航栏"');
     expect(html).not.toContain('aria-label="展开卷章导航栏"');
+    // 收起入口是面板内子栏专用的单箭头圆钮，不再是整栏双箭头（DESIGN.md `icon-button`）
+    expect(html).toContain("ant-btn-circle");
+    expect(html).not.toContain("anticon-double-left");
   });
 
   it("无 id：page-title「写作」+「从左侧选择一章开始写作」（不落空态）", () => {
@@ -281,11 +284,14 @@ describe("写作页 · 卷章导航栏宽度与收起（2b）", () => {
     expect(render()).toContain("width:200px");
   });
 
-  it("桌面收起态：32px 窄条 + 展开按钮，不渲染 rail / 手柄 / 收起按钮；正文列仍在（宽度保留）", () => {
+  it("桌面收起态：32px 窄条 + 中线同款圆钮，不渲染 rail / 手柄 / 收起按钮；正文列仍在（宽度保留）", () => {
     stubRailStorage({ width: 333, collapsed: true });
     const html = render({ chapterId: "ch-1" });
     expect(html).toContain('aria-label="展开卷章导航栏"');
     expect(html).toContain("w-8");
+    // 窄条中线是同一枚单箭头圆钮（不是双箭头 `»`），与展开态同一形态
+    expect(html).toContain("ant-btn-circle");
+    expect(html).not.toContain("anticon-double-right");
     expect(html).not.toContain(">卷章<");
     expect(html).not.toContain('aria-label="调整卷章导航栏宽度"');
     expect(html).not.toContain('aria-label="收起卷章导航栏"');
