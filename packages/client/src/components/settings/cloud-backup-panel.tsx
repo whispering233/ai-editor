@@ -233,10 +233,10 @@ export function CloudBackupPanel() {
       {/* ② 自动推送 */}
       <SectionCard title="自动推送">
         <p className="mb-2 text-xs text-muted-foreground">
-          随自动备份频率触发：创作数据（正文数据、大纲、参考资料、项目规则）有变更、且最新备份已涵盖时才推，
-          两次自动推送至少间隔 2 小时；关闭项目与手动备份后各额外触发一次，且不受 2 小时节流限制
-          （关闭项目那次若「有改动未进最新备份」则跳过）；纯聊天不单独触发（聊天记录会随下一次创作变更一起上云）。
-          备份频率关闭时不会自动推送；自动推送关闭时仍可在下方面板手动推送。
+          随自动备份频率触发：创作数据 = 三文件（正文数据、大纲、参考资料）+ 项目规则（AGENTS.md），
+          有变更、且最新备份已涵盖时才推，两次自动推送至少间隔 2 小时；关闭项目与手动备份后各额外触发一次，
+          且不受 2 小时节流限制（关闭项目那次若「有改动未进最新备份」则跳过）；
+          聊天记录不进包、不会上云。备份频率关闭时不会自动推送；自动推送关闭时仍可在下方面板手动推送。
         </p>
         <div className="flex items-center gap-2">
           <Switch
@@ -351,8 +351,8 @@ export function CloudBackupPanel() {
           </Button>
           {remoteHead !== null && (
             <span className="text-xs text-muted-foreground">
-              云端已有 {status?.remote?.backups.length ?? 0} 份（保留最近 5 份）；拉取会用云端那份覆盖三文件，
-              本机对话历史不受影响（会话是纯本地目录）
+              云端已有 {status?.remote?.backups.length ?? 0} 份（保留最近 5 份）；拉取会用云端那份覆盖三文件与项目规则
+              （AGENTS.md 同属覆盖组；包内没有规则时本机规则会被清除），本机对话历史不受影响（会话是纯本地目录）
             </span>
           )}
         </div>

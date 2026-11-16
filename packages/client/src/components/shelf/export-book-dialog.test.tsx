@@ -66,7 +66,7 @@ describe("ExportBookFormBody（导出类型框内容体）", () => {
       expect(html).toContain(option.caption("青云记"));
     }
     // caption 是产物说明：无损那条明写「可再导入」，有损那条明写「有损」（口径不许互换）
-    expect(html).toContain("青云记.zip · 三文件 · 可再导入（无损）");
+    expect(html).toContain("青云记.zip · 三文件 + 项目规则（若有）· 可再导入（无损）");
     expect(html).toContain("青云记-小说文档.zip · 卷/章 markdown 目录树 · 有损");
   });
 

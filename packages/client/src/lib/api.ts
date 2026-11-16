@@ -831,7 +831,7 @@ export function deleteProject(body: {
 }
 
 // ============ 导出/导入（「项目管理」段末尾 + shared types/api.ts
-// PROJECT_EXPORT_FILE_NAMES 注释——zip 内三文件 project.json/outline.json/data.db） ============
+// PROJECT_EXPORT_FILE_NAMES 注释——zip 内三文件 project.json/outline.json/data.db + 可选 AGENTS.md（存在才含）） ============
 
 /**
  * 解析 Content-Disposition 的文件名（RFC 5987，服务端格式
@@ -897,7 +897,7 @@ async function fetchZipDownload(path: string): Promise<ExportProjectZipRes> {
   throw new ApiError(CLIENT_NETWORK_ERROR, `非预期响应（HTTP ${res.status}）`);
 }
 
-/** 导出当前项目为 zip 备份包（「GET /project/export」：三文件 project.json/outline.json/data.db） */
+/** 导出当前项目为 zip 备份包（「GET /project/export」：三文件 project.json/outline.json/data.db + 可选 AGENTS.md，存在才含） */
 export function exportProjectZip(): Promise<ExportProjectZipRes> {
   return fetchZipDownload("/project/export");
 }
@@ -985,7 +985,8 @@ export interface RestoreBackupRes {
 
 /**
  * 从备份列表恢复当前项目（覆盖恢复）：
- * - 覆盖前服务端自动快照当前状态 → 原子替换三文件（`sessions/` 是纯本地目录，不写不删）
+ * - 覆盖前服务端自动快照当前状态 → 原子替换三文件 + 项目规则（包内没有规则则删本机规则）
+ *   （`sessions/` 是纯本地目录，不写不删）
  * - 错误：404 VALIDATION_ERROR（备份不存在）、409 SCHEMA_VERSION_MISMATCH（备份来自更高版本，
  * 前端阻断提示——message 已按相对版本分流，透传展示）
  */
@@ -1261,7 +1262,8 @@ export function testCloudConnection(): Promise<CloudTestResult> {
 
 /**
  * POST /api/v1/cloud/pull —— 从云端拉取一份备份应用到当前项目（缺省 = 云端 head；卡 5）。
- * 语义：三文件覆盖（`sessions/` 是纯本地目录，不写不删）；覆盖前自动快照本机当前状态。
+ * 语义：三文件 + 项目规则覆盖（包内没有规则则删本机规则；`sessions/` 是纯本地目录，不写不删）；
+ * 覆盖前自动快照本机当前状态。
  * 失败：409 CLOUD_NOT_CONFIGURED / NO_PROJECT_OPEN / SCHEMA_VERSION_MISMATCH、404 CLOUD_FILE_NOT_FOUND、
  *      400 VALIDATION_ERROR（坏包/文件名非法）、502 三码。
  */

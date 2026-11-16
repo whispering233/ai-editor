@@ -37,7 +37,7 @@ export const EXPORT_BOOK_OPTIONS: readonly {
   {
     kind: "project",
     label: "项目压缩文件",
-    caption: (name) => `${name}.zip · 三文件 · 可再导入（无损）`,
+    caption: (name) => `${name}.zip · 三文件 + 项目规则（若有）· 可再导入（无损）`,
   },
   {
     kind: "novel",
