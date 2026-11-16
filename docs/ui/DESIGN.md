@@ -157,11 +157,11 @@ components:
     backgroundColor: "{colors.surface}"
     textColor: "{colors.primary}"
     width: 160px
-  info-bar:
+  main-toolbar:
     backgroundColor: "{colors.canvas}"
     textColor: "{colors.secondary}"
     typography: "{typography.caption}"
-    height: 44px
+    height: 48px
   card:
     backgroundColor: "{colors.canvas}"
     rounded: "{rounded.md}"
@@ -438,7 +438,7 @@ components:
 - **滚动**：各栏独立纵向滚动；分栏之间靠 1px hairline，不靠阴影或沟槽分隔线（旧 6px 灰分隔条已废）。
 - **分栏边线单所有权（2026-11）**：交界处那条 1px 线**由面板自己画**——左栏 = `NavRail` 的 `border-r`、右栏 = `ChatPanel` 的 `border-l`、写作页卷章栏 = 桌面展开态的 `border-r`；**6px `ResizeHandle` 不画常显中线**（只在 hover / 拖拽时整条染成半透明带）。理由：手柄仅在「桌面 + 该栏展开」时存在，右栏抽屉、窄屏两级、收起（0 宽）三种形态都没有手柄 ⇒ 只有面板边线能覆盖全部场景；两边各画一条会在交界处留下相距约 3px 的**双竖线**（2026-11 用户报）。面板边线随面板边缘移动，拖拽时线跟手，不需要手柄再补一条。
 - **写作页（`#/writing`）的中栏内分栏（2026-11）**：中栏 = **卷章导航栏**（默认 240px、可拖拽 200–480px、可收起为 0px（正文列吸收宽度）；展开态由卷章栏自身 1px 右边线充当分栏线，收起态不渲染 rail、无分栏线；自身纵向滚动）+ **正文列**（吸收剩余宽度，承载页头与写作面）。两列都铺满中栏高度：页面外壳 `-m-6 flex h-[calc(100%+3rem)] min-h-0 overflow-hidden` 抵消内容区 `p-6`（同人物工作台），正文列内补回同一内边距——**外层分栏只做宽度切分，不得用 `items-start` / `self-start` 截断交叉轴**（否则正文列的 `h-full` 拿不到高度，见 §写作面高度链）。宽度 <1024px 退化为两级互斥（见 `writing-page`）。
-- **专注模式（2026-09，仅写作页章正文）**：隐藏左栏 / 右栏 / `info-bar` / 页头 / **写作页卷章导航栏与窄屏返回条**，正文独占视口宽度；**不另起悬浮条**——写作工具条本身即顶部常驻条，右端承载「字数 · 保存态」（与常规态页头同口径、**不两处同时显示**）与专注开关（同一按钮切换「专注模式 / 退出专注」）；`Esc` 退出（**开层守卫**：有可见浮层时该次 `Esc` 归浮层）；状态**不持久化**（不入 localStorage，刷新即回常规布局）；**路由离开即失效**（切章/前进后退不残留）。
+- **专注模式（2026-09，仅写作页章正文）**：隐藏左栏 / 右栏 / `main-toolbar` / 页头 / **写作页卷章导航栏与窄屏返回条**，正文独占视口宽度；**不另起悬浮条**——写作工具条本身即顶部常驻条，右端承载「字数 · 保存态」（与常规态页头同口径、**不两处同时显示**）与专注开关（同一按钮切换「专注模式 / 退出专注」）；`Esc` 退出（**开层守卫**：有可见浮层时该次 `Esc` 归浮层）；状态**不持久化**（不入 localStorage，刷新即回常规布局）；**路由离开即失效**（切章/前进后退不残留）。
   - **专注态下 AI 入口整体不可达（有意）**：中栏右下「问 AI」悬浮球在专注态**不渲染**——实测留着它只会弹一条「可直接在右栏提问」而右栏已被隐藏（指错方向 + 死角）。要问 AI 先退出专注（一次 `Esc`）。
 - **「问 AI」悬浮球（中栏右下）的页面语义**：无行级焦点时按页面注入——**大纲组页面**（`#/outline` / `#/outline/:nodeId`）在项目**存在可见推演节点**时注入**推演节点集合**（`title` = 「带着推演节点去问 AI」，focus 小条同步显示「推演节点 · N 个」）；其余情况维持现状（无焦点 → 普通进入聊天 + 中性提示）。注入内容由服务端现读项目配置展开（`20-context.md` §2）。
 
@@ -446,7 +446,7 @@ components:
 
 自上而下：**标题行**（`page-title`，每页一个）→ **二级 tab 行**（可选：设置页二级 tab、人物页四 tab）→ **控件行**（可选：左侧搜索框恒最左 192px（`search-input`）、操作按钮靠右）→ **分割线** → **内容区块**。
 
-- **分割线**：1px `{colors.hairline}`（结构描边档，与 `info-bar` 底线同档；不是 `hairline-soft` 的行分隔档），宽度与内容区块同宽——不穿透中栏内容区的内边距。
+- **分割线**：1px `{colors.hairline}`（结构描边档，与 `main-toolbar` 底线同档；不是 `hairline-soft` 的行分隔档），宽度与内容区块同宽——不穿透中栏内容区的内边距。
 - **有 tab 时不再另画分割线**：antd line 型 `Tabs` 的横向导航条**自带** 1px `{colors.hairline}` 底线（`antd/es/tabs/style/index.js` 的 `&-nav-list::before { borderBottom }`），该底线即分割线；配套 `horizontalMargin: 0`（antd 默认 `0 0 16px 0` 会在 tab 与内容间留 16px 空档，压在分割线上就是双线）。
 - **间距**：页头与内容区块之间 `{spacing.md}`（16px）；页头内部三段之间 `{spacing.sm}`（12px）。
 - **标题行窄于操作组时（带 `leading` 的页面，2026-11）**：标题行允许换行，操作组落到第二行；操作组自身空间不足时也换行（按钮不得被裁切）。标题不得被压成 0 宽；不传 `leading` 的页面保持单行。
@@ -497,7 +497,7 @@ components:
 | 元素 | 描边 | 阴影 |
 |---|---|---|
 | sidebar（左栏） | 右侧 1px `{colors.hairline}` | 无 |
-| info-bar（信息条） | 底部 1px `{colors.hairline}` | 无 |
+| main-toolbar（中栏工具栏） | 底部 1px `{colors.hairline}` | 无 |
 | tabs（二级 tab 导航条） | 底部 1px `{colors.hairline}`（即页头分割线）+ 选中项 2px `{colors.primary}` 指示条 | 无 |
 | page-header（页头分割线，无 tab 时） | 底部 1px `{colors.hairline}` | 无 |
 | card / dropdown-panel / toast | 1px `{colors.hairline}` | 仅浮层（dropdown-panel / toast）：`0 8px 24px rgba(15, 15, 15, 0.10)`；card 无 |
@@ -539,7 +539,7 @@ components:
 **`button-primary`** — 墨底白字、矩形、无投影。用于页面主操作（新建/保存）。
 **`button-default`** — 白底 + `{colors.hairline-strong}` 描边（**文字型操作按钮必须带边框**，这是仓库既有红线 H4）。
 **`button-text`** — 无边框纯文字，只用于行内最弱操作；**不得用于页面级操作**。**antd v6 `Button` 的 `variant` 必须与 `color` 同时给**（`antd/es/button/Button.js`：`if (color && variant)`”——否则静默回落到 `['default','outlined']`，`variant="text"` 会变成**带边框**按钮（右侧图标按钮一半有边框一半没有的根因）；合法写法：`color="default" variant="text"`，或遗留 `type="text"`；`design-discipline.test.ts` 有 `button-variant-color` 守卫。
-**`icon-button`（统一约定）** — 全站图标型操作按钮**只有一种实现**：antd `Button color="default" variant="text" size="small"` + 图标（**导航型也用它**：给 `Button` 传 `href`，antd 渲染成 `<a>`（`Button.js` 的 `linkButtonRestProps`）——同一个表皮、同一个 `icon-button` 几何，但保住链接语义与「本视图无操作按钮」这类否定契约；自绘图标型 `<a>` 仍禁）（⚠ `variant` 必须与 `color` 同时给，见下行 `button-text` 的坑）（图标尺寸随字号类：行内 14px = `text-sm`、工具条 16px = `text-base`），颜色继承 antd 的 text 变体（`{colors.primary}`），hover/disabled/loading 由 antd 派发；**不再并存自绘 `<button>` 图标按钮**（两套并存会让同一角色出现灰/墨/红三种观感）。**不可恢复操作**（彻底删除 purge、物理删关系、删书）用 **`color="danger" variant="text"`**（`{colors.error}`）——**不能写成 `color="default" variant="text" danger`：antd 6 的 `Button.js` 在 `color && variant` 同时给出时直接返回这对值，`danger` 糖被静默忽略**（实测：渲染出常规墨色；规则 7 `danger-color-variant` 已可执行断言）；**软删**（移入回收站）保持常规色——危险色的语义是「不可撤销」，不是「删除」。图标一律 `@ant-design/icons`（**唯一功能性自绘例外 = `PanelToggleIcon`**，见下；品牌标记 `app-mark` 见「导航与外壳」）；状态用 Filled、操作与导航用 Outlined。**整栏收起/展开 = `info-bar` 两端的静态面板图标**（`components/ui/panel-toggle-icon.tsx` 的 `PanelToggleIcon`：圆角矩形 + 内侧竖线、`currentColor`、24 viewBox / 显示 16px；左栏竖线靠左、右栏靠右镜像）——图标**不随收起态换向**，状态由动态 `aria-label` / `title` / `aria-expanded` 表达；toggle 是瞬时动作，**不加常驻选中面**（不用 `variant="filled"`）。**面板内子栏（写作页卷章栏）= 正文页头标题行最左的单箭头按钮**（`PageHeader` `leading` 槽；当前点击动作：收起 `LeftOutlined`、展开 `RightOutlined`；普通 `icon-button`，**不是圆钮**）——整栏面板图标与子栏单箭头**不得互串**（同屏两枚面板图标会让人分不清控制哪一栏）；旧整栏双箭头 `DoubleLeft/RightOutlined` 不再承载收起语义。**禁用**：`BorderLeft/RightOutlined`（表格边框图标，与面板折叠无关）、`MenuFold/UnfoldOutlined`（仅面向左侧，右栏无同族镜像）、`VerticalLeft/RightOutlined`（名字与朝向不一致——`VerticalLeft` = `▶|`、`VerticalRight` = `|◀`，二者区别在竖条在哪侧而非箭头指向，左右两栏配不出对称）。
+**`icon-button`（统一约定）** — 全站图标型操作按钮**只有一种实现**：antd `Button color="default" variant="text" size="small"` + 图标（**导航型也用它**：给 `Button` 传 `href`，antd 渲染成 `<a>`（`Button.js` 的 `linkButtonRestProps`）——同一个表皮、同一个 `icon-button` 几何，但保住链接语义与「本视图无操作按钮」这类否定契约；自绘图标型 `<a>` 仍禁）（⚠ `variant` 必须与 `color` 同时给，见下行 `button-text` 的坑）（图标尺寸随字号类：行内 14px = `text-sm`、工具条 16px = `text-base`），颜色继承 antd 的 text 变体（`{colors.primary}`），hover/disabled/loading 由 antd 派发；**不再并存自绘 `<button>` 图标按钮**（两套并存会让同一角色出现灰/墨/红三种观感）。**不可恢复操作**（彻底删除 purge、物理删关系、删书）用 **`color="danger" variant="text"`**（`{colors.error}`）——**不能写成 `color="default" variant="text" danger`：antd 6 的 `Button.js` 在 `color && variant` 同时给出时直接返回这对值，`danger` 糖被静默忽略**（实测：渲染出常规墨色；规则 7 `danger-color-variant` 已可执行断言）；**软删**（移入回收站）保持常规色——危险色的语义是「不可撤销」，不是「删除」。图标一律 `@ant-design/icons`（**唯一功能性自绘例外 = `PanelToggleIcon`**，见下；品牌标记 `app-mark` 见「导航与外壳」）；状态用 Filled、操作与导航用 Outlined。**整栏收起/展开 = `main-toolbar` 两端的静态面板图标**（`components/ui/panel-toggle-icon.tsx` 的 `PanelToggleIcon`：圆角矩形 + 内侧竖线、`currentColor`、24 viewBox / 显示 16px；左栏竖线靠左、右栏靠右镜像）——图标**不随收起态换向**，状态由动态 `aria-label` / `title` / `aria-expanded` 表达；toggle 是瞬时动作，**不加常驻选中面**（不用 `variant="filled"`）。**面板内子栏（写作页卷章栏）= 正文页头标题行最左的单箭头按钮**（`PageHeader` `leading` 槽；当前点击动作：收起 `LeftOutlined`、展开 `RightOutlined`；普通 `icon-button`，**不是圆钮**）——整栏面板图标与子栏单箭头**不得互串**（同屏两枚面板图标会让人分不清控制哪一栏）；旧整栏双箭头 `DoubleLeft/RightOutlined` 不再承载收起语义。**禁用**：`BorderLeft/RightOutlined`（表格边框图标，与面板折叠无关）、`MenuFold/UnfoldOutlined`（仅面向左侧，右栏无同族镜像）、`VerticalLeft/RightOutlined`（名字与朝向不一致——`VerticalLeft` = `▶|`、`VerticalRight` = `|◀`，二者区别在竖条在哪侧而非箭头指向，左右两栏配不出对称）。
 **`input`** — 白底 + `{colors.hairline-strong}` 描边 + `{rounded.sm}` + 32px 高；聚焦 = 1px primary 描边（**无阴影、无彩环**）。行内编辑与表单用同一个 antd `Input`。
 **`search-input`** — 列表/富页筛选栏的搜索框（全站**统一形态**）：antd `Input` + `prefix={<SearchOutlined />}` + 固定宽 `192px`（`w-48`）+ `allowClear`（筛选类，清空即回到未筛）；placeholder 统一「搜索{对象}…」。位置固定在页面控件行的**最左**（见「中栏页头结构」）。
 **`drag-indicator`** — 拖拽插入线：**实线** `{colors.primary}` 3px + 两端 8px 圆点（`h-[3px]` + `size-2 rounded-full`），横跨被拖行所在层级的内容宽度；`pointer-events-none` 不拦拖拽事件。
@@ -556,8 +556,8 @@ components:
 ### 导航与外壳
 
 **`sidebar`** — 左栏底 `{colors.surface}`（比内容面板暗一档），右侧 1px `{colors.hairline}`；**顶部标识 = `app-mark` 品牌标记 + 「书架」（根首页入口，`#/`）**（固定两字、**不挂 `truncate`**——合成斜体（`italic` 无真斜体字面可用）的墨迹会越出字宽，`overflow: hidden` 会切掉「架」右缘）、其下**书名按钮**（`#/overview` 项目概览入口）、**十项一级导航**（写作排在「大纲」之前，仅小说工作区）、工具区（回收站）、底部四快捷入口（立即备份 / 同步云端 / 设置 / 主题）。**「概览」不再占一级导航位**（入口收敛到书名按钮，`#/overview` 时书名按钮用选中面；书架路由 `#/` 下左栏无选中面——书架自身就是当前页）。
-**左栏按工作区类型渲染（2026-10 改版）**：小说工作区（`kind = "novel"`）= 上方形态；**练习工作区（`kind = "practice"`）= 顶部标识文案改「文风练习」（仍回根首页 `#/`）+ 一级导航五项（顺序：作家介绍 `#/author` / 作品介绍 `#/works` / 作家风格说明 `#/style` / 文风练习 `#/practice` / 自由练习 `#/free`）+ 工具区不渲染（无回收站概念）+ 书名按钮不渲染**（它指向 `#/overview` 项目概览，练习工作区没有概览页——`#/overview` 在练习工作区被路由守卫挡回 `#/practice`，留着就是死按钮）+ **底部四入口中「立即备份 / 同步云端 / 设置 / 主题」保持不变**（备份与云端对两种工作区同样适用）。顶部标识保持**分区身份**（不是作家名）；**作家身份由 InfoBar 项目名（纯文本）+ 各页内容表达**。导航项集是 client 常量表（kind → 项集），**不是插件式注册表**。
-**导航入口不受「文字按钮必须带边框」约束**：左栏导航项（Menu 十项 + 书名 / 设置 / 主题三个入口）与 Menu 项同级——无边框、选中态用 `{colors.surface-muted}` 灰面（Tailwind `bg-accent` = `colorFillTertiary`）、文字不变色，禁用 H4 只约束操作按钮（新建/重命名/重试/删除等）。**左栏底部区形态单一**：立即备份 / 同步云端 / 设置 / 主题四入口同为 `block` + `color="default" variant="text"` 的无边框文字按钮（**四行固定顺序**，「同步云端」在「立即备份」与「设置」之间）；「立即备份」「同步云端」是动作而非导航，形态随底部区（**H4 登记例外，仅此两处**）；禁用/加载态由 antd Button 派发（无项目 → 禁用；在途 → `loading` 防连点），失败经 `message` 提示。**`menu-item`** / **`menu-item-selected`** — 菜单项 32px 高、`{rounded.sm}`；**选中 = `{colors.surface-muted}` 灰面 + 文字不变色**（antd 默认的彩色选中项要显式覆盖：`itemSelectedBg` / `itemSelectedColor`）。**`info-bar`** — 中栏顶部 1px 底线；**桌面态左端 = 左栏收起/展开（`PanelToggleIcon side="left"`，位于项目名之前）、右端 = 右栏收起/展开（`side="right"`，位于语言之后）**；项目名（点击进 `#/overview` 项目概览）+ 阅读进度 + 语言 + 小屏聊天开关。字号 `{typography.caption}`。**两枚整栏 toggle 仅桌面（`isDesktop`）渲染**；窄屏不渲染，右栏仍是抽屉（`MessageOutlined` 开关）。图标静态，`aria-expanded` + 动态 `aria-label` / `title`（`收起左栏` / `展开左栏`、`收起右栏` / `展开右栏`），不加选中面。**形态按工作区类型（`kind`，2026-10）**：**练习工作区**下项目名降为**纯文本（不挂 `href`）**、**阅读进度不渲染**——练习工作区没有项目概览页，且 `#/overview` / `#/outline` 都被路由守卫挡回 `#/practice`，留着就是「点了没反应」的死链（点项目名还会瞬时挂载小说概览页并打出 400）；语言与小屏聊天开关两种 kind 都保留。
+**左栏按工作区类型渲染（2026-10 改版）**：小说工作区（`kind = "novel"`）= 上方形态；**练习工作区（`kind = "practice"`）= 顶部标识文案改「文风练习」（仍回根首页 `#/`）+ 一级导航五项（顺序：作家介绍 `#/author` / 作品介绍 `#/works` / 作家风格说明 `#/style` / 文风练习 `#/practice` / 自由练习 `#/free`）+ 工具区不渲染（无回收站概念）+ 书名按钮不渲染**（它指向 `#/overview` 项目概览，练习工作区没有概览页——`#/overview` 在练习工作区被路由守卫挡回 `#/practice`，留着就是死按钮）+ **底部四入口中「立即备份 / 同步云端 / 设置 / 主题」保持不变**（备份与云端对两种工作区同样适用）。顶部标识保持**分区身份**（不是作家名）；**作家身份由各页内容表达（如作家介绍页的作家名）**。导航项集是 client 常量表（kind → 项集），**不是插件式注册表**。
+**导航入口不受「文字按钮必须带边框」约束**：左栏导航项（Menu 十项 + 书名 / 设置 / 主题三个入口）与 Menu 项同级——无边框、选中态用 `{colors.surface-muted}` 灰面（Tailwind `bg-accent` = `colorFillTertiary`）、文字不变色，禁用 H4 只约束操作按钮（新建/重命名/重试/删除等）。**左栏底部区形态单一**：立即备份 / 同步云端 / 设置 / 主题四入口同为 `block` + `color="default" variant="text"` 的无边框文字按钮（**四行固定顺序**，「同步云端」在「立即备份」与「设置」之间）；「立即备份」「同步云端」是动作而非导航，形态随底部区（**H4 登记例外，仅此两处**）；禁用/加载态由 antd Button 派发（无项目 → 禁用；在途 → `loading` 防连点），失败经 `message` 提示。**`menu-item`** / **`menu-item-selected`** — 菜单项 32px 高、`{rounded.sm}`；**选中 = `{colors.surface-muted}` 灰面 + 文字不变色**（antd 默认的彩色选中项要显式覆盖：`itemSelectedBg` / `itemSelectedColor`）。**`main-toolbar`（中栏工具栏）** — 中栏顶部 1px 底线；**只承载全局操作，不承载项目信息**——品牌标记 / 项目名 / 阅读进度 / 语言已删除（项目名见左栏书名按钮，阅读进度与语言见概览页 / 大纲页）。桌面态左端 = 左栏收起/展开（`PanelToggleIcon side="left"`）；右端组 = 刷新（`ReloadOutlined`，`ml-auto` 起右对齐；全中栏统一数据刷新入口）+ 右栏收起/展开（`side="right"`）。窄屏不渲染两枚整栏 toggle（右栏仍是抽屉），右端组 = 刷新 + `MessageOutlined` 聊天开关。**两种工作区类型（`novel` / `practice`）形态一致**：工具栏不读项目配置、不按 `kind` 分叉。字号 `{typography.caption}`。图标静态，`aria-expanded` + 动态 `aria-label` / `title`（`收起左栏` / `展开左栏`、`收起右栏` / `展开右栏`），不加选中面。
 
 **`tabs`（二级 tab）** — 页面内分区导航（设置页二级 tab / 人物页四 tab）：antd `Tabs` line 型（`items` 数组，`activeKey` 受控）。未选中 `{colors.secondary}`，选中与悬浮 `{colors.primary}`（`itemSelectedColor` / `itemHoverColor` / `inkBarColor` 的 antd 默认值就是 `colorPrimary`，**不重复覆盖**），选中指示条 2px `{colors.primary}`，底线 1px `{colors.hairline}` = 页头分割线（见 §Layout「中栏页头结构」）。**页内 tab 不进 URL、不参与左栏导航高亮**，选中态是页面 state（刷新回落默认 tab）。
 
@@ -569,8 +569,8 @@ components:
 - **关闭语义（四条路径等价）**：右上角 X（`DialogContent` 默认 `showCloseButton`）/ `Esc` / 遮罩点击 / `[取消]`——**关窗即不落任何状态**；该家只有**保存 key 成功后**才进入三级导航并被选中（失败留在窗内显示错误，不关窗）。
 - 搜索无命中 / 已全部配置各给一行 `caption-text` 说明；当前无任何已配置家时，右栏给「点左侧 [添加] 选择要接入的 provider」空态。
 
-**`app-mark`（品牌标记，2026-09 定稿）** — 产品品牌标记，**全站唯一的自持品牌矢量图形**（功能性自绘 `panel-toggle-icon` 见下条；其余图标一律 `@ant-design/icons`）：几何 = **书脊 + 三条递减条目线**（竖脊 = 书 / 主干，右侧三条左对齐、长度递减的圆头线 = 卷 / 章 / 场三层）——语义是「有层级结构的书稿」，即本产品与「聊天框式 AI 写作」的分界；**无外围容器**（左栏此前的 `◈` 只是一个历史遗留字符，无含义，已删）。**色 = `currentColor`**（浅色态即 `{colors.primary}`，深色态随 seed；本产品本来就品牌色与文本色同值）——**不新增色值、不给标记上彩色**。**尺寸随字号类**（当前两处落点都是 `text-base` = 16px；组件**不提供尺寸 API**，将来真落到 `text-sm` 行内时由调用点 className 覆盖，不给组件添参数），**不做 Filled 变体**（界面内只有描边态）。**落点两处、同款**：左栏顶部标识（`[标记] 书架`，`#/` 入口）与 `info-bar` 项目名左侧（`[标记] 书名`）——**只换图形、不动文案**（那两处是导航入口与书名，不是招牌）。**系统面形态 = 同一图形的负形版**（墨底 + 纸白挖空）：`public/brand-icon.svg` 一个文件同时承担 favicon 与桌面应用图标源，描边态与负形态是**同一图形的两档量感**、不是两个符号；打包口径见 `50-desktop.md` §5.3。
-**`panel-toggle-icon`（三栏开关，2026-11）** — 功能性自绘图标，仅用于 `info-bar` 两端的整栏收起/展开：`components/ui/panel-toggle-icon.tsx`，inline SVG、`currentColor`、圆角矩形 + 内侧竖线、左右两向；24 viewBox、约 1.8 stroke、显示 16px；**无尺寸/色值 API**（尺寸随字号类，色随 `{colors.primary}`）。它不是品牌资产，也不参与 tint / 状态色——**只此一处**，不得扩散到其它图标角色（其余图标仍 `@ant-design/icons`）。
+**`app-mark`（品牌标记，2026-09 定稿）** — 产品品牌标记，**全站唯一的自持品牌矢量图形**（功能性自绘 `panel-toggle-icon` 见下条；其余图标一律 `@ant-design/icons`）：几何 = **书脊 + 三条递减条目线**（竖脊 = 书 / 主干，右侧三条左对齐、长度递减的圆头线 = 卷 / 章 / 场三层）——语义是「有层级结构的书稿」，即本产品与「聊天框式 AI 写作」的分界；**无外围容器**（左栏此前的 `◈` 只是一个历史遗留字符，无含义，已删）。**色 = `currentColor`**（浅色态即 `{colors.primary}`，深色态随 seed；本产品本来就品牌色与文本色同值）——**不新增色值、不给标记上彩色**。**尺寸随字号类**（当前落点 `text-base` = 16px；组件**不提供尺寸 API**，将来真落到 `text-sm` 行内时由调用点 className 覆盖，不给组件添参数），**不做 Filled 变体**（界面内只有描边态）。**落点一处**：左栏顶部标识（`[标记] 书架`，`#/` 入口）——**只换图形、不动文案**（那是导航入口，不是招牌）。**系统面形态 = 同一图形的负形版**（墨底 + 纸白挖空）：`public/brand-icon.svg` 一个文件同时承担 favicon 与桌面应用图标源，描边态与负形态是**同一图形的两档量感**、不是两个符号；打包口径见 `50-desktop.md` §5.3。
+**`panel-toggle-icon`（三栏开关，2026-11）** — 功能性自绘图标，仅用于 `main-toolbar` 两端的整栏收起/展开：`components/ui/panel-toggle-icon.tsx`，inline SVG、`currentColor`、圆角矩形 + 内侧竖线、左右两向；24 viewBox、约 1.8 stroke、显示 16px；**无尺寸/色值 API**（尺寸随字号类，色随 `{colors.primary}`）。它不是品牌资产，也不参与 tint / 状态色——**只此一处**，不得扩散到其它图标角色（其余图标仍 `@ant-design/icons`）。
 **`provider-icon`** — 供应商品牌 logo（三级导航项 + 添加列表 + 聊天模型下拉的分组标签）：`public/provider-icons.svg` 精灵（`<symbol>` + `<use href="/provider-icons.svg#id">`，派生自 @lobehub/icons，MIT 许可头内嵌于该文件、不引包）按 pi provider id 取图，尺寸 16px；无对应 symbol 的自定义 provider 回退 `@ant-design/icons` 的 `ApiOutlined`。品牌 logo **自带品牌色**（DeepSeek 蓝、Google 四色等）——**这是「颜色只经 antd token」的登记例外**：第三方品牌资产，只在图标内部出现，不参与界面取色；无品牌色的 logo 用 `currentColor`（`{colors.tertiary}` 档 = `text-muted-foreground`）。
 
 
@@ -593,7 +593,7 @@ components:
   - 两者皆无 → 空态（不跳「第一章」）。**章存在但正文为空仍可打开**（不因无文档回退）；`current_position` 是阅读进度，绝不复用。窄屏不自动跳（先显示目录）。解析中给骨架，不闪空态。
 - **数据与刷新**：大纲一次 `GET /outline?with_metadata=true`（页壳持有，**编辑器面板不自行拉大纲**）；章正文仍走 `GET/PUT /manuscript/:id`。**保存成功后只在 store 里不可变补丁该章的 `metadata.textLength` + `metadata.documentUpdatedAt`，不重拉大纲树**（否则字数徽标陈旧、切章闪烁）。
 - **窄屏（<1024px）= 两级互斥**（同 `character-workbench`）：`#/writing` 显示 rail 全宽（无正文，无拖拽 / 收起）；`#/writing/:id` 显示正文全宽 + 顶部 32px **「章节目录」返回条**（`ArrowLeftOutlined` + 文案，仅窄屏渲染）；点章即进正文，返回条回目录。返回条在滚动区之外，不随正文滚走。
-- **专注模式（写作页）**：隐藏左栏 / 右栏 / `info-bar` / 页头 / **rail / 窄屏返回条**，正文独占（`Esc` 退出、开层守卫、状态不持久化、路由离开即失效——沿用 §Layout 专注契约）。专注切换入口仍在写作工具条右端。
+- **专注模式（写作页）**：隐藏左栏 / 右栏 / `main-toolbar` / 页头 / **rail / 窄屏返回条**，正文独占（`Esc` 退出、开层守卫、状态不持久化、路由离开即失效——沿用 §Layout 专注契约）。专注切换入口仍在写作工具条右端。
 - **空态 / 加载 / 错误**：大纲加载中 rail 给骨架；章 id 已知但大纲未就绪时正文列给骨架、**不先挂编辑器**（避免坏 `chapterId` 先发 404）；无章行（只有 0 章卷也算）→ 正文列 `page-title`「写作」+ 空态「还没有章节」+ `去大纲新建第一卷`（导航链接，不在此页新建）；有章但无选中（桌面且无最近目标）→ 正文列 `page-title`「写作」+「从左侧选择一章开始写作」；大纲失败 → 正文列错误条 + 重试（rail 保持骨架；不挂编辑器）；显式 `#/writing/:chapterId` 不在可见大纲 → 正文列错误条「章节不存在或已删除」+ `返回章节目录`（不自动回退；最近打开失效已在解析阶段回退）；章的正文加载 / 保存错误沿用章正文的错误条与 `DOCUMENT_STALE` 处理（见 §写作面）。**窄屏目录页没有正文列** ⇒ 错误条 + 重试与「还没有章节」空态挂在 rail 内（`去大纲新建第一卷` CTA 仅在桌面正文列；窄屏走左栏「大纲」）；桌面 rail 仍保持骨架。
 - **旧路由**：`#/manuscript/:id` → `#/writing/:id`、`#/manuscript` → `#/outline`，一律 `location.replace`；旧书签可用，历史里不多一层。
 **`table-header`** — 表头**白底**（不是 antd 默认灰底）+ 1px `{colors.hairline}` 底线 + caption 字色 `{colors.secondary}`。
@@ -839,7 +839,7 @@ components:
 - 选中态用 `{colors.surface-muted}` 灰面，不用彩色底
 - tint 底色只给**用户标签** chip（`data.tags`）；枚举类型/分类徽标一律描边式 `type-badge`（不给类型上 tint；大纲层级按卷/章·场取两档描边，见 §Colors）
 - 字号只用四档（20 / 16 / 14 / 12）；标题一律 `Typography.Title level={4|5}`
-- 图标一律 `@ant-design/icons`；尺寸随字号类（14 `text-sm` / 16 `text-base` / 20 `text-xl` / 空态 24 `text-2xl`）；状态用 Filled、操作与导航用 Outlined；**整栏收起/展开 = `info-bar` 两端的静态 `PanelToggleIcon`**（面板图标，不随态换向；动态 `aria-label` / `aria-expanded`）；**面板内子栏 = 写作页页头的单箭头按钮**（`Left/RightOutlined`，不是圆钮）；不用 `DoubleLeft/RightOutlined` 表示整栏；禁 `Border*` / `MenuFold*` / `Vertical*`（见 §Components `icon-button`）。**自持图形三处 = `provider-icon` / `app-mark` / `panel-toggle-icon`**（供应商品牌 logo 走自持 svg 精灵 + 品牌自带色；品牌标记与三栏开关走自持内联 SVG + `currentColor`，无形色语汇、不新增色值——均见 §Components）
+- 图标一律 `@ant-design/icons`；尺寸随字号类（14 `text-sm` / 16 `text-base` / 20 `text-xl` / 空态 24 `text-2xl`）；状态用 Filled、操作与导航用 Outlined；**整栏收起/展开 = `main-toolbar` 两端的静态 `PanelToggleIcon`**（面板图标，不随态换向；动态 `aria-label` / `aria-expanded`）；**面板内子栏 = 写作页页头的单箭头按钮**（`Left/RightOutlined`，不是圆钮）；不用 `DoubleLeft/RightOutlined` 表示整栏；禁 `Border*` / `MenuFold*` / `Vertical*`（见 §Components `icon-button`）。**自持图形三处 = `provider-icon` / `app-mark` / `panel-toggle-icon`**（供应商品牌 logo 走自持 svg 精灵 + 品牌自带色；品牌标记与三栏开关走自持内联 SVG + `currentColor`，无形色语汇、不新增色值——均见 §Components）
 - 文字型**操作**按钮带边框（H4 红线）；操作按钮一律直接展示，不收进 `⋯` 菜单。导航入口（左栏 Navigation/Menu 项）不属此列
 - 思维链默认折叠（流式期间临时展开），不占正文视线
 - 中文排版靠系统字体栈；不引入 web 字体
