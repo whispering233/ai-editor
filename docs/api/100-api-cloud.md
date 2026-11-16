@@ -43,8 +43,8 @@
       createdAt: string;      // ISO 8601（由文件名时间戳解析，本地时区）
       kind: "auto" | "manual";
       name?: string;          // 用户标签（带标签的份永不参与云端清理）
-      device: string;         // 来源设备（必填：唯一命名格式恒有此段）
-      stats: { characters: number; settings: number; chapters: number };  // 尾部三段统计（唯一命名格式恒有）
+      device: string;         // 来源设备（必填：两种形态恒有此段）
+      stats?: { characters: number; settings: number; chapters: number };  // 尾部三段统计（仅小说工作区；练习区无此段）
       size: number;
     }>;
   };
@@ -147,7 +147,7 @@
 // Res: 200
 {
   pushed: { fileName: string; size: number; device: string; kind: "auto" | "manual"; name?: string;
-            stats: { characters: number; settings: number; chapters: number } };
+            stats?: { characters: number; settings: number; chapters: number } };  // 仅小说工作区
   remote: { dirName: string; headFileName: string };
   pruned: string[];      // 本次云端保留清理删除的文件名（带用户标签的份永不列入；只删「能解析出时间戳且无标签」的份）。
                          //   注意：`.tmp-*` 的清理属流程第 2 步（垃圾回收），**不计入** pruned
@@ -215,7 +215,7 @@
       kind: "auto" | "manual";
       name?: string;
       device: string;
-      stats: { characters: number; settings: number; chapters: number };
+      stats?: { characters: number; settings: number; chapters: number };
       size: number;
     }>;
   }>;

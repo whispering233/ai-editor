@@ -35,7 +35,7 @@
   - **变更判定只有一把尺子**：`hasFileChangesSince`（三文件 + `data.db-wal` + `AGENTS.md`；容差只给 `data.db`/`-wal`）是备份 tick / 云端 dirty / 自动推送的唯一判定入口，**不得再起第二套**；云端文件集合只计可解析备份名（`.tmp-*` 等不参与，否则一次失败上传会让「云端有更新」永久亮）。
   - **新机器恢复 = 列 + 导入新书**（`GET /cloud/remote-books` / `POST /cloud/import-book`）：导入时**必须**顺手写该书 book state（`lastPushedFileName` = 导入的那份 / `lastSeenCloudFiles` / `lastSyncAt`）并把那份 zip 落进新书 `.backups/`——不写就会一打开就弹冲突。
   - **地址语义 = 用户云盘根**；工作根 `<云盘根>/ai-editor/` 由 `createWebdavClient` **唯一一处拼接**（配置/UI 都只表达云盘根，不做「截断再拼回」）；`ensureWorkingRoot()` 幂等建「云盘根 + 工作根」。
-  - **备份命名唯一格式**（写入 = 解析，`shared/utils/backup.ts` 单正则；逐段语义、保留策略与“不解析旧命名”口径见 `docs/db/schema.md`「自动备份目录」）：三类旧命名**不解析**（留盘不列表）、**不做重命名迁移**；打开项目时若 `.backups/` 有文件但无一可解析 → 兜底生成一份（`ensureParseableBackup`）。
+  - **备份命名两种形态**（写入 = 解析，`shared/utils/backup.ts` 唯一实现；小说 = `<时间戳>-<自动|手动>-<设备>[-<标签>]-人物N-设定N-章N.zip`，练习区 = `<时间戳>-<自动|手动>-<设备>[-<标签>].zip`、**无统计段**；逐段语义、保留策略与“不解析旧命名”口径见 `docs/db/schema.md`「自动备份目录」）：三类旧命名**不解析**（留盘不列表）、**不做重命名迁移**；打开项目时若 `.backups/` 有文件但无一可解析 → 兜底生成一份（`ensureParseableBackup`）。
   - **凭据不得进文件名段**（2026-09 安全修复，不可回退）：设备名与备份标签都会进 `.backups/` 文件名 + 上传云盘 + 冲突框展示 ⇒ 等于 WebDAV 应用密码一律 400（唯一比较口径 = `cloud/state.ts` 的 `equalsCredential`；写侧 = `writeCloudConfig` + `backup.ts` 的 `writeBackup`/`renameBackup` 两入口）；读侧 `configuredDeviceName` 把存量坏值当未配置（回退 hostname，立刻止漏）。**新增任何「用户文本进文件名」的入口都要挂同一守卫。**
   - **三态与「有未备份改动」**：`local.backupStale` = `hasUnbackedChanges` **且** `dirty`（拉取/恢复后必为 false；`backupStale` 不随同步前移）；**自动推送的守卫用纯 `hasUnbackedChanges`**（更严格，避免推旧包上云）——两处口径不同是有意的。
   - **自动推送复用备份 tick 链**（**不得新增第二套定时器**：排程条件恒等于「自动备份频率开启」，频率关闭即不排程、自动推送一并停；`AUTO_PUSH_THROTTLE_MS` 只是同一 tick 链上的节流窗口，不是排程间隔）；节流基准 `lastAutoPushAt` 只由定时路径推进；失败只记 `lastAutoPushError`（清除点 = `pushBackup` 成功写）。
