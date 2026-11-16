@@ -1,5 +1,5 @@
 // RelationsView 纯逻辑测试（U8 关联 tab）：仓库无 jsdom / @testing-library 环境（node 纯逻辑测试），
-// 只测过滤纯函数 filterRelations——前端过滤是关联视图的核心（服务端不支持「任一端」OR 与名称模糊）。
+// 只测过滤纯函数 filterRelations——前端过滤是关联视图的核心（服务端名称 q 不支持模糊，视图仍拉全量）。
 import { describe, expect, it } from "vitest";
 import { createElement } from "react";
 import { renderToString } from "react-dom/server";
@@ -68,11 +68,42 @@ describe("filterRelations（关联总览前端过滤）", () => {
     expect(filterRelations(SAMPLE, EMPTY_RELATION_FILTER)).toHaveLength(4);
   });
 
-  it("端点类型过滤：源端或目标端任一匹配（OR 语义）", () => {
-    const out = filterRelations(SAMPLE, { ...EMPTY_RELATION_FILTER, endpointType: "location" });
-    expect(out.map((r) => r.id)).toEqual(["r1"]);
-    const ch = filterRelations(SAMPLE, { ...EMPTY_RELATION_FILTER, endpointType: "outline_node" });
-    expect(ch.map((r) => r.id)).toEqual(["r3", "r4"]); // r3 目标端、r4 源端
+  it("端点类型：只筛源端", () => {
+    const out = filterRelations(SAMPLE, { ...EMPTY_RELATION_FILTER, sourceType: "character" });
+    expect(out.map((r) => r.id)).toEqual(["r1", "r2"]);
+    const ch = filterRelations(SAMPLE, { ...EMPTY_RELATION_FILTER, sourceType: "outline_node" });
+    expect(ch.map((r) => r.id)).toEqual(["r4"]);
+  });
+
+  it("端点类型：只筛目标端", () => {
+    const loc = filterRelations(SAMPLE, { ...EMPTY_RELATION_FILTER, targetType: "location" });
+    expect(loc.map((r) => r.id)).toEqual(["r1"]);
+    const ch = filterRelations(SAMPLE, { ...EMPTY_RELATION_FILTER, targetType: "outline_node" });
+    expect(ch.map((r) => r.id)).toEqual(["r3"]);
+    const hook = filterRelations(SAMPLE, { ...EMPTY_RELATION_FILTER, targetType: "hook" });
+    expect(hook.map((r) => r.id)).toEqual(["r4"]);
+  });
+
+  it("端点类型：源 + 目标双端 AND", () => {
+    const cc = filterRelations(SAMPLE, {
+      ...EMPTY_RELATION_FILTER,
+      sourceType: "character",
+      targetType: "character",
+    });
+    expect(cc.map((r) => r.id)).toEqual(["r2"]);
+    const cl = filterRelations(SAMPLE, {
+      ...EMPTY_RELATION_FILTER,
+      sourceType: "character",
+      targetType: "location",
+    });
+    expect(cl.map((r) => r.id)).toEqual(["r1"]);
+  });
+
+  it("端点类型：反向回归——源端类型不因目标端命中而误命中", () => {
+    // 旧的「任一端 OR」会误命中 r4（其目标是 hook）
+    expect(filterRelations(SAMPLE, { ...EMPTY_RELATION_FILTER, sourceType: "hook" })).toHaveLength(
+      0,
+    );
   });
 
   it("关系类型过滤", () => {
@@ -135,13 +166,13 @@ describe("filterRelations（关联总览前端过滤）", () => {
   it("多条件叠加（AND）", () => {
     const out = filterRelations(SAMPLE, {
       ...EMPTY_RELATION_FILTER,
-      endpointType: "outline_node",
+      targetType: "outline_node",
       nameQuery: "入门",
     });
     expect(out.map((r) => r.id)).toEqual(["r3"]);
     const none = filterRelations(SAMPLE, {
       ...EMPTY_RELATION_FILTER,
-      endpointType: "hook",
+      sourceType: "hook",
       relationType: "rival",
     });
     expect(none).toHaveLength(0);

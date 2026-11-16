@@ -1,8 +1,8 @@
 // 关联 tab 视图（U8；「关联 Tab（实体关系总览）」）
-// 数据：GET /api/v1/relation?depth=1 一次拉全量（MVP 关系量级小），过滤全部前端实现：
-// 服务端 source_type+target_type 同时传是 AND 语义，无法表达「任一端」OR 过滤；名称 q 服务端也不支持。
-// 过滤（filterRelations 纯函数，可单测）：端点类型（sourceType/targetType 任一匹配）/ 关系类型 /
-// 名称（sourceName/targetName 包含、大小写不敏感；名称可能 undefined——回退 id）。
+// 数据：GET /api/v1/relation?depth=1 一次拉全量（MVP 关系量级小），过滤全部前端实现
+// （服务端 source_type / target_type 支持 AND，但名称 q 不支持模糊，统一在前端过滤）。
+// 过滤（filterRelations 纯函数，可单测）：源类型 / 目标类型（各自独立，空串 = 不限；同时给 = AND）/
+// 关系类型 / 名称（sourceName/targetName 任一包含、大小写不敏感；名称可能 undefined——回退 id）。
 // 行：源（端点类型徽标 + 源名）→ 关系类型标签（relationTypeLabel + 方向箭头 →）→ 目标（徽标 + 目标名）→ [删除]；
 // 端点名旁的类型徽标**排在名称前**（列内对齐，见 DESIGN.md §relations-view）；端点点击跳各自宿主段详情（人物/设定/地点/伏笔/事件/时间点/参考资料 →
 // characters|setting|locations|hooks|timeline|timepoints|references）；大纲节点（S12.2 起）跳 #/outline/:nodeId。
@@ -36,34 +36,41 @@ export const ENDPOINT_TYPE_LABEL: Record<string, string> = {
   outline_node: "大纲节点",
 };
 
+/** 端点类型过滤选项（源 / 目标两个下拉共用；含大纲节点） */
+const ENDPOINT_TYPE_FILTER_OPTIONS = Object.entries(ENDPOINT_TYPE_LABEL).map(
+  ([value, label]) => ({ value, label }),
+);
+
 /** 过滤条件（"" = 全部） */
 export interface RelationFilter {
-  /** 端点类型：sourceType 或 targetType 任一匹配（服务端 AND 语义无法表达，前端过滤） */
-  endpointType: string;
+  /** 源端点类型（"" = 不限） */
+  sourceType: string;
+  /** 目标端点类型（"" = 不限；与源类型同时给 = AND） */
+  targetType: string;
   /** 关系类型 */
   relationType: string;
-  /** 名称关键词（源/目标名称包含；大小写不敏感；trim 后为空忽略） */
+  /** 名称关键词（源/目标名称任一包含；大小写不敏感；trim 后为空忽略） */
   nameQuery: string;
 }
 
 export const EMPTY_RELATION_FILTER: RelationFilter = {
-  endpointType: "",
+  sourceType: "",
+  targetType: "",
   relationType: "",
   nameQuery: "",
 };
 
-/** 按过滤条件筛选关系（纯函数；名称缺失回退 id，id 也能被搜到） */
+/** 按过滤条件筛选关系（纯函数）：源类型 / 目标类型各自判断、同时给 = AND；名称缺失回退 id，id 也能被搜到 */
 export function filterRelations(
   relations: RelationSummaryItem[],
   filter: RelationFilter,
 ): RelationSummaryItem[] {
   const q = filter.nameQuery.trim().toLowerCase();
   return relations.filter((r) => {
-    if (
-      filter.endpointType !== "" &&
-      r.sourceType !== filter.endpointType &&
-      r.targetType !== filter.endpointType
-    ) {
+    if (filter.sourceType !== "" && r.sourceType !== filter.sourceType) {
+      return false;
+    }
+    if (filter.targetType !== "" && r.targetType !== filter.targetType) {
       return false;
     }
     if (filter.relationType !== "" && r.relationType !== filter.relationType) {
@@ -194,7 +201,7 @@ export function RelationsView({
 
   return (
     <div>
-      {/* 页头控件行（由本视图渲染，工具栏随视图结构）：左=端点类型/关系类型/搜索；右=建立关联
+      {/* 页头控件行（由本视图渲染，工具栏随视图结构）：左=搜索/源类型/目标类型/关系类型；右=建立关联
           （前端过滤；scope 模式隐藏——列表已按端点过滤，操作入口由宿主详情页给） */}
       {scope === undefined && (
         <div className="mb-3 flex flex-wrap items-center gap-3">
@@ -210,15 +217,29 @@ export function RelationsView({
           </div>
           <Select
             size="medium"
-            value={filter.endpointType === "" ? undefined : filter.endpointType}
+            value={filter.sourceType === "" ? undefined : filter.sourceType}
             onChange={(value) =>
-              setFilter((f) => ({ ...f, endpointType: value === undefined ? "" : String(value) }))
+              setFilter((f) => ({ ...f, sourceType: value === undefined ? "" : String(value) }))
             }
-            aria-label="端点类型过滤"
-            placeholder="全部端点类型"
+            aria-label="源端点类型过滤"
+            prefix={<span className="text-xs text-muted-foreground">源</span>}
+            placeholder="全部类型"
             allowClear
             style={{ minWidth: 140 }}
-            options={Object.entries(ENDPOINT_TYPE_LABEL).map(([v, label]) => ({ value: v, label }))}
+            options={ENDPOINT_TYPE_FILTER_OPTIONS}
+          />
+          <Select
+            size="medium"
+            value={filter.targetType === "" ? undefined : filter.targetType}
+            onChange={(value) =>
+              setFilter((f) => ({ ...f, targetType: value === undefined ? "" : String(value) }))
+            }
+            aria-label="目标端点类型过滤"
+            prefix={<span className="text-xs text-muted-foreground">目标</span>}
+            placeholder="全部类型"
+            allowClear
+            style={{ minWidth: 140 }}
+            options={ENDPOINT_TYPE_FILTER_OPTIONS}
           />
           <Select
             size="medium"
