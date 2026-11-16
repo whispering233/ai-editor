@@ -1,4 +1,4 @@
-// 正文导入导出通用件（卡 12.6）：纯函数 + 极薄 DOM 封装（导出 md / 块 JSON，导入 md / 块 JSON）。
+// 正文导入导出通用件（卡 12.6）：纯函数 + 极薄 DOM 封装（导出 md / 块 JSON / 纯文本 TXT，导入 md / 块 JSON）。
 // 契约：docs/api/110-api-manuscript.md「导入导出（无端点）」——**纯客户端、不新增端点**；
 // 浏览器形态与桌面形态同一套实现（`<input type="file">` 读文本 + `Blob` + `<a download>`），不加 preload 能力。
 //
@@ -7,7 +7,14 @@
 // 本文件只负责文件名拼接（sanitize 实现 = shared `utils/file-name.ts`，客户端导入导出与小说文档导出共用）、
 // 有损判定与提示文案，故 node 环境可测（仓内无 jsdom，编辑器本体不参与单测）。对话框/下载的**渲染**部分
 // （confirm 弹层、真实文件对话框）由页面接线 + 浏览器走查承担。
-import { isBlockArray, sanitizeDocumentFileName } from "@whispering233/ai-editor-shared";
+import type { NovelTxtLayout } from "@whispering233/ai-editor-shared";
+import {
+  blocksToPlainMd,
+  buildNovelTxt,
+  isBlockArray,
+  novelTxtFileName,
+  sanitizeDocumentFileName,
+} from "@whispering233/ai-editor-shared";
 
 /** 导出/导入载荷（文件名 + 文本） */
 export interface DocumentFile {
@@ -38,6 +45,42 @@ export function exportDocumentMarkdown(
   return {
     fileName: `${sanitizeDocumentFileName(title)}.md`,
     body: blocksToMarkdown(content),
+  };
+}
+
+/**
+ * 单章 TXT 的标题行（**显示标签，不是文件名**）：`第M章 章名` → 章名空只留 `第M章` →
+ * 编号取不到只用章名 → 都空 `正文`。章名 trim 后为空按空处理（标题行用原始章名，不走 sanitize）。
+ */
+export function chapterTxtLabel(chapterLabel: string | null, chapterTitle: string | null): string {
+  const label = chapterLabel?.trim() ?? "";
+  const title = chapterTitle?.trim() ?? "";
+  if (label !== "" && title !== "") return `${label} ${title}`;
+  if (label !== "") return label;
+  return title !== "" ? title : "正文";
+}
+
+/**
+ * 导出纯文本（TXT，**有损**：只留正文文本投影，块结构与样式不保留）；排版 / CRLF / 尾换行与下载文件名
+ * 一律复用整本 TXT 的 shared 纯函数（`buildNovelTxt` / `novelTxtFileName`），不在客户端复刻。
+ * 正文 = 块 JSON → `blocksToPlainMd`（与 `content_text` 同源投影）；`content` 不是合法 JSON → 空文本
+ * （不抛：导出成只有标题行的文件）。
+ */
+export function exportDocumentTxt(
+  content: string,
+  title: string,
+  chapterLabel: string,
+  layout: NovelTxtLayout,
+): DocumentFile {
+  let blocks: unknown = [];
+  try {
+    blocks = JSON.parse(content);
+  } catch {
+    // 空串 / 坏 JSON：按空文档处理（`blocksToPlainMd` 对非数组也返回空串），导出不抛
+  }
+  return {
+    fileName: novelTxtFileName(title, layout),
+    body: buildNovelTxt([{ kind: "chapter", label: chapterLabel, text: blocksToPlainMd(blocks) }], layout),
   };
 }
 
