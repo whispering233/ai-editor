@@ -88,7 +88,7 @@ pnpm typecheck && pnpm lint && pnpm -r test   # 验证
 | `docs/ui/` | **视觉与布局唯一契约**（`DESIGN.md`：色 / 字号 / 圆角 / 间距 / 三栏布局与页头结构 + antd token 登记表与守卫） |
 | `test-project/` | 测试项目目录（整体不入库） |
 
-逐文件索引与阅读顺序见根 `docs-map.md`；实现任何功能前先读对应文档。
+逐文件索引与阅读顺序见 `docs/docs-map.md`；实现任何功能前先读对应文档。
 
 ## 设计原则
 

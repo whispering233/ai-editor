@@ -57,4 +57,4 @@
 - `CHANGELOG.md`（仓库根）：逐版本事实，发布正文来源。
 - `docs/design/tasks.md`：当前任务卡（完成后清空，历史只留在 `CHANGELOG.md`）。
 - `docs/design/backlog.md`：未排期遗留项与有意口径。
-- `docs-map.md`（仓库根，本文件）：索引与阅读顺序。
+- `docs/docs-map.md`（本文件）：索引与阅读顺序。
