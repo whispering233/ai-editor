@@ -1,12 +1,14 @@
-// 大纲页树视图的推演节点徽标走查：仓内无 jsdom，用 react-dom/server 直渲染页面
-// （同 pages/reference-list.test.tsx 惯例）。
-// 覆盖：章行徽标文案 / title（含章号与 k / N）/ 位置（「阅读进度」左侧）/ 卷与场景行无徽标 /
-// 页头「清除推演标记」按钮的可见性（有可见标记才渲染）。
+// 大纲页（`#/outline` / `#/outline/:nodeId`）SSR 走查：仓内无 jsdom，用 react-dom/server 直渲染页面
+// （同 pages/writing.test.tsx 惯例）。契约 = docs/ui/DESIGN.md `outline-page` + §Layout「分栏边线单所有权」。
+//
+// 覆盖：分栏壳（rail + 详情列）/ rail header 图标组 / 推演徽标 / 详情列各空态 / 窄屏两级互斥 /
+// 宽度与收起持久化。`useMediaQuery` 的 useState 初始化器读 `window.matchMedia`，SSR 下直接跑会崩 ⇒
+// 用 `vi.hoisted` 变量 mock（浏览器行为不变；测试只切 desktop / narrow 两态）。
 // 右键菜单项活在 portal 里、关闭态不渲染 ⇒ 菜单文案由 lib/deduction.test.ts 的纯函数覆盖，
 // 「点菜单项 → 徽标即时刷新」走浏览器人工核对（无 jsdom 无法派发右键事件）。
 // `clearDeductionMarks` 碰 store action + 请求，同 `submitDeductionMarks` 不进单测。
 import { renderToString } from "react-dom/server";
-import { describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type {
   OutlineChapter,
   OutlineScene,
@@ -17,6 +19,21 @@ import type {
 import Outline from "./Outline";
 import OutlineDetail from "./OutlineDetail";
 import { useProjectStore } from "../stores/project";
+
+const media = vi.hoisted(() => ({ desktop: true }));
+vi.mock("../hooks/use-media-query", () => ({
+  useMediaQuery: () => media.desktop,
+}));
+
+// 大纲 loader 只记调用：SSR 不跑 effect，但「谁挂了这个 hook」可在渲染期观察到——
+// 桌面收起 / 窄屏深链这两条 rail 不渲染的路径下，壳必须是唯一的调用者（否则树永远不加载）。
+const loader = vi.hoisted(() => ({ calls: [] as { withMetadata: boolean }[] }));
+vi.mock("../hooks/use-outline-loader", () => ({
+  useOutlineLoader: (opts: { withMetadata: boolean }) => {
+    loader.calls.push(opts);
+    return { reload: async () => {}, retry: () => {} };
+  },
+}));
 
 const chapter = (id: string, title: string, children?: OutlineScene[]): OutlineChapter => ({
   id,
@@ -47,6 +64,8 @@ const OUTLINE: OutlineTree = {
   ],
 };
 
+const EMPTY_OUTLINE: OutlineTree = { id: "root", type: "root", schemaVersion: 1, children: [] };
+
 const CONFIG: ProjectConfig = {
   id: "p-1",
   name: "测试书",
@@ -61,19 +80,54 @@ const CONFIG: ProjectConfig = {
   updatedAt: "t",
 };
 
+interface RenderOptions {
+  /** 与路由一致：undefined = `#/outline`，有值 = `#/outline/:nodeId` */
+  nodeId?: string;
+  outline?: OutlineTree | null;
+  outlineLoading?: boolean;
+  outlineError?: string | null;
+  /** null = 未打开项目；对象 = 在 CONFIG 上覆盖 */
+  config?: Partial<ProjectConfig> | null;
+  desktop?: boolean;
+  /** 便捷：等同 `config: { deductionNodes }` */
+  deductionNodes?: string[];
+}
+
 /**
  * SSR 预置 store：zustand 的服务端快照取 `getInitialState()`（不是 `getState()`）——`setState` 对
  * `renderToString` 无效，故本用例直接往初始 state 对象（`getInitialState()` 返回的就是它）上写。
  */
-function render(config: Partial<ProjectConfig> = {}): string {
+function render({
+  nodeId,
+  outline = OUTLINE,
+  outlineLoading = false,
+  outlineError = null,
+  config = CONFIG,
+  desktop = true,
+  deductionNodes,
+}: RenderOptions = {}): string {
+  media.desktop = desktop;
   Object.assign(useProjectStore.getInitialState(), {
-    config: { ...CONFIG, ...config },
-    outline: OUTLINE,
+    config:
+      config === null ? null : { ...CONFIG, ...config, ...(deductionNodes ? { deductionNodes } : {}) },
+    outline,
+    outlineError,
     configLoading: false,
-    outlineLoading: false,
-    outlineWithMetadata: true,
+    outlineLoading,
+    outlineWithMetadata: outline !== null,
   });
-  return renderToString(<Outline />);
+  return renderToString(<Outline nodeId={nodeId} />).replace(/<!--[^>]*-->/g, "");
+}
+
+/** hook 初始 state 在 SSR 读一次 localStorage（`typeof window` 守卫）⇒ 用 window stub 预置 */
+function stubRailStorage(layout: { width: number | null; collapsed: boolean }) {
+  vi.stubGlobal("window", {
+    localStorage: {
+      getItem: (key: string) =>
+        key === "ai-editor:outline-rail" ? JSON.stringify(layout) : null,
+      setItem: () => {},
+    },
+  });
 }
 
 /** 取某行自身的 HTML（到下一个 data-node-id 为止——子节点渲染在父行之后） */
@@ -82,6 +136,23 @@ function rowHtml(html: string, nodeId: string): string {
   const end = html.indexOf("data-node-id=", start + 1);
   return html.slice(start, end === -1 ? undefined : end);
 }
+
+beforeEach(() => {
+  media.desktop = true;
+});
+
+afterEach(() => {
+  media.desktop = true;
+  vi.unstubAllGlobals();
+  loader.calls.length = 0;
+  Object.assign(useProjectStore.getInitialState(), {
+    config: null,
+    outline: null,
+    outlineError: null,
+    outlineLoading: false,
+    outlineWithMetadata: false,
+  });
+});
 
 describe("大纲页树视图：推演节点徽标", () => {
   it("多标记：首位「推演起点」/ 末位「推演终点」，title = 文案（第N章）· 第 k / 共 N 个推演节点", () => {
@@ -103,13 +174,13 @@ describe("大纲页树视图：推演节点徽标", () => {
     expect(render({ deductionNodes: [] })).not.toContain("推演");
   });
 
-  // 页头一键清空入口（DESIGN.md「`推演节点` 徽标」）：可见性判据与徽标同源
+  // rail header 一键清空入口（DESIGN.md「`推演节点` 徽标」）：可见性判据与徽标同源
   // （`deduction.marks.length > 0` ⇒ 无可见标记时按钮不渲染，不给「点了没反应」的入口）。
-  it("有可见标记：页头渲染「清除推演标记」按钮", () => {
+  it("有可见标记：rail header 渲染「清除推演标记」按钮", () => {
     expect(render({ deductionNodes: ["ch-1"] })).toContain("清除推演标记");
   });
 
-  it("无可见标记：页头不渲染「清除推演标记」按钮", () => {
+  it("无可见标记：rail header 不渲染「清除推演标记」按钮", () => {
     expect(render({ deductionNodes: [] })).not.toContain("清除推演标记");
     // 盘上有 id 但全部失效（章被软删）⇒ 无可见标记，按钮同样不渲染
     expect(render({ deductionNodes: ["ghost"] })).not.toContain("清除推演标记");
@@ -122,7 +193,10 @@ describe("大纲页树视图：推演节点徽标", () => {
   });
 
   it("位置：徽标排在「阅读进度」左侧（阅读进度是单值固定标记、恒贴右）", () => {
-    const row = rowHtml(render({ deductionNodes: ["ch-1"], currentPosition: "ch-1" }), "ch-1");
+    const row = rowHtml(
+      render({ deductionNodes: ["ch-1"], config: { currentPosition: "ch-1" } }),
+      "ch-1",
+    );
     const deduction = row.indexOf("推演节点");
     const current = row.indexOf("阅读进度");
     expect(deduction).toBeGreaterThan(-1);
@@ -133,13 +207,164 @@ describe("大纲页树视图：推演节点徽标", () => {
 
 // 写作入口迁到一级页（writing-4 收口）：大纲页只有树视图，页头不再有视图切换
 // （旧双视图与视图持久化 key 已删）——此处只钉「切换文案不出现 + 右端组按钮在」。
-describe("大纲页：单树视图", () => {
-  it("页头无视图切换按钮，右端组 =「全部折叠」+「+ 新建卷」", () => {
+describe("大纲页：rail header 图标组", () => {
+  it("无视图切换按钮；右端组 =「全部折叠」+「新建卷」（icon-button + title / aria-label）", () => {
     const html = render();
     expect(html).not.toContain("章视图");
-    expect(html).not.toContain("大纲树");
-    expect(html).toContain("全部折叠");
-    expect(html).toContain("+ 新建卷");
+    expect(html).toContain('aria-label="全部折叠"');
+    expect(html).toContain('aria-label="新建卷"');
+    // header 是自定义 40px 行（不是 PageHeader），不放收起钮（收起入口在详情列页头）
+    expect(html).toContain('aria-label="大纲树"');
+    expect(html).not.toContain('aria-label="收起大纲树"></button>');
+  });
+});
+
+describe("大纲页 · 桌面分栏壳", () => {
+  it("全高分栏外壳（抵消中栏 p-6）+ rail 默认宽度与右边线 + 详情列吸收剩余宽度", () => {
+    const html = render();
+    expect(html).toContain("-m-6 flex h-[calc(100%+3rem)] min-h-0 overflow-hidden");
+    expect(html).toContain("flex min-h-0 min-w-0 flex-1 flex-col p-6");
+    // 默认宽度 = max(320px, 中栏 1/3)：未拖拽过时由 CSS 算，不写死像素
+    expect(html).toContain("width:max(320px, calc(100% / 3))");
+    // 分栏线归 rail 自己的 border-r（手柄不画线，DESIGN.md §Layout「分栏边线单所有权」）
+    expect(html).toContain("border-r border-border");
+    expect(html).toContain('aria-label="调整大纲树宽度"');
+    expect(html).toContain('role="separator"');
+    // rail header 与树在左列
+    expect(html).toContain(">大纲<");
+    expect(html).toContain("第1卷");
+  });
+
+  it("无 id（#/outline）：详情列页头「详情」+ 引导文案 + 页头最左的收起按钮", () => {
+    const html = render();
+    expect(html).toContain(">详情<");
+    expect(html).toContain("从左侧选择一个卷、章或场查看详情");
+    expect(html).toContain('aria-label="收起大纲树"');
+    expect(html).toContain('aria-expanded="true"');
+    expect(html).not.toContain('aria-label="展开大纲树"');
+    // 位置 = 详情页头标题行最左（在「详情」标题之前）
+    expect(html.indexOf('aria-label="收起大纲树"')).toBeLessThan(html.indexOf(">详情<"));
+  });
+
+  it("有 id（#/outline/:id）：同一壳里渲染节点详情（标题 / 保存 / 写正文），rail 照旧", () => {
+    const html = render({ nodeId: "ch-1" });
+    expect(html).toContain('aria-label="大纲树"');
+    expect(html).toContain(">雪夜出走<");
+    expect(html).toContain('href="#/writing/ch-1"');
+    expect(html).toContain("ant-btn-primary"); // antd 在两字中文按钮里插空格（`保 存`），只验主按钮存在
+    expect(html).not.toContain("从左侧选择一个卷、章或场查看详情");
+    // 详情页头也带收起按钮（四种详情形态同款）
+    expect(html).toContain('aria-label="收起大纲树"');
+  });
+
+  it("无项目 / 加载中 / 加载失败 / 空树 / 坏 id：详情列都有页头与引导（不先挂表单）", () => {
+    expect(render({ config: null })).toContain("未打开项目，无法查看大纲详情");
+    expect(render({ outline: null, outlineLoading: true })).toContain("animate-pulse");
+    const failed = render({ outline: null, outlineError: "CLIENT_NETWORK_ERROR" });
+    expect(failed).toContain("大纲加载失败，详情暂不可用");
+    expect(render({ outline: EMPTY_OUTLINE })).toContain("还没有大纲，先在左侧新建第一卷");
+    const missing = render({ nodeId: "ghost" });
+    expect(missing).toContain("该节点不存在或已被删除");
+    expect(missing).toContain('href="#/outline"');
+    // 坏 id 空态两个出口（DESIGN.md `outline-page`）：去回收站 / 返回大纲
+    expect(missing).toContain('href="#/trash"');
+    expect(missing).toContain("去回收站");
+    // 每种形态都保留页头与收起钮
+    for (const html of [
+      render({ config: null }),
+      render({ outline: EMPTY_OUTLINE }),
+      render({ nodeId: "ghost" }),
+    ]) {
+      expect(html).toContain(">详情<");
+      expect(html).toContain('aria-label="收起大纲树"');
+    }
+  });
+});
+
+describe("大纲页 · 窄屏两级互斥（<1024px）", () => {
+  it("无 id：只渲染 rail 全宽（无右边线 / 手柄 / 收起钮 / 详情列）", () => {
+    const html = render({ desktop: false });
+    expect(html).toContain("w-full");
+    expect(html).toContain("border-r-0");
+    expect(html).not.toContain("border-r border-border");
+    expect(html).not.toContain("width:max(320px");
+    expect(html).toContain(">大纲<");
+    expect(html).not.toContain(">详情<");
+    expect(html).not.toContain('aria-label="调整大纲树宽度"');
+    expect(html).not.toContain('aria-label="收起大纲树"');
+    expect(html).not.toContain('aria-label="展开大纲树"');
+  });
+
+  it("有 id：详情全宽 + 顶部「大纲树」返回条（无 rail）", () => {
+    const html = render({ desktop: false, nodeId: "ch-1" });
+    expect(html).not.toContain('aria-label="大纲树"');
+    expect(html).not.toContain('aria-label="调整大纲树宽度"');
+    expect(html).toContain('href="#/outline"');
+    expect(html).toContain(">大纲树<");
+    expect(html).toContain(">雪夜出走<");
+  });
+});
+
+describe("大纲页 · 壳自身加载树（rail 不渲染的路径）", () => {
+  // 阻塞回归：壳只读 store 的 outline 时，这两条路径没有 rail / 详情 loader ⇒ 树永远不加载。
+  // 表达式：渲染时 `useOutlineLoader` 的调用次数——rail 不在场，唯一可能调用者就是壳。
+  it("桌面收起 + 深链：rail 不渲染，壳自己挂 loader（树未就绪时不会永远停骨架）", () => {
+    stubRailStorage({ width: 333, collapsed: true });
+    const html = render({ nodeId: "ch-1", outline: null, outlineLoading: true });
+    expect(html).not.toContain('aria-label="大纲树"');
+    expect(loader.calls).toEqual([{ withMetadata: true }]);
+  });
+
+  it("窄屏深链：rail 不渲染，壳自己挂 loader", () => {
+    const html = render({ desktop: false, nodeId: "ch-1", outline: null, outlineLoading: true });
+    expect(html).not.toContain('aria-label="大纲树"');
+    expect(loader.calls).toEqual([{ withMetadata: true }]);
+  });
+});
+
+describe("大纲页 · rail 宽度与收起（持久化）", () => {
+  it("持久化像素宽度生效（越界收敛到 [280, 600]）", () => {
+    stubRailStorage({ width: 333, collapsed: false });
+    const html = render();
+    expect(html).toContain("width:333px");
+    expect(html).not.toContain("max(320px");
+
+    stubRailStorage({ width: 9999, collapsed: false });
+    expect(render()).toContain("width:600px");
+
+    stubRailStorage({ width: 120, collapsed: false });
+    expect(render()).toContain("width:280px");
+  });
+
+  it("桌面收起态：rail 完全不渲染（无 header / 窄条 / 手柄），页头按钮转「展开」，详情列吸收宽度", () => {
+    stubRailStorage({ width: 333, collapsed: true });
+    const html = render({ nodeId: "ch-1" });
+    expect(html).toContain('aria-label="展开大纲树"');
+    expect(html).toContain('aria-expanded="false"');
+    expect(html).not.toContain('aria-label="大纲树"');
+    expect(html).not.toContain('aria-label="调整大纲树宽度"');
+    expect(html).not.toContain("width:333px");
+    // 详情列照常渲染（宽度保留在存储里，展开恢复原宽）
+    expect(html).toContain(">雪夜出走<");
+  });
+
+  it("桌面收起态：空态文案改指页头左侧的展开钮（不留「从左侧选择」）", () => {
+    stubRailStorage({ width: 333, collapsed: true });
+    const collapsed = render();
+    expect(collapsed).toContain("从页头左侧展开大纲树");
+    expect(collapsed).not.toContain("从左侧选择一个卷、章或场查看详情");
+
+    stubRailStorage({ width: 333, collapsed: false });
+    const expanded = render();
+    expect(expanded).toContain("从左侧选择一个卷、章或场查看详情");
+    expect(expanded).not.toContain("从页头左侧展开大纲树");
+  });
+
+  it("窄屏无收起：存储的 collapsed 不生效，rail 仍全宽", () => {    stubRailStorage({ width: 333, collapsed: true });
+    const html = render({ desktop: false });
+    expect(html).toContain("w-full");
+    expect(html).toContain(">大纲<");
+    expect(html).not.toContain('aria-label="展开大纲树"');
   });
 });
 

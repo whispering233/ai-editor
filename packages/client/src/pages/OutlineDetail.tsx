@@ -17,6 +17,7 @@
 // 描述，update 自动取旧值）→ 成功后 toast + 重拉变更记录列表
 // 样式 token 类（oracle 红线：禁止硬编码色类）
 import { useEffect, useMemo, useState } from "react";
+import type { ReactNode } from "react";
 import { buildDeductionMarks, formatTimestamp } from "@whispering233/ai-editor-shared";
 import { CreateRelationDialog } from "../components/entity/create-relation-dialog";
 import { RelationsView } from "../components/entity/relations-view";
@@ -54,7 +55,15 @@ import {
 import { useProjectStore } from "../stores/project";
 import { useUiStore } from "../stores/ui";
 
-export default function OutlineDetail({ nodeId }: { nodeId: string }) {
+/** 可嵌入（中栏分栏壳的右列）：`leading` = 页头标题行最左的槽（壳注入 rail 收起 / 展开钮）；
+ * 页头常驻、内容区独立滚动（DESIGN.md §Layout「页头常驻」）。 */
+export default function OutlineDetail({
+  nodeId,
+  leading,
+}: {
+  nodeId: string;
+  leading?: ReactNode;
+}) {
   const outline = useProjectStore((s) => s.outline);
   const outlineLoading = useProjectStore((s) => s.outlineLoading);
   const config = useProjectStore((s) => s.config);
@@ -235,10 +244,11 @@ export default function OutlineDetail({ nodeId }: { nodeId: string }) {
   const noProject = config === null && !configLoading;
 
   return (
-    <section>
+    <section className="flex min-h-0 flex-1 flex-col">
       {/* 页头（统一壳）：标题 + 操作区（设为阅读进度 / 保存）+ 元信息行 + 分割线 */}
       <PageHeader
         title={node?.title ?? "…"}
+        leading={leading}
         truncateTitle
         action={
           <>
@@ -311,6 +321,8 @@ export default function OutlineDetail({ nodeId }: { nodeId: string }) {
         }
       />
 
+      {/* 内容区：独立滚动（页头不跟着走） */}
+      <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">
       {noProject ? (
         /* 未打开项目：引导回首页（同大纲列表页） */
         <EmptyState
@@ -436,6 +448,7 @@ export default function OutlineDetail({ nodeId }: { nodeId: string }) {
           </div>
         </div>
       )}
+      </div>
 
       {/* 新增关联对话框（详情模式：源固定为本大纲节点，S12.2 扩展） */}
       {relationDialogOpen && node !== null && (

@@ -12,7 +12,6 @@ import { AntdProvider } from "./components/AntdProvider";
 import { ErrorBoundary } from "./components/feedback/ErrorBoundary";
 import Dashboard from "./pages/Dashboard";
 import Outline from "./pages/Outline";
-import OutlineDetail from "./pages/OutlineDetail";
 import EntityList from "./pages/EntityList";
 import EntityDetail from "./pages/EntityDetail";
 import CharacterWorkbench from "./pages/CharacterWorkbench";
@@ -73,9 +72,14 @@ function renderPage(route: Route): ReactNode {
     case "overview":
       return <Dashboard mode="overview" />;
     case "outline":
-      // S12.2：按段数区分——1 段（#/outline）→ 大纲树；2 段（#/outline/:nodeId）→ 节点详情
-      // （二级路由，仿实体详情分支；key = nodeId 变化强制卸载重挂，详情页表单按节点重置）
-      return second !== undefined ? <OutlineDetail key={second} nodeId={second} /> : <Outline />;
+      // 大纲页 = 中栏内 master-detail：`#/outline` 与 `#/outline/:nodeId` 都渲染同一个分栏壳
+      // （nodeId 只决定右列；壳不挂 key——换选中不能重挂 rail 的折叠 / 编辑状态）；更深段归回 `#/outline`
+      if (second === undefined) return <Outline />;
+      return third === undefined ? (
+        <Outline nodeId={second} />
+      ) : (
+        <RedirectTo to="/outline" />
+      );
     case "entities": {
       // 实体家族一级化——旧 #/entities/:type[/:id] 全量重定向到新段
       // （泛型列表入口已移除的 hook/event/timepoint/reference：丢/带 id 落宿主详情段）
