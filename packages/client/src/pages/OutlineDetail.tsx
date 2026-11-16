@@ -1,6 +1,6 @@
 // 大纲节点详情页（S12.2；麦基字段集；「节点详情页」；
 // S13.2：header 加「设为阅读进度」——入口自大纲页迁入，PUT /project/config { current_position }，
-// 已是阅读进度禁用；store updateConfig 自动重拉 config 联动 概览页/行尾徽标/compute 默认节点）
+// 已是阅读进度禁用；store updateConfig 自动重拉 config 联动概览页/行尾徽标/compute 默认节点）
 // D2：header 加「标记为推演节点 / 移出推演节点」（仅章节点渲染）+ 元信息行推演徽标
 // （提交实现与大纲行右键菜单共用 = lib/deduction.ts）
 // 路由：#/outline/:nodeId（中栏大纲 tab 二级路由，main.tsx outline 分支拦截第二段，仿实体详情）
@@ -173,7 +173,7 @@ export default function OutlineDetail({ nodeId }: { nodeId: string }) {
   /**
    * 设为阅读进度（S13.2，自大纲页迁入）：提交实现 = lib/current-position.ts 唯一入口
    * （大纲行右键菜单共用）——PUT /project/config { current_position }，store 内部 updateConfig
-   * 成功后自动重拉 config，联动 概览页「阅读进度」/大纲行尾徽标/compute 预览默认节点（S5.4）/
+   * 成功后自动重拉 config，联动概览页「阅读进度」/大纲行尾徽标/compute 预览默认节点（S5.4）/
    * S9 伏笔健康指标基准。已是阅读进度 → 按钮禁用不触发；在途防重入由 settingCurrent 承担。
    * 服务端只接受章节点（卷/场景 → 400）——本页对非章节点禁用按钮（currentPositionHost），
    * 入口可见性与右键菜单同口径（卡片 1.1）。
