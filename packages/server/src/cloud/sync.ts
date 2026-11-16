@@ -250,10 +250,14 @@ export async function renameCloudDir(project: ProjectContext): Promise<void> {
   writeBookState(project.config.id, { dirName: next });
 }
 
-/** 云端书目录内的**文件集合**（排序；目录条目剔除）——「云端有更新」的判定基准（与时间戳无关） */
+/**
+ * 云端书目录内的**备份名字集合**（排序）——「云端有更新」的判定基准（与时间戳无关）。
+ * 只计 `parseBackupFileName` 命中的名字：`.tmp-*` 上传残留与杂项文件不参与，否则一次失败上传的临时名会让
+ * 「云端有更新」永久为真（拉取也清不掉）。见 `docs/design/40-cloud-sync.md` §3。
+ */
 export function cloudFileSet(entries: readonly DavEntry[]): string[] {
   return entries
-    .filter((entry) => !entry.isCollection)
+    .filter((entry) => !entry.isCollection && parseBackupFileName(entry.name) !== null)
     .map((entry) => entry.name)
     .sort();
 }

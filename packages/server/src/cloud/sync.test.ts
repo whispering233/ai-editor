@@ -27,7 +27,7 @@ import { BACKUPS_DIR_NAME, writeBackup } from "../backup.js";
 import type { ProjectContext } from "../middleware/project.js";
 import { HttpError } from "../middleware/error.js";
 import { initCloudState, writeBookState, writeCloudConfig, readBookState } from "./state.js";
-import { MAX_CLOUD_BACKUPS, computeCloudSync, pullBackup, pushBackup, renameCloudDir } from "./sync.js";
+import { MAX_CLOUD_BACKUPS, cloudFileSet, computeCloudSync, pullBackup, pushBackup, renameCloudDir } from "./sync.js";
 
 const BASE = "https://dav.example.com/dav"; // 云盘根（配置值）；客户端会拼上工作根 `ai-editor`
 const USER = "u@example.com";
@@ -705,6 +705,33 @@ describe("computeCloudSync：三态判定（集合基准 + 本机 mtime，不含
     writeBookState(project.config.id, { lastSyncAt: SYNCED_BASE, lastSeenCloudFiles: ["x.zip"] });
     const out = computeCloudSync(project, true, files(["20200101-000000000-自动-别的机器-人物0-设定0-章0.zip", "x.zip"]));
     expect(out.state).toBe("remote-ahead");
+  });
+
+  /** 列目录结果 → 集合（与 `GET /cloud/status` 同一入口：`cloudFileSet(entries)`） */
+  const cloudFiles = (names: string[]): { files: string[] } => ({
+    files: cloudFileSet(
+      names.map((name) => ({ href: name, name, path: name, isCollection: false, size: 1, lastModified: null })),
+    ),
+  });
+  const BASE_FILE = "20260101-000000000-自动-本机-人物0-设定0-章0.zip";
+
+  it("云端 `.tmp-*` 上传残留不参与集合 → 不是 remote-ahead（失败上传不再永久误报）", () => {
+    writeBookState(project.config.id, { lastSyncAt: SYNCED_BASE, lastSeenCloudFiles: [BASE_FILE] });
+    expect(cloudFiles([BASE_FILE, `.tmp-${BASE_FILE}`]).files).toEqual([BASE_FILE]);
+    expect(computeCloudSync(project, true, cloudFiles([BASE_FILE, `.tmp-${BASE_FILE}`])).state).toBe("synced");
+  });
+
+  it("云端杂项文件名（非本程序命名）不参与集合 → 不是 remote-ahead", () => {
+    writeBookState(project.config.id, { lastSyncAt: SYNCED_BASE, lastSeenCloudFiles: [BASE_FILE] });
+    const remote = cloudFiles([BASE_FILE, "用户手放的文件.txt", "notes.md"]);
+    expect(remote.files).toEqual([BASE_FILE]);
+    expect(computeCloudSync(project, true, remote).state).toBe("synced");
+  });
+
+  it("云端真的多一份合法备份仍判 remote-ahead（过滤不过度）", () => {
+    writeBookState(project.config.id, { lastSyncAt: SYNCED_BASE, lastSeenCloudFiles: [BASE_FILE] });
+    const added = "20260102-000000000-自动-别的机器-人物1-设定0-章2.zip";
+    expect(computeCloudSync(project, true, cloudFiles([BASE_FILE, added, `.tmp-${added}`])).state).toBe("remote-ahead");
   });
 
   it("本机有改动：创作数据晚于 lastSyncAt（三文件改动即算）", () => {
