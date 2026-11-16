@@ -62,7 +62,14 @@ export function PageHeader({
           <PageTitle className={cn("min-w-0", truncateTitle && "truncate")}>{title}</PageTitle>
         )}
         {action !== undefined && (
-          <div className="ml-auto flex min-w-0 flex-wrap items-center justify-end gap-2">{action}</div>
+          <div
+            className={cn(
+              "ml-auto flex items-center gap-2",
+              leading !== undefined ? "min-w-0 flex-wrap justify-end" : "shrink-0",
+            )}
+          >
+            {action}
+          </div>
         )}
       </div>
       {description !== undefined && <div className="mt-1">{description}</div>}

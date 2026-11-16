@@ -30,7 +30,7 @@ export function AppShell({ route, children }: { route: Route; children: ReactNod
   const { layout, isDesktop, dragSide, toggleCollapse, startResize, moveResize, endResize } =
     usePanels();
   const isDragging = dragSide !== null;
-  // 专注模式（卡 13.4，仅章正文页）：为真时只渲染中栏（左栏 / 右栏 / 两根拖拽手柄 / 收起条全不渲染）
+  // 专注模式（卡 13.4，仅章正文页）：为真时只渲染中栏（左栏 / 右栏 / 两根拖拽手柄全不渲染）
   const focusMode = useUiStore((s) => s.focusMode);
 
   // 全站 Ctrl/Cmd + S 的存档阶段（契约 DESIGN.md §设置页「快捷键」区）：
@@ -55,7 +55,7 @@ export function AppShell({ route, children }: { route: Route; children: ReactNod
     // 拖拽期间根容器禁文本选中（指针已 capture 在手柄上，兜底防边缘选中）
     <div className={cn("flex h-screen overflow-hidden", isDragging && "select-none")}>
       {/* 专注模式（卡 13.4，契约 DESIGN.md §Layout「专注模式」）：只渲染中栏——左栏 / 右栏 /
-          两根拖拽手柄 / 收起条一律不渲染（退出来自工具条按钮或 Esc，整棵外壳即刻回来） */}
+          两根拖拽手柄一律不渲染（退出来自工具条按钮或 Esc，整棵外壳即刻回来） */}
       {!focusMode && (
         <>
           {/* 左栏：桌面收起态 = 0px（整栏不渲染，无窄条/占位）；展开态 = NavRail + 拖拽手柄。
