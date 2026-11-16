@@ -54,7 +54,7 @@ describe("CloudBackupPanel · 自动推送条件提示", () => {
     const html = render(true, null);
 
     expect(html).toContain(HINT);
-    expect(html).toContain("随自动备份频率触发：创作数据 = 三文件（正文数据、大纲、参考资料）+ 项目规则（AGENTS.md）");
+    expect(html).toContain("随自动备份频率触发：创作数据（正文、参考资料、大纲、项目设置、项目规则）有变更");
     expect(html).toContain("备份频率关闭时不会自动推送");
     // 聊天记录是纯本地目录：说明行不得再暗示它会随包上云
     expect(html).toContain("聊天记录不进包、不会上云");
