@@ -1,5 +1,5 @@
 // 左栏 NavRail（重构，替代原书架树 Sidebar），**形态按当前工作区类型（`kind`）取**：
-// 顶部标识（根首页 `#/` 入口）+ 收起按钮 + [书名按钮（项目概览入口 `#/overview`）] + 一级导航
+// 顶部标识（根首页 `#/` 入口）+ [书名按钮（项目概览入口 `#/overview`）] + 一级导航
 // （antd Menu）+ [工具区（回收站）] + 底部四入口。项集 / 标识文案 / 是否渲染回收站与书名按钮一律取自
 // `./nav-items.tsx` 的 `NAV_RAIL_BY_KIND`（kind → 形态的唯一定义处，见 DESIGN.md §导航与外壳
 // 「左栏按工作区类型渲染」）——小说 = 八项 + 回收站 + 书名按钮；练习 = 仅「文风练习」（`#/practice`）、
@@ -23,7 +23,6 @@ import { useState } from "react";
 import {
   BookOutlined,
   CloudSyncOutlined,
-  DoubleLeftOutlined,
   MoonOutlined,
   SaveOutlined,
   SettingOutlined,
@@ -51,12 +50,9 @@ function navKey(route: Route): string | null {
 
 export function NavRail({
   width,
-  onToggleCollapse,
 }: {
   /** 桌面态像素宽度（flex-basis 覆盖默认）；undefined = 小屏默认百分比布局 */
   width?: number;
-  /** 收起左栏回调（F7 桌面态由 AppShell 传入；小屏无收起能力） */
-  onToggleCollapse?: () => void;
 }) {
   const { theme: mode, toggleTheme } = useTheme();
   const config = useProjectStore((s) => s.config);
@@ -117,7 +113,7 @@ export function NavRail({
           : { flex: "1 1 10%" }
       }
     >
-      {/* 顶行：书架入口（点击回书架主页）+ 收起按钮（桌面态） */}
+      {/* 顶行：书架入口（点击回书架主页）；整栏收起/展开已归 `info-bar` 左端（2026-11） */}
       <div className="flex h-12 shrink-0 items-center gap-1 border-b border-border px-2">
         <a
           href="#/"
@@ -129,17 +125,6 @@ export function NavRail({
               （见 DESIGN.md §Typography）——固定标签只需防折行。文案按 kind（书架 / 文风练习） */}
           <span className="whitespace-nowrap text-base italic">{spec.brandLabel}</span>
         </a>
-        {onToggleCollapse && (
-          <Button
-            color="default" variant="text"
-            size="small"
-            aria-label="收起左栏"
-            title="收起左栏"
-            // 图标 = 面板折叠同一族镜像对（DESIGN.md `icon-button`）：收起 = `«`（朝本侧边缘）
-            icon={<DoubleLeftOutlined />}
-            onClick={onToggleCollapse}
-          />
-        )}
       </div>
 
       {/* 导航区 */}

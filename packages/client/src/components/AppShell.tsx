@@ -1,9 +1,11 @@
 // 应用外壳（§2）：三栏装配——左栏 Sidebar + 中栏 MainPanel + 右栏 ChatPanel
 // F7 修订（2026-08 用户反馈）：桌面态（≥1024px）三栏宽度可拖拽（像素）+ 左/右栏可收起/展开，
 // 宽度与收起态 localStorage 持久化（hooks/use-panels，同哲学——纯展示层不进数据文件）；
-// 装配顺序 Sidebar（或收起窄条）→ 拖拽手柄 → MainPanel（flex-1 弹性吸收剩余空间）→ 拖拽手柄 →
-// ChatPanel（或收起窄条）；收起态下手柄隐藏/禁用（拖拽与收起互斥）。
-// <1024px 小屏不渲染手柄/收起条，三栏回退默认百分比类（右栏抽屉行为不变，开关在 InfoBar 右侧，
+// 2026-11 修订：**收起 = 0px**（不渲染该栏、无窄条、无占位）；收起/展开入口全部在 `info-bar` 两端
+// （两枚静态 `PanelToggleIcon`，状态经 `panelToggles` 下发），栏内不再有收起按钮。
+// 装配顺序 Sidebar（展开态）→ 拖拽手柄 → MainPanel（flex-1 弹性吸收剩余空间）→ 拖拽手柄 →
+// ChatPanel（展开态）；拖拽手柄仅在「桌面 + 该栏展开」时渲染（拖拽与收起互斥）。
+// <1024px 小屏不渲染手柄，三栏回退默认百分比类（右栏抽屉行为不变，开关在 InfoBar 右侧，
 // 抽屉渲染在 ChatPanel；open 状态在此持有）
 import { useEffect, useState, type ReactNode } from "react";
 import type { Route } from "../hooks/use-route";
@@ -20,7 +22,6 @@ import { CloudPullConfirm } from "./settings/cloud-pull-confirm";
 import { CloudStaleBackupDialog } from "./settings/cloud-stale-backup-dialog";
 import { MainPanel } from "./main-panel/MainPanel";
 import { NavRail } from "./nav/NavRail";
-import { CollapseStrip } from "./ui/collapse-strip";
 import { ResizeHandle } from "./ui/resize-handle";
 
 export function AppShell({ route, children }: { route: Route; children: ReactNode }) {
@@ -57,25 +58,22 @@ export function AppShell({ route, children }: { route: Route; children: ReactNod
           两根拖拽手柄 / 收起条一律不渲染（退出来自工具条按钮或 Esc，整棵外壳即刻回来） */}
       {!focusMode && (
         <>
-          {/* 左栏：收起 → 窄条；展开 → Sidebar（桌面传像素宽度覆盖默认 10%，小屏不传走默认百分比）；
-              收起按钮（PanelLeftClose）渲染在产品标识行右侧（Sidebar 内部，仅桌面态传入回调时出现） */}
-          {isDesktop && layout.collapsedSidebar ? (
-            <CollapseStrip side="left" label="展开左栏" onExpand={() => toggleCollapse("sidebar")} />
-          ) : (
-            <NavRail
-              width={isDesktop ? layout.sidebarWidth : undefined}
-              onToggleCollapse={isDesktop ? () => toggleCollapse("sidebar") : undefined}
-            />
-          )}
-          {/* 左|中拖拽手柄：仅桌面 + 左栏展开时渲染（收起态隐藏，拖拽与收起互斥） */}
-          {isDesktop && !layout.collapsedSidebar && (
-            <ResizeHandle
-              label="调整左栏宽度"
-              active={dragSide === "sidebar"}
-              onStart={(clientX) => startResize("sidebar", clientX)}
-              onMove={(clientX) => moveResize("sidebar", clientX)}
-              onEnd={endResize}
-            />
+          {/* 左栏：桌面收起态 = 0px（整栏不渲染，无窄条/占位）；展开态 = NavRail + 拖拽手柄。
+              收起/展开入口在 info-bar 左端（`panelToggles`），栏内无按钮。 */}
+          {(!isDesktop || !layout.collapsedSidebar) && (
+            <>
+              <NavRail width={isDesktop ? layout.sidebarWidth : undefined} />
+              {/* 左|中拖拽手柄：仅桌面 + 左栏展开时渲染（收起态无处可拖） */}
+              {isDesktop && (
+                <ResizeHandle
+                  label="调整左栏宽度"
+                  active={dragSide === "sidebar"}
+                  onStart={(clientX) => startResize("sidebar", clientX)}
+                  onMove={(clientX) => moveResize("sidebar", clientX)}
+                  onEnd={endResize}
+                />
+              )}
+            </>
           )}
         </>
       )}
@@ -85,6 +83,12 @@ export function AppShell({ route, children }: { route: Route; children: ReactNod
         route={route}
         focusMode={focusMode}
         chatOpen={chatOpen}
+        panelToggles={{
+          sidebarCollapsed: layout.collapsedSidebar,
+          chatCollapsed: layout.collapsedChat,
+          onToggleSidebar: () => toggleCollapse("sidebar"),
+          onToggleChat: () => toggleCollapse("chat"),
+        }}
         onToggleChat={() => setChatOpen((v) => !v)}
         onOpenChat={() => {
           // 悬浮问 AI「点击必有反应」：小屏开抽屉；桌面右栏收起时展开（已展开则不动作 → false）
@@ -114,16 +118,13 @@ export function AppShell({ route, children }: { route: Route; children: ReactNod
               onEnd={endResize}
             />
           )}
-          {/* 右栏：收起 → 窄条；展开 → ChatPanel（桌面传像素宽度 + 收起按钮；小屏抽屉行为不变——
-              open/onClose 仅小屏生效，收起按钮不渲染） */}
-          {isDesktop && layout.collapsedChat ? (
-            <CollapseStrip side="right" label="展开右栏" onExpand={() => toggleCollapse("chat")} />
-          ) : (
+          {/* 右栏：桌面收起态 = 0px（整栏不渲染，无窄条/占位）；展开态 = ChatPanel（桌面传像素宽度）；
+              小屏抽屉行为不变——open/onClose 仅小屏生效 */}
+          {(!isDesktop || !layout.collapsedChat) && (
             <ChatPanel
               open={chatOpen}
               onClose={() => setChatOpen(false)}
               width={isDesktop ? layout.chatWidth : undefined}
-              onToggleCollapse={isDesktop ? () => toggleCollapse("chat") : undefined}
             />
           )}
         </>

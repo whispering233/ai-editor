@@ -18,7 +18,6 @@ import type { MenuProps } from "antd";
 import {
   BulbOutlined,
   CloseOutlined,
-  DoubleRightOutlined,
   DownOutlined,
   MessageOutlined,
   PlusOutlined,
@@ -353,12 +352,10 @@ export function sessionItemMenu(
 function SessionTitleBar({
   disabled,
   onClose,
-  onToggleCollapse,
 }: {
   disabled: boolean;
+  /** 小屏抽屉关闭（仅抽屉传入） */
   onClose?: () => void;
-  /** 收起右栏回调（F7：仅桌面静态栏传入——抽屉模式无收起能力）；渲染收起按钮 */
-  onToggleCollapse?: () => void;
 }) {
   const sessions = useChatStore((s) => s.sessions);
   const currentSessionId = useChatStore((s) => s.currentSessionId);
@@ -433,18 +430,6 @@ function SessionTitleBar({
         title="新会话"
         icon={<PlusOutlined />}
       />
-      {onToggleCollapse && (
-        <Button
-          color="default" variant="text"
-          size="small"
-          className="ml-auto shrink-0"
-          onClick={onToggleCollapse}
-          aria-label="收起聊天面板"
-          title="收起聊天面板"
-          // 图标 = 面板折叠同一族镜像对（DESIGN.md `icon-button`）：收起 = `»`（朝本侧边缘）
-          icon={<DoubleRightOutlined />}
-        />
-      )}
       {onClose && (
         <Button
           color="default" variant="text"
@@ -1445,17 +1430,16 @@ function MessageList({ disabled }: { disabled: boolean }) {
 
 function ChatPanelBody({
   onClose,
-  onToggleCollapse,
 }: {
+  /** 小屏抽屉关闭（桌面静态栏不传） */
   onClose?: () => void;
-  onToggleCollapse?: () => void;
 }) {
   const config = useProjectStore((s) => s.config);
   const disabled = !config;
 
   return (
     <div className="flex h-full min-h-0 flex-col">
-      <SessionTitleBar disabled={disabled} onClose={onClose} onToggleCollapse={onToggleCollapse} />
+      <SessionTitleBar disabled={disabled} onClose={onClose} />
       {!disabled && (
         <>
           <DisconnectBanner />
@@ -1469,24 +1453,21 @@ function ChatPanelBody({
 }
 
 // ============ 外壳：桌面静态右栏（≥1024px） / 小屏抽屉（<1024px） ============
+// 整栏收起/展开已归 `info-bar` 右端（2026-11）：收起态由 `AppShell` 整栏不渲染（0px），本组件无收起按钮。
 
 export function ChatPanel({
   open,
   onClose,
   width,
-  onToggleCollapse,
 }: {
   open: boolean;
   onClose: () => void;
   /** 桌面态像素宽度（flex-basis 覆盖默认 40%）；undefined = 小屏默认百分比布局（抽屉不参与 flex） */
   width?: number;
-  /** 收起右栏回调（F7：桌面态由 AppShell 传入；小屏抽屉无收起能力，不传即不渲染按钮） */
-  onToggleCollapse?: () => void;
 }) {
   const isDesktop = useMediaQuery("(min-width: 1024px)");
 
-  // 桌面（≥1024px）：右栏静态列——F7 起宽度由 AppShell 传入像素（flex-basis 覆盖默认 40%），
-  // 收起按钮（PanelRightClose）在会话标题行右侧（onToggleCollapse 传入时渲染）
+  // 桌面（≥1024px）：右栏静态列——F7 起宽度由 AppShell 传入像素（flex-basis 覆盖默认 40%）
   if (isDesktop) {
     return (
       <aside
@@ -1495,7 +1476,7 @@ export function ChatPanel({
           width !== undefined ? { flex: `0 1 ${width}px`, minWidth: CHAT_MIN_WIDTH } : undefined
         }
       >
-        <ChatPanelBody onToggleCollapse={onToggleCollapse} />
+        <ChatPanelBody />
       </aside>
     );
   }
