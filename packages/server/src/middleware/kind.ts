@@ -7,10 +7,11 @@
 //    Hono 的中间件与 handler 按注册序组合，registration 顺序错了守卫不生效）。
 //    小说语义组 = entity / outline / manuscript / relation / delta / trash / names / proposal；
 //    通用组（project / chat / backup / cloud / settings）不挂。
-// 2. handler 内 `assertWorkspaceKind(project, kind)`：端点级粒度不够时用——目前两处：
+// 2. handler 内 `assertWorkspaceKind(project, kind)`：端点级粒度不够时用——目前三处：
 //    `PUT /project/config`（`current_position` / `deduction_nodes` 是小说语义**字段**，
-//    端点本身通用）与 `GET /project/export-novel`（同组内还有对两种 kind 都放行的
-//    `GET /project/export`，无法整组挂）。
+//    端点本身通用）、`GET /project/export-novel`（同组内还有对两种 kind 都放行的
+//    `GET /project/export`，无法整组挂）与 `GET /project/export-novel-txt`（同上，
+//    且同组还有 `GET /project/export`）。
 // 3. 反向守卫（练习端点组）随练习路由一起挂（`requireKind("practice")`）。
 //
 // 无当前工作区时**放行**：`NO_PROJECT_OPEN` 409 由各 handler 的 `requireCurrentProject`
