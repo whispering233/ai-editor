@@ -7,7 +7,7 @@
 ### 卡 1：大纲页分栏壳、路由与响应式
 
 - **目标**：`#/outline` 与 `#/outline/:nodeId` 都由同一个 `<Outline nodeId={...} />` 分栏壳渲染：左 rail 显示现有大纲树（能力暂保持现状），右详情列显示 `OutlineDetail`；完成宽度拖拽 / 收起、窄屏两级互斥、空态 / 错误态 / 加载态、页头常驻。
-- **允许改**：`packages/client/src/main.tsx`、`packages/client/src/pages/Outline.tsx`、新增 `packages/client/src/hooks/use-outline-rail.ts`；如需拆栏头可新增 `packages/client/src/components/outline/outline-rail-header.tsx`。`packages/client/src/pages/OutlineDetail.tsx` 仅做「可嵌入」的最小改动（允许暂时保留自身 loader，卡 3 移除）。
+- **允许改**：`packages/client/src/main.tsx`、`packages/client/src/pages/Outline.tsx`、新增 `packages/client/src/hooks/use-outline-rail.ts`；如需拆栏头可新增 `packages/client/src/components/outline/outline-rail-header.tsx`。`packages/client/src/pages/OutlineDetail.tsx` 仅做「可嵌入」的最小改动（允许暂时保留自身 loader，卡 3 移除）；新增 `packages/client/src/hooks/use-outline-rail.test.ts` 覆盖纯函数防御分支。
 - **不做**：不改写作页 / `use-writing-rail.ts`；不改 API / DB / tools；不删除现有树能力；不做 dirty 守卫（卡 3）；不改写作页旧路由。
 - **验收**：桌面 `#/outline` = 树 + 空详情；`#/outline/:id` = 树 + 详情；宽度默认 `max(320px, 中栏 1/3)`、拖拽 280–600、收起 0、刷新保持（`ai-editor:outline-rail`）；窄屏 `#/outline` 树全宽、`#/outline/:id` 详情 + 「大纲树」返回条；无项目 / 空树 / 坏 id 都有页头与引导；rail header 40px、详情页头常驻；`outline.test.tsx` 的 SSR 断言同步更新（补 `useMediaQuery` mock）。
 - **完成判据（硬）**：`git log --oneline -1` 含本卡 commit；`git status --porcelain` 为空；汇报附 commit hash + `pnpm typecheck` + `pnpm lint` + `pnpm --filter @whispering233/ai-editor-client test` 的输出摘要。oracle：reviewer 独立复跑 + 浏览器核一次分栏 / 窄屏。
@@ -38,8 +38,8 @@
 
 ### 卡 5：测试、像素走查与文档收口
 
-- **目标**：补 `outline.test.tsx` 的 SSR 断言（树 / 详情 / 空态 / 窄屏 / 图标徽标），必要时补 `use-outline-rail` 的纯函数测试（默认宽 / clamp / 持久化解析）；跑全量验证；由 `ui-verifier` 做有上限的浏览器像素走查；更新 `CHANGELOG.md` Unreleased；清空本文件的任务卡。
-- **允许改**：`packages/client/src/pages/outline.test.tsx`、`packages/client/src/hooks/use-outline-rail.test.ts`（如新增）、`CHANGELOG.md`、`docs/design/tasks.md`。功能缺陷回到对应卡修，不在本卡顺手改设计。
+- **目标**：补 `outline.test.tsx` 的 SSR 断言（树 / 详情 / 空态 / 窄屏 / 图标徽标）；`use-outline-rail` 的纯函数测试已随卡 1 落地，本卡只复跑；跑全量验证；由 `ui-verifier` 做有上限的浏览器像素走查；更新 `CHANGELOG.md` Unreleased；清空本文件的任务卡。
+- **允许改**：`packages/client/src/pages/outline.test.tsx`、`CHANGELOG.md`、`docs/design/tasks.md`。功能缺陷回到对应卡修，不在本卡顺手改设计。
 - **不做**：不新增功能 / 不扩 API / 不改 `DESIGN.md` 已定稿的交互口径（除非发现文档与实现矛盾，先停下提问）。
 - **验收**：`pnpm typecheck`、`pnpm lint`、`pnpm -r test` 全绿；`ui-verifier` 按条目上限核桌面 1440 / 窄屏 390 的分栏、收起、选中、图标徽标、空态、dirty 确认；CHANGELOG 只记用户可见变化；`tasks.md` 回到「暂无」。
 - **完成判据（硬）**：`git log --oneline -1` 含本卡 commit；`git status --porcelain` 为空；汇报附 commit hash + 三条命令输出摘要 + ui-verifier 的逐条证据。oracle：ui-verifier 独立验收（不在本卡 commit 内）。
