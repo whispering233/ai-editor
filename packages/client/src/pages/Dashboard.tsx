@@ -14,6 +14,7 @@ import { formatRelativeTime } from "@whispering233/ai-editor-shared";
 import type {
   AuthorEntry,
   EntityType,
+  NovelTxtLayout,
   OutlineNode,
   WorkspaceKind,
 } from "@whispering233/ai-editor-shared";
@@ -46,6 +47,7 @@ import { skeletonClass } from "@/lib/styles";
 import {
   ApiError,
   CLIENT_NETWORK_ERROR,
+  exportNovelTxt,
   exportNovelZip,
   exportProjectZip,
   getPracticeSamples,
@@ -432,13 +434,18 @@ export default function Dashboard({ mode }: { mode: DashboardMode }) {
 
   // ============ 书架行能力（Sidebar 迁入） ============
 
-  /** 导出当前项目（zip → 临时 <a> 下载）；两条产物按 kind 分派端点，落盘管道与错误分流共用 */
-  async function handleExportBook(name: string, kind: ExportBookKind) {
+  /** 导出当前项目（产物 → 临时 <a> 下载）；三条产物按 kind 分派端点（纯文本带排版参数），
+   * 落盘管道与错误分流共用 */
+  async function handleExportBook(name: string, kind: ExportBookKind, layout: NovelTxtLayout) {
     if (exporting) return;
     setExporting(true);
     try {
       const { blob, filename } =
-        kind === "novel" ? await exportNovelZip() : await exportProjectZip();
+        kind === "novel"
+          ? await exportNovelZip()
+          : kind === "txt"
+            ? await exportNovelTxt(layout)
+            : await exportProjectZip();
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
@@ -1074,14 +1081,14 @@ export default function Dashboard({ mode }: { mode: DashboardMode }) {
           </DialogContent>
         </Dialog>
 
-        {/* 导出类型框（受控）：两种产物共用同一 <a download> 管道；成功关框、失败留框；
-            可选导出项按当前工作区 kind（练习工作区无「小说文档」） */}
+        {/* 导出类型框（受控）：三条产物共用同一 <a download> 管道；成功关框、失败留框；
+            可选导出项按当前工作区 kind（练习工作区只留「项目压缩文件」） */}
         <ExportBookDialog
           open={exportOpen}
           name={config?.name ?? ""}
           workspaceKind={config?.kind ?? "novel"}
           exporting={exporting}
-          onExport={(kind) => void handleExportBook(config?.name ?? "", kind)}
+          onExport={(kind, layout) => void handleExportBook(config?.name ?? "", kind, layout)}
           onOpenChange={setExportOpen}
         />
 

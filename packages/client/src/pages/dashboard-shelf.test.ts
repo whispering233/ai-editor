@@ -48,7 +48,7 @@ describe("书架行结构（卡 23.5）", () => {
   });
 });
 
-// 导出入口（卡 E5）：点「导出」不再直接下载，先弹类型选择框（两条产物两条端点 + 同一落盘管道）。
+// 导出入口（卡 E5）：点「导出」不再直接下载，先弹类型选择框（三条产物三条端点 + 同一落盘管道）。
 describe("当前书条导出入口（卡 E5）", () => {
   it("「导出」按钮开弹窗（不再直接发起下载）", () => {
     expect(dashboard).toMatch(/导出\s*<\/Button>/);
@@ -56,16 +56,23 @@ describe("当前书条导出入口（卡 E5）", () => {
     expect(dashboard).toContain("<ExportBookDialog");
   });
 
-  it("弹窗只上报所选类型（onExport(kind)），不自己下载", () => {
-    expect(dashboard).toMatch(/<ExportBookDialog[\s\S]{0,360}?onExport=\{\(kind\) => void handleExportBook\(/);
+  it("弹窗只上报所选类型与排版（onExport(kind, layout)），不自己下载", () => {
+    expect(dashboard).toMatch(
+      /<ExportBookDialog[\s\S]{0,360}?onExport=\{\(kind, layout\) => void handleExportBook\(/,
+    );
   });
 
   it("弹窗拿到当前工作区 kind（练习工作区只给三文件包一项）", () => {
     expect(dashboard).toMatch(/<ExportBookDialog[\s\S]{0,360}?workspaceKind=\{config\?\.kind \?\? "novel"\}/);
   });
 
-  it("handleExportBook 按 kind 分派端点，成功关框、失败留框", () => {
-    expect(dashboard).toMatch(/kind === "novel" \? await exportNovelZip\(\) : await exportProjectZip\(\)/);
+  it("handleExportBook 按 kind 分派三个端点（纯文本带 layout 参数），成功关框、失败留框", () => {
+    expect(dashboard).toMatch(
+      /kind === "novel"\s*\? await exportNovelZip\(\)\s*:\s*kind === "txt"\s*\? await exportNovelTxt\(layout\)\s*:\s*await exportProjectZip\(\)/,
+    );
+    expect(dashboard).toMatch(
+      /async function handleExportBook\(name: string, kind: ExportBookKind, layout: NovelTxtLayout\)/,
+    );
     expect(dashboard).toContain("setExportOpen(false)");
   });
 });

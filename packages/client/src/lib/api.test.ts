@@ -18,6 +18,7 @@ import {
   deleteEntity,
   deleteOutlineNode,
   deleteProject,
+  exportNovelTxt,
   exportNovelZip,
   exportProjectZip,
   getCloudRemoteBooks,
@@ -1131,6 +1132,61 @@ describe("exportNovelZip（GET /project/export-novel：与 exportProjectZip 同�
   });
 });
 
+describe("exportNovelTxt（GET /project/export-novel-txt：text/plain 分流 + layout query）", () => {
+  it("text/plain 响应 → blob + `{书名}.txt` 文件名；默认请求 layout=preserve", async () => {
+    const bytes = new TextEncoder().encode("第1章 起点\r\n\r\n正文\r\n");
+    mockRawResponse(new Blob([bytes]), 200, {
+      "Content-Type": "text/plain; charset=utf-8",
+      "Content-Disposition": `attachment; filename="book.txt"; filename*=UTF-8''${encodeURIComponent("血与火.txt")}`,
+    });
+    const res = await exportNovelTxt("preserve");
+    expect(res.filename).toBe("血与火.txt");
+    expect(new TextDecoder().decode(await res.blob.arrayBuffer())).toBe("第1章 起点\r\n\r\n正文\r\n");
+    expect(globalThis.fetch).toHaveBeenCalledWith("/api/v1/project/export-novel-txt?layout=preserve");
+  });
+
+  it("网文排版：layout=webnovel 进查询串", async () => {
+    mockRawResponse(new Blob(["txt"]), 200, {
+      "Content-Type": "text/plain; charset=utf-8",
+      "Content-Disposition": `attachment; filename="book.txt"; filename*=UTF-8''${encodeURIComponent("血与火-网文.txt")}`,
+    });
+    const res = await exportNovelTxt("webnovel");
+    expect(res.filename).toBe("血与火-网文.txt");
+    expect(globalThis.fetch).toHaveBeenCalledWith("/api/v1/project/export-novel-txt?layout=webnovel");
+  });
+
+  it("2xx text/html（中间层兜底页）→ 抛 CLIENT_NETWORK_ERROR，不把 HTML 当 TXT 下载", async () => {
+    mockRawResponse("<html>not found</html>", 200, { "Content-Type": "text/html" });
+    await expect(exportNovelTxt("preserve")).rejects.toMatchObject({ code: CLIENT_NETWORK_ERROR });
+  });
+
+  it("无 Content-Disposition → 回退 book.txt（TXT 端点自己的兜底，不是 project.zip）", async () => {
+    mockRawResponse(new Blob(["txt"]), 200, { "Content-Type": "text/plain; charset=utf-8" });
+    await expect(exportNovelTxt("preserve").then((r) => r.filename)).resolves.toBe("book.txt");
+  });
+
+  it("400 VALIDATION_ERROR / KIND_MISMATCH（JSON 错误包裹）→ ApiError code 与 message 透传", async () => {
+    mockRawResponse(
+      JSON.stringify({ success: false, error: { code: "VALIDATION_ERROR", message: "本书还没有章节" } }),
+      400,
+      { "Content-Type": "application/json" },
+    );
+    await expect(exportNovelTxt("preserve")).rejects.toMatchObject({
+      code: "VALIDATION_ERROR",
+      message: "本书还没有章节",
+    });
+    mockRawResponse(
+      JSON.stringify({
+        success: false,
+        error: { code: "KIND_MISMATCH", message: "该端点仅适用于小说工作区" },
+      }),
+      400,
+      { "Content-Type": "application/json" },
+    );
+    await expect(exportNovelTxt("preserve")).rejects.toMatchObject({ code: "KIND_MISMATCH" });
+  });
+});
+
 describe("parseContentDispositionFilename（RFC 5987 文件名解析）", () => {
   it("filename* UTF-8 中文解码优先于 ASCII filename", () => {
     const header = `attachment; filename="book.zip"; filename*=UTF-8''${encodeURIComponent("血与火.zip")}`;
@@ -1149,6 +1205,13 @@ describe("parseContentDispositionFilename（RFC 5987 文件名解析）", () => 
 
   it("无 header → project.zip（兜底）", () => {
     expect(parseContentDispositionFilename(null)).toBe("project.zip");
+  });
+
+  it("可选 fallback：TXT 端点无 header → book.txt；非法 percent 序列也回退 fallback", () => {
+    expect(parseContentDispositionFilename(null, "book.txt")).toBe("book.txt");
+    expect(parseContentDispositionFilename("attachment; filename*=UTF-8''%zz%zz", "book.txt")).toBe(
+      "book.txt",
+    );
   });
 });
 

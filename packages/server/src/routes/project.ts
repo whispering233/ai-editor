@@ -21,8 +21,10 @@ import type { ProjectFileConfig, ProjectListBook, WorkspaceKind } from "@whisper
 import {
   buildNovelChapterMarkdown,
   buildNovelExportEntries,
+  buildNovelTxt,
   mapProjectFileToConfig,
   novelExportZipFileName,
+  novelTxtFileName,
   numberVisibleOutline,
   orderVisibleChapters,
   resolveAuthor,
@@ -30,6 +32,7 @@ import {
   WORKSPACE_DIRS,
   WORKSPACE_KINDS,
 } from "@whispering233/ai-editor-shared";
+import type { NovelTxtBlock } from "@whispering233/ai-editor-shared";
 import { SchemaVersionError, type MigrationResult, type Db } from "@whispering233/ai-editor-db";
 import { closeDatabase, openDatabase } from "@whispering233/ai-editor-db";
 import { OUTLINE_FILE_NAME } from "@whispering233/ai-editor-db";
@@ -55,6 +58,7 @@ import {
   projectConfigUpdateReqSchema,
   projectCreateReqSchema,
   projectDeleteReqSchema,
+  projectExportNovelTxtQuerySchema,
   projectListResSchema,
   projectOpenReqSchema,
 } from "@whispering233/ai-editor-shared/schemas";
@@ -439,6 +443,63 @@ projectRoutes.get("/export-novel", (c) => {
   c.header("Content-Type", "application/zip");
   c.header("Content-Disposition", `attachment; filename="book.zip"; filename*=UTF-8''${encodeURIComponent(fileName)}`);
   return c.body(zipData);
+});
+
+/**
+ * TXT 标题行：`第N卷 卷名` / `第M章 章名`。名字 trim 后为空 → **只留标签**（不写「未命名」）；
+ * **标题用原始名（不 sanitize）**——sanitize 只用于文件名，不复用 md zip 的 `labeledSegment`。
+ */
+function txtHeading(label: string, title: string): string {
+  const trimmed = title.trim();
+  return trimmed === "" ? label : `${label} ${trimmed}`;
+}
+
+// GET /api/v1/project/export-novel-txt —— 导出当前项目正文为单个纯文本（`.txt`）
+//
+// 契约：`docs/api/10-api-project.md` §GET /api/v1/project/export-novel-txt。排版 / 换行归一 /
+// 文件名**一律走 shared 纯函数**（`buildNovelTxt` / `novelTxtFileName`）——服务端只做三件事：
+// 派生阅读序（`numberVisibleOutline`）、批量取 `content_text` 投影、拼卷 / 章标题。
+// 流程：requireCurrentProject（无项目 → 409）→ 仅小说工作区（同组 /export 对两种 kind 都放行，
+// 不能整组挂）→ 校验 `layout` → 无可见章 400（不产空文件）→ 一次 IN 查询取正文投影 → 组装块。
+// 只读 data.db：**不做 wal_checkpoint**、不写项目目录任何文件（同 /export-novel）。
+projectRoutes.get("/export-novel-txt", (c) => {
+  const project = requireCurrentProject();
+  assertWorkspaceKind(project, "novel");
+  const query = projectExportNovelTxtQuerySchema.safeParse(c.req.query());
+  if (!query.success) throw query.error;
+  const layout = query.data.layout ?? "preserve";
+  const numbering = numberVisibleOutline(readOutlineFile(project.root));
+  if (numbering.chapters.length === 0) {
+    throw new HttpError(400, "VALIDATION_ERROR", "本书还没有章节");
+  }
+  const texts = getDocumentTexts(
+    project.db,
+    "chapter",
+    numbering.chapters.map((chapter) => chapter.chapterId),
+  );
+  const blocks: NovelTxtBlock[] = [];
+  const emittedVolumes = new Set<string>();
+  // 顺序 = `numbering.chapters` 的阅读序（含存量直挂 root 的章）：卷标题只在遍历到该卷的第一章时
+  // 产出 ⇒ **无可见章的卷不输出卷标题**；直挂 root 的章（volumeId = ""）没有卷标题。
+  for (const chapter of numbering.chapters) {
+    if (chapter.volumeId !== "" && !emittedVolumes.has(chapter.volumeId)) {
+      emittedVolumes.add(chapter.volumeId);
+      blocks.push({ kind: "volume", label: txtHeading(chapter.volumeLabel, chapter.volumeTitle) });
+    }
+    blocks.push({
+      kind: "chapter",
+      label: txtHeading(chapter.chapterLabel, chapter.chapterTitle),
+      text: texts.get(chapter.chapterId) ?? "",
+    });
+  }
+  // Content-Disposition：ASCII fallback + RFC 5987 filename*（同 /export、/export-novel）
+  const fileName = novelTxtFileName(project.config.name, layout);
+  c.header("Content-Type", "text/plain; charset=utf-8");
+  c.header(
+    "Content-Disposition",
+    `attachment; filename="book.txt"; filename*=UTF-8''${encodeURIComponent(fileName)}`,
+  );
+  return c.body(buildNovelTxt(blocks, layout));
 });
 
 // ============ 导入与备份管理（B2.2） ============
