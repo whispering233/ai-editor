@@ -1,7 +1,9 @@
 // 徽标 chip 的两个形态（DESIGN.md §Components `tag` / `type-badge`，全站各自唯一实现）：
 // - `TagChip`  = **用户标签**（`data.tags` 数组元素）：tint 五色底 + 墨字
 // - `TypeChip` = **类型/分类徽标**（卷/章/场、实体类型、端点类型、关系类型、伏笔 category、回收站类型）：
-//               浅底 + **1px 红褐描边** + 随主题翻转的墨字（强调靠轮廓，不占面积）。
+//               浅底 + **1px 描边** + 随主题翻转的墨字（强调靠轮廓，不占面积）。
+//               边框两档（DESIGN.md §Colors `type-badge`「大纲层级双档」）：默认红褐（卷 / 状态徽标 /
+//               其它枚举类型）与 `soft` 软灰（章 / 场，表达「下一级」）；不新增第三种彩色。
 //               为什么不做实底：实底彩色要么压不住读（橙 `#ef8354` 上墨字仅 4.70:1、白字 2.61:1），
 //               要么每行摆一块告警色；描边把色相拆成「轮廓」，与 tint 标签（面积式）形态彻底分开。
 // 准入规则（2026-09 收口，别再扩散）：tint 只给用户标签。枚举类型是「结构」不是用户数据，逐个发彩色
@@ -48,15 +50,29 @@ export interface TypeChipProps {
   className?: string;
   /** hover 提示（完整语义；如推演标记的「推演起点（第3章）」——徽标文案本身是缩写） */
   title?: string;
+  /** 边框档（DESIGN.md §Colors `type-badge`「大纲层级双档」）：`default` = 红褐（卷 / 状态徽标 /
+   * 其它枚举类型），`soft` = 软灰（章 / 场——表达「下一级」，不是禁用）。**只给大纲层级徽标用** */
+  tone?: "default" | "soft";
 }
 
-/** 类型/分类徽标（**描边式**：浅底 + 1px 红褐边框 + 随主题翻转的墨字——强调靠轮廓）：
+/** 两档边框类（同属性互斥，调用点按层级选一个——不并存两条边框类） */
+const TYPE_CHIP_BORDER_CLASS: Record<NonNullable<TypeChipProps["tone"]>, string> = {
+  default: "border-type-badge-border",
+  soft: "border-type-badge-border-soft",
+};
+
+/** 类型/分类徽标（**描边式**：浅底 + 1px 边框 + 随主题翻转的墨字——强调靠轮廓）：
  * 卷/章/场、实体类型、端点类型、关系类型、回收站类型 */
-export function TypeChip({ children, className, title }: TypeChipProps) {
+export function TypeChip({ children, className, title, tone = "default" }: TypeChipProps) {
   return (
     <span
       title={title}
-      className={cn(CHIP_BASE, "border border-type-badge-border bg-accent text-foreground", className)}
+      className={cn(
+        CHIP_BASE,
+        "border bg-accent text-foreground",
+        TYPE_CHIP_BORDER_CLASS[tone],
+        className,
+      )}
     >
       {children}
     </span>

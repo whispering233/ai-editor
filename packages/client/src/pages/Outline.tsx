@@ -765,6 +765,7 @@ export default function Outline() {
               <span className="-ml-2 w-6 shrink-0" />
             )}
             <TypeChip
+              tone={node.type === "volume" ? "default" : "soft"}
               className={cn(
                 "shrink-0 justify-center tabular-nums",
                 numberLabel !== undefined ? "min-w-14" : "w-7",
@@ -932,6 +933,7 @@ export default function Outline() {
               {/* 新建行的类型徽标：编号未分配 → 只给枚举文案，但几何与建出后的编号徽标同宽
                   （卷/章 `min-w-14`、场 `w-7`，否则输入行与上面的行错位） */}
               <TypeChip
+                tone={creatingAt.type === "volume" ? "default" : "soft"}
                 className={cn(
                   "h-5 shrink-0 justify-center",
                   creatingAt.type === "scene" ? "w-7" : "min-w-14",

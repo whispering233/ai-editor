@@ -31,6 +31,19 @@ describe("TypeChip（类型/分类徽标：中性底，不参与 tint）", () =>
     expect(html).toContain("text-foreground");
     expect(html).not.toContain("bg-tag-");
     expect(html).not.toContain("bg-type-badge");
+    // 默认档不夹带软灰档（大纲层级双档互斥；别的枚举/状态徽标保持红褐）
+    expect(html).not.toContain("border-type-badge-border-soft");
+  });
+
+  it('tone="soft"：只换边框类（软灰）——默认红褐类不得并存', () => {
+    const html = renderToString(<TypeChip tone="soft">章</TypeChip>);
+    expect(html).toContain("border-type-badge-border-soft");
+    // `-soft` 是默认类的前缀，必须用负向前瞻才分得开两条边框类
+    expect(html).not.toMatch(/border-type-badge-border(?!-)/);
+    // 底 / 字 / 形状不变（软灰只是层级降一档，不是禁用态）
+    expect(html).toContain("bg-accent");
+    expect(html).toContain("text-foreground");
+    expect(html).not.toContain("bg-tag-");
   });
 
   it("形状类与 TagChip 一致（并排时基线/圆角/字号不漂移）", () => {

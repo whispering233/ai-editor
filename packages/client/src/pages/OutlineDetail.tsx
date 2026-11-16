@@ -292,7 +292,9 @@ export default function OutlineDetail({ nodeId }: { nodeId: string }) {
           /* 元信息行：类型徽标 + 更新时间 + 推演标记（排在「阅读进度」左侧，同大纲行）+ 阅读进度 */
           node ? (
             <div className="flex items-center gap-2 text-xs text-muted-foreground">
-              <TypeChip>{TYPE_LABEL[node.type]}</TypeChip>
+              <TypeChip tone={node.type === "volume" ? "default" : "soft"}>
+                {TYPE_LABEL[node.type]}
+              </TypeChip>
               <span>更新于 {formatTimestamp(node.updatedAt)}</span>
               {textLengthLabel !== null && <span className="tabular-nums">{textLengthLabel}</span>}
               {deductionMark !== undefined && (

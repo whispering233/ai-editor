@@ -16,7 +16,7 @@ import type { EntityType } from "@whispering233/ai-editor-shared";
 import { formatRelativeTime } from "@whispering233/ai-editor-shared";
 import { Alert, Button, Skeleton, Typography } from "antd";
 import { PageHeader } from "@/components/ui/page-header";
-import { TypeChip } from "@/components/ui/tag-chip";
+import { TypeChip, type TypeChipProps } from "@/components/ui/tag-chip";
 import { EmptyState } from "@/components/ui/empty-state";
 import { DeleteOutlined, RedoOutlined, ReloadOutlined } from "@ant-design/icons";
 import { ConfirmDialog } from "../components/outline/dialogs";
@@ -57,9 +57,14 @@ const NODE_TYPE_LABEL: Record<OutlineNodeType, string> = {
   scene: "场",
 };
 
-/** 类型徽标（实体/大纲类型共用；中性底，枚举不上 tint——DESIGN.md §Components `type-badge`） */
-function TypeBadge({ label }: { label: string }) {
-  return <TypeChip className="shrink-0">{label}</TypeChip>;
+/** 类型徽标（实体/大纲类型共用；中性底，枚举不上 tint——DESIGN.md §Components `type-badge`）。
+ * `tone` 只给大纲节点栏按层级选档（卷 default / 章·场 soft）；实体类型行恒默认红褐 */
+function TypeBadge({ label, tone }: { label: string; tone?: TypeChipProps["tone"] }) {
+  return (
+    <TypeChip tone={tone} className="shrink-0">
+      {label}
+    </TypeChip>
+  );
 }
 
 /** purge 确认目标（实体 / 节点） */
@@ -330,7 +335,10 @@ export default function Trash() {
                 {data.nodes.map((node) => (
                   <li key={node.id} className="px-3 py-2">
                     <div className="flex items-center gap-2">
-                      <TypeBadge label={NODE_TYPE_LABEL[node.type]} />
+                      <TypeBadge
+                        label={NODE_TYPE_LABEL[node.type]}
+                        tone={node.type === "volume" ? "default" : "soft"}
+                      />
                       <span className="min-w-0 flex-1 truncate text-sm" title={node.title}>
                         <Typography.Text ellipsis>{node.title}</Typography.Text>
                       </span>

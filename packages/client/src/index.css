@@ -70,8 +70,10 @@
   --color-heat-2: var(--heat-2);
   --color-heat-3: var(--heat-3);
   --color-heat-4: var(--heat-4);
-  /* 类型徽标边框色（描边式 chip，两态同值；底/字随主题翻转）；人物页「角色定位」字色（两态不同值）*/
+  /* 类型徽标边框色（描边式 chip；底/字随主题翻转；大纲层级双档：卷 = 默认红褐 / 章·场 = soft 软灰）；
+     人物页「角色定位」字色（两态不同值）*/
   --color-type-badge-border: var(--type-badge-border);
+  --color-type-badge-border-soft: var(--type-badge-border-soft);
   --color-character-role: var(--character-role);
 }
 
@@ -90,6 +92,9 @@
   /* 类型徽标边框（描边式 chip）：两态同一值——1px 线在灰底上需 ≥3:1 才可见（浅底 3.61 / 深底 3.34）。
      底与字不在这里定义：底 = --accent（surface-muted）、字 = --foreground，两者都随主题翻转 */
   --type-badge-border: #d94a4a;
+  /* 大纲层级第二档（章/场）：软灰表达「下一级」，不是禁用——两态取值见 DESIGN.md §Colors `type-badge`
+     （浅底 3.92:1 / 深底 4.84:1）；卷、状态徽标与其它枚举类型仍用上面的红褐 */
+  --type-badge-border-soft: #787671;
   /* 人物页左栏「角色定位」字色（浅色态加深到 4.93:1；深色态换回原橙 6.24:1）*/
   --character-role: #b4551f;
   /* 写作面纸张（DESIGN.md §Colors「写作面偏好」，浅色 = 登记值 colors.paper-cream / paper-warm）——
@@ -110,6 +115,8 @@
   --heat-3: #26a641;
   --heat-4: #39d353;
   --character-role: #ef8354;
+  /* 章节层级徽标软灰：深底上浅灰（vs 深底 4.84:1）；浅色态见 :root */
+  --type-badge-border-soft: rgba(255, 255, 255, 0.51);
   /* 纸张深色值 = 「暖色深色纸」推断值（DESIGN.md §Known gaps：「纸张深色值未与实机比对」）——
      观感不对只改这一处，别去动 blocknote.css 的引用 */
   --paper-cream: #221f19;

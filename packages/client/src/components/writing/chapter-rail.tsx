@@ -167,7 +167,10 @@ export function ChapterRail({
                   >
                     {/* 缩进占位：与卷行折叠箭头同几何（24px 盒） */}
                     <span className="-ml-2 w-6 shrink-0" aria-hidden />
-                    <TypeChip className="min-w-14 shrink-0 justify-center tabular-nums">
+                    <TypeChip
+                      tone="soft"
+                      className="min-w-14 shrink-0 justify-center tabular-nums"
+                    >
                       {row.label}
                     </TypeChip>
                     <span className="min-w-0 flex-1 truncate text-sm" title={row.title}>

@@ -100,6 +100,13 @@ describe("ChapterRail · 几何与行内容", () => {
     expect(chapterTag(html, "ch-2")).not.toContain("字");
   });
 
+  it("层级双档（DESIGN.md §Colors `type-badge`）：卷行徽标默认红褐、章行徽标软灰", () => {
+    const html = render();
+    // 4 个章行（含存量根级章 ch-3）/ 2 个卷行——`-soft` 是默认类的前缀，必须用负向前瞻分开数
+    expect((html.match(/border-type-badge-border-soft/g) ?? []).length).toBe(4);
+    expect((html.match(/border-type-badge-border(?!-)/g) ?? []).length).toBe(2);
+  });
+
   it("存量根级章在顶层就地显示（卷1 章之后、卷2 之前）", () => {
     const html = render();
     expect(html.indexOf("根级旧章")).toBeGreaterThan(html.indexOf("旧盟友"));
