@@ -23,8 +23,7 @@ import {
 } from "@whispering233/ai-editor-db";
 import type { ProjectFileConfig } from "@whispering233/ai-editor-shared";
 import {
-  hasAuthoringChangesSince,
-  hasLocalEditsSince,
+  hasFileChangesSince,
   hasUnbackedChanges,
   latestParseableBackupTime,
   setProjectTick,
@@ -325,6 +324,11 @@ describe("自动推送：开关与三条触发路径", () => {
     const beforeChat = putCount();
     await autoPushOnClose(project);
     expect(putCount()).toBe(beforeChat);
+
+    // 场景 D：只改项目规则（AGENTS.md）→ 关闭项目路径同样算创作变更（与定时路径同一把尺子）
+    changeCoveredByBackup(AGENTS_FILE_NAME);
+    await autoPushOnClose(project);
+    expect(putCount()).toBe(beforeChat + 1);
   });
 
   it("关闭项目：云盘不可达时不抛，只写 lastAutoPushError（关闭语义不受影响）", async () => {
@@ -420,35 +424,32 @@ describe("自动推送：开关与三条触发路径", () => {
     expect(putCount()).toBeGreaterThan(before); // 真的推了
   });
 
-describe("hasAuthoringChangesSince：创作数据口径（排除 sessions/、含 AGENTS.md）", () => {
-  it("只动 sessions/ → 两个口径都**不算**变更（会话是纯本地目录，不进包）", () => {
+describe("hasFileChangesSince：唯一一把尺子（三文件 + data.db-wal + AGENTS.md，排除 sessions/）", () => {
+  it("只动 sessions/ → **不算**变更（会话是纯本地目录，不进包）", () => {
     const base = makeBackupAndBaseline();
     writeAfter(join("sessions", "s2.jsonl"), base);
 
-    expect(hasAuthoringChangesSince(project, new Date(base))).toBe(false);
-    expect(hasLocalEditsSince(project, new Date(base))).toBe(false);
+    expect(hasFileChangesSince(project, new Date(base))).toBe(false);
   });
 
-  it("动 outline.json / data.db-wal → 两个口径都算变更", () => {
+  it("动 outline.json / data.db-wal → 算变更", () => {
     const base = makeBackupAndBaseline();
     changeOutlineAfter(base);
 
-    expect(hasLocalEditsSince(project, new Date(base))).toBe(true);
-    expect(hasAuthoringChangesSince(project, new Date(base))).toBe(true);
+    expect(hasFileChangesSince(project, new Date(base))).toBe(true);
   });
 
-  it("动 outline.json（三文件）→ 算创作变更（卡 12.7b：创作数据 = 三文件 + AGENTS.md）", () => {
-    const base = makeBackupAndBaseline();
-    changeOutlineAfter(base);
-
-    expect(hasAuthoringChangesSince(project, new Date(base))).toBe(true);
-  });
-
-  it("动 AGENTS.md（项目规则）→ 算创作变更", () => {
+  it("动 AGENTS.md（项目规则）→ 算变更（改规则等同写正文）", () => {
     const base = makeBackupAndBaseline();
     writeAfter(AGENTS_FILE_NAME, base);
 
-    expect(hasAuthoringChangesSince(project, new Date(base))).toBe(true);
+    expect(hasFileChangesSince(project, new Date(base))).toBe(true);
+  });
+
+  it("AGENTS.md 缺失（从未有规则）→ 不算变更（不能每 tick 都备份/推送）", () => {
+    const base = makeBackupAndBaseline();
+
+    expect(hasFileChangesSince(project, new Date(base))).toBe(false);
   });
 });
 

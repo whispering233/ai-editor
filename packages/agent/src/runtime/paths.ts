@@ -5,12 +5,14 @@
 
 import { join, resolve } from "node:path";
 import { getAgentDir } from "@earendil-works/pi-coding-agent";
+// 运行时常量只在 schemas 子路径（根入口是 type-only barrel）；单一事实源 = shared types/api.ts
+import { AGENTS_FILE_NAME } from "@whispering233/ai-editor-shared/schemas";
 
 /** 项目内会话目录名（纯本地目录：不进备份/导出/云端；server 侧遗留白名单与恢复口径共用同一常量） */
 export const SESSIONS_DIR_NAME = "sessions";
 
-/** 项目规则文件名（唯一持久化上下文通道；读取只认项目根这一个文件） */
-export const AGENTS_FILE_NAME = "AGENTS.md";
+/** 项目规则文件名（唯一持久化上下文通道；读取只认项目根这一个文件。re-export shared 的单一事实源） */
+export { AGENTS_FILE_NAME };
 
 /** pi agent dir（`~/.pi/agent`；调用方可覆盖——测试隔离依赖） */
 export function resolveAgentDir(override?: string): string {

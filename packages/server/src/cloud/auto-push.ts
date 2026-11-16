@@ -3,9 +3,9 @@
 // 语义（`docs/design/40-cloud-sync.md` §5 触发口径）与不变式：
 // - **自动推送不是无条件的**（不变式 10）：定时路径必须同时满足「2 小时节流」与「创作数据有变更」；
 //   关闭项目（「工作段结束」语义）与手动备份成功后各无条件推一次，且**不受节流**、**不推进节流基准**
-// - 变更判定分两档：定时路径看**创作数据**（`hasAuthoringChangesSince`——三文件 + `AGENTS.md`，
-//   改规则也值得推一次）；关闭项目路径看**三文件口径**（`hasLocalEditsSince`）——两档都**不含
-//   `sessions/`**（会话是纯本地目录、不进包，纯聊天不产生「有东西待推」）
+// - 变更判定**只有一把尺子**（2026-11 归一）：定时路径与关闭项目路径都调 `hasFileChangesSince`
+//   ——三文件 + `data.db-wal` + `AGENTS.md`（容差只给 `data.db`/`-wal`），**不含 `sessions/`**
+//  （会话是纯本地目录、不进包，纯聊天不产生「有东西待推」）。改项目规则从此等同写正文
 // - **失败一律不抛、不阻塞**：只写 `lastAutoPushError` + `console.error`（关闭项目那次尤其如此——
 //   网络差时一次 push 可能数秒，不能拖住关闭；`POST /project/close` / `/project/backup` 都是 fire-and-forget）
 // - **职责分离（卡 B）**：云端**永不创建备份**；定时与关闭项目路径在「有改动未进最新备份」
@@ -19,7 +19,7 @@
 // 依赖方向：本模块 → backup / cloud(state, sync)；**不得反向**（backup 模块不 import cloud，
 // tick 钩子由 middleware/project.ts 注册，见 backup.ts 的 `setProjectTick`）。
 
-import { hasAuthoringChangesSince, hasLocalEditsSince, hasUnbackedChanges } from "../backup.js";
+import { hasFileChangesSince, hasUnbackedChanges } from "../backup.js";
 import { HttpError } from "../middleware/error.js";
 import type { ProjectContext } from "../middleware/project.js";
 import { readAutoPush, readBookState, readWebdavConfig, writeBookState, type CloudBookState } from "./state.js";
@@ -117,12 +117,12 @@ export async function maybeAutoPush(project: ProjectContext, options: AutoPushOp
   //    云端永不创建备份（职责分离）——等下次备份 tick（频率开启时）自然补上，或用户主动同步时二选一。
   if (hasUnbackedChanges(project)) return false;
 
-  // ③ 变更（只看创作数据；`sessions/` 恒不参与）
+  // ③ 变更（创作数据口径；`sessions/` 恒不参与）
   const lastSyncAt = state?.lastSyncAt;
   const changed =
     typeof lastSyncAt !== "string" ||
     Number.isNaN(Date.parse(lastSyncAt)) ||
-    hasAuthoringChangesSince(project, new Date(lastSyncAt));
+    hasFileChangesSince(project, new Date(lastSyncAt));
   if (!changed) return false;
 
   return pushOnce(project, { writeThrottle: true, atMillis: now() });
@@ -130,7 +130,7 @@ export async function maybeAutoPush(project: ProjectContext, options: AutoPushOp
 
 /**
  * 关闭项目路径（`POST /project/close`，调用方 fire-and-forget）：
- * 「工作段结束」语义——**不受节流**、变更判定 = 三文件口径（`hasLocalEditsSince`；`sessions/` 不参与），
+ * 「工作段结束」语义——**不受节流**、变更判定与定时路径相同（`hasFileChangesSince`；`sessions/` 不参与），
  * 且**不推进 `lastAutoPushAt`**（与 2 小时节流无关）。失败只记状态 + 日志。
  *
  * 调用时机：`setCurrentProject(null)` 之前启动即可——推送只读 `.backups/` 与 `cloud.json`，
@@ -144,7 +144,7 @@ export async function autoPushOnClose(project: ProjectContext): Promise<void> {
   const changed =
     typeof lastSyncAt !== "string" ||
     Number.isNaN(Date.parse(lastSyncAt)) ||
-    hasLocalEditsSince(project, new Date(lastSyncAt));
+    hasFileChangesSince(project, new Date(lastSyncAt));
   if (!changed) return;
   await pushOnce(project, { writeThrottle: false, atMillis: Date.now() });
 }

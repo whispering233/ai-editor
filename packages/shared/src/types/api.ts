@@ -406,6 +406,17 @@ export type ProjectBackupRenameReq = z.infer<typeof projectBackupRenameReqSchema
  */
 export const PROJECT_EXPORT_FILE_NAMES = ["project.json", "outline.json", "data.db"] as const;
 
+/** 项目规则文件名（项目根目录，与 project.json 同级；唯一持久化上下文通道） */
+export const AGENTS_FILE_NAME = "AGENTS.md";
+
+/**
+ * 包内**可选**条目（与上面的「必需三文件」相对）：`AGENTS.md` = 项目规则，**存在才打包**，
+ * 故一个包内条目数为 3 或 4。备份 / 导出 / 云端同一个包；读侧按**严格镜像**——包内缺该条目
+ * = 该项目当时没有规则文件（旧包亦然），恢复 / 拉取 / 导入会删除本机规则（见
+ * `docs/design/40-cloud-sync.md` §3）。
+ */
+export const PROJECT_EXPORT_OPTIONAL_FILE_NAMES = [AGENTS_FILE_NAME] as const;
+
 /**
  * GET /api/v1/project/export：
  * - **响应为二进制 zip（application/zip），非 JSON 包裹**——「成功响应

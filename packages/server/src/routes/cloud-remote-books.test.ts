@@ -14,12 +14,15 @@ import { formatBackupFileName, generateProjectId, WORKSPACE_DIRS, type ProjectFi
 // 三文件名单单源（与备份管道逐字同一常量；根入口是 type-only barrel，运行时常量只在 schemas 子路径）
 import { PROJECT_EXPORT_FILE_NAMES } from "@whispering233/ai-editor-shared/schemas";
 import {
+  AGENTS_FILE_NAME,
   closeDatabase,
   DATA_DB_FILE_NAME,
   openDatabase,
+  readAgentsFile,
   readProjectFile,
   SCHEMA_VERSION,
   setUserVersion,
+  writeAgentsFile,
   writeOutlineFile,
   writeProjectFile,
 } from "@whispering233/ai-editor-db";
@@ -471,13 +474,14 @@ describe("POST /api/v1/cloud/import-book", () => {
     });
   });
 
-  it("导入后 lastSyncAt 基准取自三文件 mtime（非本地时钟）", async () => {
-    // 确定性用例：把本地时钟停在 2020，基准若取 `new Date()` 就会滞后于刚写下的三文件 → 本条红
+  it("导入后 lastSyncAt 基准取自三文件 + 规则（若有）的 mtime（非本地时钟）", async () => {
+    // 确定性用例：把本地时钟停在 2020，基准若取 `new Date()` 就会滞后于刚写下的文件 → 本条红
     vi.useFakeTimers({ toFake: ["Date"] });
     vi.setSystemTime(new Date("2020-01-01T00:00:00Z"));
     configureCloud();
     const dav = stubDav();
     const local = makeLocalBook("基准书");
+    writeAgentsFile(local.dir, "导入带来的规则"); // 包内带规则 → 包内多一个条目（3 或 4）
     const zip = makeBackupZip(local.dir);
     const dirName = `基准书-${local.id}`;
     seedCloudBook(dav, dirName, [zip]);
@@ -485,10 +489,11 @@ describe("POST /api/v1/cloud/import-book", () => {
 
     expect((await request("/api/v1/cloud/import-book", "POST", { dir_name: dirName })).status).toBe(200);
     const bookDir = importedBookDir("基准书");
+    expect(readAgentsFile(bookDir)).toBe("导入带来的规则"); // 规则随包搬进了新书
     const newestMtime = Math.max(
-      ...PROJECT_EXPORT_FILE_NAMES.map((name) => Math.ceil(statSync(join(bookDir, name)).mtimeMs)),
+      ...[...PROJECT_EXPORT_FILE_NAMES, AGENTS_FILE_NAME].map((name: string) => Math.ceil(statSync(join(bookDir, name)).mtimeMs)),
     );
-    // 基准早于任一自己刚写下的文件 ⇒ project.json/outline.json 的**严格**比较读成「本机有改动」
+    // 基准早于任一自己刚写下的文件 ⇒ project.json/outline.json/AGENTS.md 的**严格**比较读成「本机有改动」
     const state = readBookState(local.id);
     expect(Date.parse(state?.lastSyncAt as string)).toBeGreaterThanOrEqual(newestMtime);
 

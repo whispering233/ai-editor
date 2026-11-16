@@ -375,7 +375,8 @@ projectRoutes.post("/close", (c) => {
 // 流程：requireCurrentProject（无项目 → 409，与 /config 一致）→ 三文件存在性防御
 // （缺失任一 → 500：打开的项目三文件必然齐全，缺失即损坏，不导出半成品包）→
 // createBackupZip（B2.2 提取：wal_checkpoint 合并 WAL + zipSync 打包——与自动备份
-// 同款管道，条目名保持数据文件原名，import/restore 侧按固定名校验）。
+// 同款管道，条目名保持数据文件原名，import/restore 侧按固定名校验；包内条目 = 三文件
+// + **可选** AGENTS.md（项目规则，存在才含））。
 // key 存用户级配置，天然不入包。
 projectRoutes.get("/export", (c) => {
   const project = requireCurrentProject();
@@ -525,7 +526,7 @@ export function uniqueBookDir(root: string, name: string, kind: WorkspaceKind): 
 // （file=zip + name=书名）→ 书名校验（防路径逃逸）→ file.size 上限复核 →
 // fflate Unzip 流式解压（**解压总字节预算 200MB**——zip 炸弹防御；未知条目仅记名
 // 不解压；失败 400「不是有效的项目备份包」）→ **条目白名单**（只接受
-// PROJECT_EXPORT_FILE_NAMES 三文件名，非白名单条目即损坏/恶意包，严格拒绝——
+// PROJECT_EXPORT_FILE_NAMES 三文件名 + 可选 AGENTS.md，非白名单条目即损坏/恶意包，严格拒绝——
 // 逐名比对天然防 zip 路径穿越）→ 三文件齐全 → project.json/outline.json 顶层
 // → data.db 校验（**大小 > 0 → 打开成功 → user_version === SCHEMA_VERSION**；
 // 0 字节/非 SQLite → 400 坏包；版本不匹配 409 SCHEMA_VERSION_MISMATCH 按相对版本

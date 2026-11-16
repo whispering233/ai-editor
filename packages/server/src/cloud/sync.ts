@@ -21,7 +21,7 @@ import {
 } from "@whispering233/ai-editor-shared";
 import { HttpError } from "../middleware/error.js";
 import type { ProjectContext } from "../middleware/project.js";
-import { BACKUPS_DIR_NAME, hasLocalEditsSince, hasUnbackedChanges, restoreBackup } from "../backup.js";
+import { BACKUPS_DIR_NAME, hasFileChangesSince, hasUnbackedChanges, restoreBackup } from "../backup.js";
 import { readBookState, readWebdavConfig, writeBookState } from "./state.js";
 import { createWebdavClient, type DavEntry, type WebdavClient } from "./webdav.js";
 
@@ -267,9 +267,10 @@ export interface CloudSyncComputation {
 /**
  * 计算本机侧状态与三态（卡 5 定稿口径）：
  * - **「云端有更新」= 云端文件集合 ≠ `lastSeenCloudFiles`**（不看时间戳：跨机器时钟偏差会让 head 比较漏报，见设计文档 §3）
- * - **「本机有改动」= 创作数据 mtime 晚于 `lastSyncAt`**（`hasLocalEditsSince`，三文件 + `data.db-wal`；
- *   **不含 `.backups/`**——force 会把云端旧份写进那里；**也不含 `sessions/`**——会话不进包）。
- *   注意口径差异：`data.db`/`-wal` 比较带 1s 容差（checkpoint 会刷新其 mtime），其余**严格比较**
+ * - **「本机有改动」= 创作数据 mtime 晚于 `lastSyncAt`**（`hasFileChangesSince`——与备份 tick / 自动推送
+ *   同一把尺子：三文件 + `data.db-wal` + `AGENTS.md`；**不含 `.backups/`**——force 会把云端旧份写进那里；
+ *   **也不含 `sessions/`**——会话不进包）。
+ *   注意口径：`data.db`/`-wal` 比较带 1s 容差（checkpoint 会刷新其 mtime），其余（含 `AGENTS.md`）**严格比较**
  * - 自动推送的失败标记（`lastAutoPushError`）原样透出（面板显示一行，成功即消失；卡 7）
  * - 无同步记录（`lastSyncAt`/`lastSeenCloudFiles` 缺失）→ 云端有份即视为「有更新」、本机按「有改动」处理（保守）
  */
@@ -283,7 +284,7 @@ export function computeCloudSync(
   }
   const state = readBookState(project.config.id);
   const lastSyncAt = state?.lastSyncAt ?? null;
-  const dirty = lastSyncAt === null ? true : hasLocalEditsSince(project, new Date(lastSyncAt));
+  const dirty = lastSyncAt === null ? true : hasFileChangesSince(project, new Date(lastSyncAt));
   const local: CloudLocalState = {
     lastPushedFileName: state?.lastPushedFileName ?? null,
     lastSyncAt,

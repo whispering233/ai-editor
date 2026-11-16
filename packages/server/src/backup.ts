@@ -1,20 +1,21 @@
 // 自动备份与恢复（B2.2 + B2.5 + B2.6）
 //
 // 职责：
-// - 备份管道：三文件 + wal_checkpoint → .backups/<YYYYMMDD-HHmmssSSS>-<自动|手动>-<设备>[-<标签>]-人物N-设定N-章N.zip
+// - 备份管道：三文件 + 可选 AGENTS.md（存在才打包）+ wal_checkpoint → .backups/<YYYYMMDD-HHmmssSSS>-<自动|手动>-<设备>[-<标签>]-人物N-设定N-章N.zip
 // （复用导出打包；毫秒精度；类型段：手动备份落「手动」、自动备份/覆盖前快照落「自动」）
 // - 保留策略：每项目保留最近 MAX_BACKUPS_PER_PROJECT 份，超出删除最旧（含覆盖前快照；
 // **只有唯一命名格式的文件参与**——parseBackupFileName 解析，旧命名份留盘但不识别）
 // - 升级兜底：打开项目时若 .backups/ 有文件但无一可解析（旧命名残留）→ ensureParseableBackup
 // 立即生成一份新格式备份（不重命名旧份：旧份无设备/统计信息，硬补会谎报）
 // - 自动定时器：跟随当前项目生命周期（middleware/project.ts setCurrentProject 挂载启停），
-// 有变更才备份（三文件 + data.db-wal 伴生文件 mtime 与 .backups/ 最新备份时间比较，
-// 无状态、服务重启不丢；F2：WAL 模式写只刷新 -wal，补查避免漏检 data.db 变更）；
+// 有变更才备份（变更判定 = 三文件 + data.db-wal + AGENTS.md 与 .backups/ 最新备份时间比较，
+// 无状态、服务重启不丢；F2：WAL 模式写只刷新 -wal，补查避免漏检 data.db 变更；
+// **云端 dirty 与自动推送也用同一个 hasFileChangesSince**——一把尺子）；
 // 排程条件 = 自动备份频率开启（关闭 → 不排程：自动推送也挂在同一条 tick 链上（卡 7），
 // 但只推已存在的本地备份，频率关闭就没有新档可推）
-// - 备份包校验（restore 与 import 共用）：zip 解析/白名单/三文件齐全/顶层/
-// data.db user_version 三态分流（绝不静默重建）
-// - restore：fileName 白名单 → 覆盖前自动快照 → 校验 → 原子替换三文件
+// - 备份包校验（restore 与 import 共用）：zip 解析/白名单（三文件 + 可选 AGENTS.md + 遗留 sessions/）/
+// 三文件齐全/顶层/data.db user_version 三态分流（绝不静默重建）
+// - restore：fileName 白名单 → 覆盖前自动快照 → 校验 → 原子替换三文件 + 规则（包内无规则 → 删本机规则）
 // - rename：只改名称段（时间戳与 kind 保持）
 //
 // 依赖方向：本模块不依赖 middleware（避免循环依赖——定时器持有所调度项目引用，
@@ -25,7 +26,7 @@ import { tmpdir } from "node:os";
 import { basename, dirname, join } from "node:path";
 import { Unzip, UnzipInflate, zipSync } from "fflate";
 import { BACKUP_FREQUENCIES, DEFAULT_BACKUP_FREQUENCY_MINUTES, formatBackupFileName, MAX_BACKUPS_PER_PROJECT, MAX_BACKUP_NAME_LENGTH, parseBackupFileName, resolveWorkspaceKind, sanitizeBackupName, WORKSPACE_KIND_LABELS, type BackupKind, type BackupStats, type WorkspaceKind } from "@whispering233/ai-editor-shared";
-import { PROJECT_EXPORT_FILE_NAMES } from "@whispering233/ai-editor-shared/schemas";
+import { PROJECT_EXPORT_FILE_NAMES, PROJECT_EXPORT_OPTIONAL_FILE_NAMES } from "@whispering233/ai-editor-shared/schemas";
 import {
   AGENTS_FILE_NAME,
   closeDatabase,
@@ -61,10 +62,11 @@ export const BACKUPS_DIR_NAME = ".backups";
  */
 export const LEGACY_PACKED_DIR_NAMES: readonly string[] = [SESSIONS_DIR_NAME];
 
-/** 备份包条目白名单判定（三文件 + 遗留目录前缀——逐名比对天然防 zip 路径穿越；
+/** 备份包条目白名单判定（三文件 + 可选 AGENTS.md + 遗留目录前缀——逐名比对天然防 zip 路径穿越；
  * 目录子路径拒绝含 `..` 的条目防相对路径逃逸） */
 export function isAllowedBackupEntry(name: string): boolean {
   if ((PROJECT_EXPORT_FILE_NAMES as readonly string[]).includes(name)) return true;
+  if ((PROJECT_EXPORT_OPTIONAL_FILE_NAMES as readonly string[]).includes(name)) return true;
   return LEGACY_PACKED_DIR_NAMES.some((d) => name.startsWith(`${d}/`)) && !name.split("/").includes("..");
 }
 
@@ -136,9 +138,9 @@ function assertBackupFileNameFormat(fileName: string): NonNullable<ReturnType<ty
 /**
  * 打包当前项目为 zip（export 同款管道）：
  * wal_checkpoint(TRUNCATE) 把 WAL 合并回主文件（zip 内 data.db 为完整快照，
- * 无需附带 -wal/-shm）→ zipSync 打包（键序稳定：project.json → outline.json → data.db）。
- * **条目恰好三文件**——`sessions/` 是纯本地目录，不进任何 zip（备份/导出/云端）；
- * 正文与参考资料在 data.db 内。
+ * 无需附带 -wal/-shm）→ zipSync 打包（键序稳定：project.json → outline.json → data.db → AGENTS.md）。
+ * **条目 = 三文件 + 可选 `AGENTS.md`（存在才追加，包内条数 3 或 4）**——`sessions/` 是纯本地目录，
+ * 不进任何 zip（备份/导出/云端）；正文与参考资料在 data.db 内。
  * 三文件缺失任一 → 抛错（打开的项目三文件必然齐全，缺失即损坏，不导出半成品包）。
  */
 export function createBackupZip(project: ProjectContext): Uint8Array<ArrayBuffer> {
@@ -149,6 +151,12 @@ export function createBackupZip(project: ProjectContext): Uint8Array<ArrayBuffer
     [OUTLINE_FILE_NAME]: readFileSync(join(dir, OUTLINE_FILE_NAME)),
     [DATA_DB_FILE_NAME]: readFileSync(join(dir, DATA_DB_FILE_NAME)),
   };
+ // 项目规则是可选文件：不存在（ENOENT）= 该书没有规则，不多出空条目；其余读错照旧上抛
+  try {
+    zipEntries[AGENTS_FILE_NAME] = readFileSync(join(dir, AGENTS_FILE_NAME));
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code !== "ENOENT") throw err;
+  }
   return zipSync(zipEntries, { level: 6 });
 }
 
@@ -468,7 +476,7 @@ function unzipWithBudget(zipData: Uint8Array, budget: number): { entries: Record
   let total = 0;
   const unzipper = new Unzip((file) => {
     names.push(file.name);
-    if (!isAllowedBackupEntry(file.name)) return; // 未知条目不解压（白名单 = 三文件 + 遗留 sessions/）
+    if (!isAllowedBackupEntry(file.name)) return; // 未知条目不解压（白名单 = 三文件 + 可选 AGENTS.md + 遗留 sessions/）
     const chunks: Uint8Array[] = [];
     let size = 0;
     file.ondata = (err, chunk, final) => {
@@ -516,10 +524,10 @@ function isValidOutlineFile(parsed: unknown): boolean {
  * 备份包完整校验（自 import 校验顺序 3-7 提取，restore 与 import 共用）：
  *
  * 1. zip 解析（流式 + 解压总字节预算 200MB，zip 炸弹防御；失败 400「不是有效的项目备份包」）
- * 2. 条目白名单（只接受 PROJECT_EXPORT_FILE_NAMES 三文件名 + 遗留的 sessions/ 目录条目——
+ * 2. 条目白名单（PROJECT_EXPORT_FILE_NAMES 三文件名 + 可选 `AGENTS.md` + 遗留的 sessions/ 目录条目——
  * 存量旧包含 `sessions/**`，接受但**内容一律忽略**；新包不会再含它。
- * 逐名比对天然防 zip 路径穿越；**目录条目为非必需**——旧备份包无 sessions/ 仍可导入）
- * 3. 三文件齐全
+ * 逐名比对天然防 zip 路径穿越；**规则与目录条目为非必需**——旧包无它们仍可导入）
+ * 3. 三文件齐全（`AGENTS.md` 可选、**不校验内容**）
  * 4. 临时目录写入 → project.json / outline.json 顶层（JSON 损坏 / 不符 → 400）
  * 5. data.db 校验（**大小 > 0 → 打开成功 → user_version**）：
  * - v === SCHEMA_VERSION → 接受（现状）
@@ -542,7 +550,7 @@ export function validateBackupPackage(zipData: Uint8Array): {
    * **导入/云端导入按它落 `<kind 目录>/<名字>/`**（备份是权威，见 `docs/api/10-api-project.md` §import） */
   kind: WorkspaceKind;
 } {
- // 1/2. 解压 + 白名单（严格拒绝）：三数据文件名 + 遗留的 sessions/ 前缀
+ // 1/2. 解压 + 白名单（严格拒绝）：三数据文件名 + 可选 AGENTS.md + 遗留的 sessions/ 前缀
   let entries: Record<string, Uint8Array>;
   let entryNames: string[];
   try {
@@ -558,7 +566,7 @@ export function validateBackupPackage(zipData: Uint8Array): {
     throw new HttpError(
       400,
       "VALIDATION_ERROR",
-      `备份包含未知条目: ${unknown.join(", ")}（只接受 ${PROJECT_EXPORT_FILE_NAMES.join("/")}；存量旧包另可含 ${LEGACY_PACKED_DIR_NAMES.map((d) => `${d}/`).join("/")}，其内容被忽略）`,
+      `备份包含未知条目: ${unknown.join(", ")}（只接受 ${[...PROJECT_EXPORT_FILE_NAMES, ...PROJECT_EXPORT_OPTIONAL_FILE_NAMES].join("/")}；存量旧包另可含 ${LEGACY_PACKED_DIR_NAMES.map((d) => `${d}/`).join("/")}，其内容被忽略）`,
     );
   }
   const missing = PROJECT_EXPORT_FILE_NAMES.filter((f) => !(f in entries));
@@ -686,38 +694,24 @@ function latestBackupTime(backupsDir: string): Date | null {
 }
 
 /**
- * 三文件 + `data.db-wal` 伴生文件是否在 since 之后有变更（「任一 mtime 晚于上次备份时刻」）：
- * - 三文件：任一 mtime > since + 容差 → 有变更；**主文件缺失 → 视为有变更**（防御：不静默
- *   跳过，让备份管道报错暴露损坏）
+ * 「本机创作数据自 since 后有改动」——**唯一一把尺子**（备份 tick / 云端 `dirty` / 自动推送共用，
+ * `docs/design/40-cloud-sync.md` §5）：三文件 + `data.db-wal` + `AGENTS.md`。
+ *
+ * - 主文件（`project.json` / `outline.json` / `data.db`）缺失 → 视为有变更（防御：不静默跳过，
+ *   让备份管道报错暴露损坏）
  * - `data.db-wal`（F2）：普通写事务只追加 `-wal`、主文件 mtime 不变；**wal 缺失 ≠ 变更**
  *   （无未 checkpoint 的写，属正常状态，否则每次 tick 都误备份）
- * `sessions/` **不参与**（纯本地目录：不进包 ⇒ 写会话不该触发备份，见 `docs/design/40-cloud-sync.md` §3）。
- * mtime 判定容差见 BACKUP_CHANGE_TOLERANCE_MS 注释。
+ * - `AGENTS.md` 可选：**缺失（ENOENT）不算变更**（从未有规则的项目不该每 tick 都备份；
+ *   app 内清空规则是写空文件，不走删除）
+ * `sessions/` **不参与**（纯本地目录：不进包 ⇒ 写会话不该触发备份/推送）。
+ * 容差口径见 `hasChangesSince`（只给 `data.db` / `-wal`）。
  */
 export function hasFileChangesSince(project: ProjectContext, since: Date): boolean {
-  const limit = since.getTime() + BACKUP_CHANGE_TOLERANCE_MS;
-  for (const name of [PROJECT_FILE_NAME, OUTLINE_FILE_NAME, DATA_DB_FILE_NAME]) {
-    try {
-      if (statSync(join(project.root, name)).mtimeMs > limit) return true;
-    } catch {
-      return true;
-    }
-  }
- // data.db-wal 伴生文件（F2）：wal 存在且 mtime 晚于 limit → 有变更；
- // wal 缺失（ENOENT）= 无未 checkpoint 的写，属正常状态，不视为变更；其余错误仍防御
- // 视为有变更（与主文件缺失语义一致）
-  const walPath = join(project.root, `${DATA_DB_FILE_NAME}-wal`);
-  try {
-    if (statSync(walPath).mtimeMs > limit) return true;
-  } catch (err) {
-    if ((err as NodeJS.ErrnoException).code !== "ENOENT") return true;
-  }
- // sessions/ 不参与变更判定（纯本地目录）
-  return false;
+  return hasChangesSince(project, since, { extraFiles: [AGENTS_FILE_NAME] });
 }
 
 /**
- * mtime 变更判定内核（`hasLocalEditsSince` 与 `hasAuthoringChangesSince` 共用，避免两份漂移）：
+ * mtime 变更判定内核（唯一调用方 `hasFileChangesSince`）：
  * 三文件（`data.db`/`-wal` 带 `BACKUP_CHANGE_TOLERANCE_MS` 容差，其余**严格** `>`）→ 额外单文件
  * （`scope.extraFiles`，严格；ENOENT = 该可选文件不存在，不算变更）。
  *
@@ -761,33 +755,6 @@ function hasChangesSince(
 }
 
 /**
- * 「本机创作数据自 since 后有改动」判定（**云端三态专用**，与备份定时器的 `hasFileChangesSince`
- * 口径刻意不同——见 `docs/design/40-cloud-sync.md` §3）：
- *
- * - `project.json` / `outline.json`：
- *   **严格** `mtime > since`。这些文件不会被备份/同步管道写入，容差在这里只有代价：
- *   `lastSyncAt` 是**不推进的固定基准**（只在下一次同步时前移），容差会把 `[since, since+1s]`
- *   内的本机改动**永久漏判**（状态误报「已同步」，用户可能因此拉取覆盖它）。
- * - `data.db` / `data.db-wal`：保留 `BACKUP_CHANGE_TOLERANCE_MS` 容差——备份/推送管道内的
- *   `wal_checkpoint` 会把 `data.db` mtime 刷到同步时刻，严格比较会自激误判「永远有改动」。
- * - `sessions/` **不参与**（纯本地目录，不进包 ⇒ 纯聊天不产生「有东西待推」）。
- */
-export function hasLocalEditsSince(project: ProjectContext, since: Date): boolean {
-  return hasChangesSince(project, since, {});
-}
-
-/**
- * 「本机**创作数据**自 since 后有改动」判定（**自动推送专用**，卡 7；`docs/design/40-cloud-sync.md` §5）：
- * 与 `hasLocalEditsSince` 同一套 mtime 口径（两者都不含 `sessions/`——会话是纯本地目录、不进包），
- * 但**额外纳入 `AGENTS.md`**（项目规则也是创作数据，改规则值得推一次）。
- *
- * 创作数据本体 = 三文件（正文/参考资料在 `data.db` 内）。
- */
-export function hasAuthoringChangesSince(project: ProjectContext, since: Date): boolean {
-  return hasChangesSince(project, since, { extraFiles: [AGENTS_FILE_NAME] });
-}
-
-/**
  * 最新一份**可解析**备份的时间（旧命名不算；无 → null）。`hasUnbackedChanges` 的基准，
  * 也用于「升级兜底后是否已有新格式档」的判断。
  */
@@ -797,8 +764,8 @@ export function latestParseableBackupTime(project: ProjectContext): Date | null 
 
 /**
  * 「本机有改动未进最新备份」（卡 B，`GET /cloud/status` 的 `local.backupStale`）：
- * 最新一份本地备份的时间早于最新创作改动（三文件口径同 `hasLocalEditsSince`，
- * `data.db`/`-wal` 带 1s 容差）。**没有任何可解析备份 → true**
+ * 最新一份本地备份的时间早于最新创作改动（口径 = `hasFileChangesSince`，与备份 tick / 自动推送同一把尺子）。
+ * **没有任何可解析备份 → true**
  *（那时推送会 404「没有可推送的备份」，语义上也是「还没有能代表当前的档」）。
  *
  * 用途：自动推送的守卫（有未备份改动时跳过，不做「按需备份」——备份归本地、云端只是镜像）。
@@ -806,7 +773,7 @@ export function latestParseableBackupTime(project: ProjectContext): Date | null 
 export function hasUnbackedChanges(project: ProjectContext): boolean {
   const latest = latestParseableBackupTime(project);
   if (latest === null) return true;
-  return hasLocalEditsSince(project, latest);
+  return hasFileChangesSince(project, latest);
 }
 
 /**
@@ -814,9 +781,9 @@ export function hasUnbackedChanges(project: ProjectContext): boolean {
  *
  * 1. 频率判定：关闭（null/0/非枚举）→ 直接返回 false（null/0 = 关闭；
  * B2.1 疑问裁决 2：读侧非枚举值按关闭处理，不开启自动备份）
- * 2. 变更判定：`.backups/` 为空（无上次备份时刻）→ 需要备份；否则三文件 +
- * data.db-wal 伴生文件（F2：WAL 模式写只刷新 -wal）mtime 均早于
- * 「上次备份时刻 + 容差」→ 跳过（无变更不产生垃圾备份）
+ * 2. 变更判定：`.backups/` 为空（无上次备份时刻）→ 需要备份；否则 `hasFileChangesSince`
+ *（三文件 + `data.db-wal` + `AGENTS.md`：WAL 模式写只刷新 -wal）→ 无变更 → 跳过
+ *（无变更不产生垃圾备份）
  * 3. 有变更 → writeBackup（含保留策略清理）
  *
  * @returns 本次是否生成了备份
@@ -906,7 +873,7 @@ function scheduleNext(project: ProjectContext): void {
 // ============ 覆盖恢复共享管道（restore / import 覆盖 / 新书导入共用，B2.3 提取） ============
 
 /**
- * 用备份包内容替换目录三文件（restore 与 import 分流共用，B2.3 提取）：
+ * 用备份包内容替换目录三文件 + 项目规则（restore 与 import 分流共用，B2.3 提取）：
  *
  * - project.json：JSON 解析后按 opts 覆盖——`keepId`（id 是书的身份，覆盖恢复以它为
  * 唯一 key；备份包可能来自异项目，防御性强制保留）、`name`（「目录名 = 书名」
@@ -916,6 +883,9 @@ function scheduleNext(project: ProjectContext): void {
  * 其余字段随备份替换。序列化走 2 空格缩进 + 尾换行
  * （与 db 包 writeJsonAtomic 同款格式惯例）
  * - outline.json / data.db：原样字节原子写
+ * - 项目规则（`AGENTS.md`）：**严格镜像**——包内有该条目 → 原子写；包内没有 → **删除本机规则文件**
+ *（ENOENT 容忍：本机本就没有）。包内缺 = 该项目当时没有规则（旧包亦然），覆盖前自动快照留有
+ * 旧规则可回滚（`docs/design/40-cloud-sync.md` §4）
  *
  * **`sessions/` 一律不碰**（不写不删）：它是纯本地目录，包内的存量 `sessions/**` 条目接受但忽略。
  *
@@ -934,7 +904,7 @@ export function writeProjectFilesFromBackup(
 ): void {
  // 替换顺序：JSON 两文件在前，data.db 最后——db 替换失败时其余已替换
  // （校验已通过，文件内容本身有效，部分替换可经重新恢复修复）；replaced 清单供失败日志使用（P1-2）
-  const targetNames = [PROJECT_FILE_NAME, OUTLINE_FILE_NAME, DATA_DB_FILE_NAME];
+  const targetNames = [PROJECT_FILE_NAME, OUTLINE_FILE_NAME, DATA_DB_FILE_NAME, AGENTS_FILE_NAME];
   const replaced: string[] = [];
   try {
     const parsedProject = JSON.parse(new TextDecoder().decode(entries[PROJECT_FILE_NAME])) as Record<string, unknown>;
@@ -950,6 +920,18 @@ export function writeProjectFilesFromBackup(
     replaced.push(OUTLINE_FILE_NAME);
     writeFileAtomic(join(dir, DATA_DB_FILE_NAME), entries[DATA_DB_FILE_NAME]);
     replaced.push(DATA_DB_FILE_NAME);
+ // 项目规则严格镜像（放在三文件之后：它是最容易因权限/占位失败的一步，放最后让三文件先落定）
+    const agents = entries[AGENTS_FILE_NAME];
+    if (agents !== undefined) {
+      writeFileAtomic(join(dir, AGENTS_FILE_NAME), agents);
+    } else {
+      try {
+        unlinkSync(join(dir, AGENTS_FILE_NAME));
+      } catch (err) {
+        if ((err as NodeJS.ErrnoException).code !== "ENOENT") throw err;
+      }
+    }
+    replaced.push(AGENTS_FILE_NAME);
   } catch (err) {
  // P1-2：失败路径日志（对齐「记日志暴露部分替换」承诺）——已替换/未替换文件清单 + 覆盖前快照名
     const notReplaced = targetNames.filter((n) => !replaced.includes(n));
@@ -996,7 +978,7 @@ export function migratePromptToAgents(project: ProjectContext): void {
  *
  * 1. 释放当前 data.db 连接（替换 data.db 前必须；顺带清理陈旧 WAL/SHM 残留——
  * 替换后新库不得复用旧 WAL）
- * 2. writeProjectFilesFromBackup 原子替换三文件（保留当前项目 id；**传入 `opts.name` / `opts.kind` 时才归一**——覆盖类入口的 kind 已由 `assertBackupKindMatches` 先校验相等，故归一只是把旧包缺的 `kind` 补写为目标值）
+ * 2. writeProjectFilesFromBackup 原子替换三文件 + 项目规则（保留当前项目 id；**传入 `opts.name` / `opts.kind` 时才归一**——覆盖类入口的 kind 已由 `assertBackupKindMatches` 先校验相等，故归一只是把旧包缺的 `kind` 补写为目标值）
  * 3. 重连 + 版本对齐（v < 当前且有迁移路径 → 前向迁移，v === 当前 → 原样。
  * 校验阶段已拒绝 v > 当前与无路径旧版，此处不会触发重建/拒绝）
  * 4. 同步内存 config（刚原子写入，readProjectFile 必非 null；损坏抛错由 catch 恢复连接）
@@ -1092,7 +1074,7 @@ export function snapshotBookDir(dir: string): BackupFileInfo {
 
 /**
  * 原子写任意字节（同款流程：写同目录临时文件 → fsync → rename 覆盖；
- * 供 restore/import 替换三文件用——JSON 版见 db 包 writeJsonAtomic，此处为通用 bytes 版）。
+ * 供 restore/import 替换三文件与规则用——JSON 版见 db 包 writeJsonAtomic，此处为通用 bytes 版）。
  * 失败保留临时文件供排查，原文件未被触碰。
  */
 function writeFileAtomic(filePath: string, data: Uint8Array): void {
@@ -1130,14 +1112,15 @@ function writeFileAtomic(filePath: string, data: Uint8Array): void {
  * `<YYYYMMDD-HHmmssSSS>-<自动|手动>-<设备>[-<标签>]-人物N-设定N-章N.zip`（shared parseBackupFileName，
  * ^$ 锚定 + 设备/标签部分拒绝 /\\，天然防路径分隔符与 `..` 穿越；旧命名不可解析 ⇒ 一并被拒）；
  * 格式合法但文件不存在 → 404
- * 2. **覆盖前自动快照**：当前三文件打包为快照存入 .backups/（复用备份管道，
+ * 2. **覆盖前自动快照**：当前三文件 + 规则（若有）打包为快照存入 .backups/（复用备份管道，
  * 就是普通备份文件，自然参与保留策略——后悔药）
  * 3. 备份包校验（validateBackupPackage：zip/白名单//user_version 三态，
  * 拒绝时数据零触碰——校验通过前不触碰任何数据文件）
  * 4. **工作区类型校验**（assertBackupKindMatches：包内 kind ≠ 当前工作区 kind → 400
  * `KIND_MISMATCH`，不动三文件内容；顺序在覆盖前快照之后，见 `docs/api/20-api-backup.md`）
  * 5. **原子替换**：closeDatabase（释放当前连接）→ 三文件逐文件原子写
- * （临时文件 + rename；data.db 顺带清理 -wal/-shm 残留）→ 重新 openDatabase
+ * （临时文件 + rename；data.db 顺带清理 -wal/-shm 残留）+ 项目规则**严格镜像**（包内有 → 原子写；
+ * 包内无 → 删本机规则）→ 重新 openDatabase
  * + ensureSchemaCompatible（校验阶段已保证 v ≤ 当前且有迁移路径或匹配——
  * v < 有路径时此处前向迁移）→ project.config 同步新 project.json
  * 6. 项目 id 保留（当前项目引用不变）；重启定时器（频率可能随备份变化）
@@ -1170,7 +1153,7 @@ export function restoreBackup(
   const currentKind = resolveWorkspaceKind(project.config.kind);
   assertBackupKindMatches(kind, currentKind);
 
- // 5. 覆盖管道（B2.3 提取，import 覆盖复用）：原子替换三文件（保留当前 id）+
+ // 5. 覆盖管道（B2.3 提取，import 覆盖复用）：原子替换三文件 + 规则（保留当前 id）+
  // 重连 data.db + 同步 config + 重启定时器。
  // name 归一为当前目录名（审核裁决：与 import 覆盖一致，维持「目录名 = 书名」
  // 不变式——id 是身份、name 是展示名；改名需求走 /project/rename）；

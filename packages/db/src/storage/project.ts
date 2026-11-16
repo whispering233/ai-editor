@@ -9,13 +9,15 @@ import { join } from "node:path";
 import { statSync } from "node:fs";
 import type { ProjectFileConfig } from "@whispering233/ai-editor-shared";
 import { resolveWorkspaceKind } from "@whispering233/ai-editor-shared";
+// 运行时常量只在 schemas 子路径（根入口是 type-only barrel）；单一事实源 = shared types/api.ts
+import { AGENTS_FILE_NAME } from "@whispering233/ai-editor-shared/schemas";
 import { readTextFileOrNull, writeJsonAtomic, writeTextAtomic } from "./atomic.js";
 
 /** project.json 文件名（项目根目录） */
 export const PROJECT_FILE_NAME = "project.json";
 
-/** 文件名（项目规则文件，项目根目录，与 project.json 同级） */
-export const AGENTS_FILE_NAME = "AGENTS.md";
+/** 项目规则文件名（re-export shared 的单一事实源；值 = `AGENTS.md`，项目根目录） */
+export { AGENTS_FILE_NAME };
 
 /**
  * 读取 project.json。

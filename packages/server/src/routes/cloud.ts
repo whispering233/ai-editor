@@ -14,6 +14,7 @@ import {
   cloudPullReqSchema,
   cloudPushReqSchema,
   PROJECT_EXPORT_FILE_NAMES,
+  PROJECT_EXPORT_OPTIONAL_FILE_NAMES,
 } from "@whispering233/ai-editor-shared/schemas";
 import type {
   CloudConfigPutResult,
@@ -273,20 +274,22 @@ function parseCloudBookDirName(dirName: string): { name: string | null; projectI
 }
 
 /**
- * 导入完成时的同步基准（写进 `cloud.json` 的 `lastSyncAt`）= `max(now, 刚写下的三文件 mtime 向上取整到毫秒)`。
+ * 导入完成时的同步基准（写进 `cloud.json` 的 `lastSyncAt`）= `max(now, 刚写下的三文件 + 规则（若有）
+ * 的 mtime 向上取整到毫秒)`。
  *
  * 为何不直接 `new Date()`：文件系统 mtime 是**亚毫秒**精度，而 `new Date()` 只到毫秒——同一毫秒内
- * 写下的文件会被 `hasLocalEditsSince` 的**严格**比较（project.json/outline.json 无容差）读成
- * 「本机有改动」，于是刚导入完查状态就是 `local-ahead`（实测同毫秒写入下约 1/6 概率）。
- * 基准不由自己写入的文件决定，才符合「刚导入 = 已同步」的语义。
+ * 写下的文件会被 `hasFileChangesSince` 的**严格**比较（project.json/outline.json/AGENTS.md 无容差）
+ * 读成「本机有改动」，于是刚导入完查状态就是 `local-ahead`（实测同毫秒写入下约 1/6 概率）。
+ * 基准不由自己写入的文件决定，才符合「刚导入 = 已同步」的语义。规则文件**存在才取**（包内没规则
+ * → 本机也没有这个文件，stat 失败跳过）。
  */
 function importSyncBaseline(bookDir: string): string {
   let baseline = Date.now();
-  for (const name of PROJECT_EXPORT_FILE_NAMES) {
+  for (const name of [...PROJECT_EXPORT_FILE_NAMES, ...PROJECT_EXPORT_OPTIONAL_FILE_NAMES]) {
     try {
       baseline = Math.max(baseline, Math.ceil(statSync(join(bookDir, name)).mtimeMs));
     } catch {
-      continue; // 三文件刚写完，stat 失败不改变基准（基准只影响三态判定的灵敏度）
+      continue; // 文件不存在（三文件刚写完/包内无规则）不改变基准（基准只影响三态判定的灵敏度）
     }
   }
   return new Date(baseline).toISOString();

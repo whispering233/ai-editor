@@ -26,6 +26,7 @@ import {
   readProjectFile,
   SCHEMA_VERSION,
   setUserVersion,
+  writeAgentsFile,
   writeOutlineFile,
   writeProjectFile,
 } from "@whispering233/ai-editor-db";
@@ -1451,7 +1452,7 @@ describe("自动定时器（open 启 / close 停 / 切换重启）", () => {
 // ============ sessions/ 是纯本地目录（不进任何 zip、恢复/导入不触碰） ============
 
 describe("sessions/ 纯本地目录", () => {
-  it("createBackupZip 恰好三文件：有/无 sessions/ 都不产生 sessions 条目", async () => {
+  it("createBackupZip 无规则 → 恰好三文件：有/无 sessions/ 都不产生 sessions 条目", async () => {
     const dir = makeTmpDir();
     initProjectDir(dir, makeConfig("proj-sess1", "会话备份"));
     await openProject(dir);
@@ -1469,7 +1470,7 @@ describe("sessions/ 纯本地目录", () => {
     expect(names2).toEqual(["data.db", "outline.json", "project.json"]);
   });
 
-  it("GET /project/export 与原样管道一致：导出 zip 条目同样只有三文件", async () => {
+  it("GET /project/export 与原样管道一致：无规则时导出 zip 条目同样只有三文件", async () => {
     const dir = makeTmpDir();
     initProjectDir(dir, makeConfig("proj-sess-export", "导出"));
     const app = await openProject(dir);
@@ -1555,6 +1556,12 @@ describe("sessions/ 纯本地目录", () => {
     expect(isAllowedBackupEntry("sessions/a/../../evil.jsonl")).toBe(false);
   });
 
+  it("白名单：AGENTS.md（可选条目）放行；其他项目根文件仍拒绝", () => {
+    expect(isAllowedBackupEntry(AGENTS_FILE_NAME)).toBe(true);
+    expect(isAllowedBackupEntry("agents.md")).toBe(false); // 逐字比对（不忽略大小写）
+    expect(isAllowedBackupEntry("AGENTS.md.bak")).toBe(false);
+  });
+
   it("validateBackupPackage：sessions/../ 穿越条目 → 400 未知条目拒绝", () => {
     const dir = makeTmpDir();
     initProjectDir(dir, makeConfig("proj-sess5", "坏包"));
@@ -1565,6 +1572,92 @@ describe("sessions/ 纯本地目录", () => {
       "sessions/../evil.jsonl": new TextEncoder().encode("x"),
     });
     expect(() => validateBackupPackage(zip)).toThrowError(/未知条目/);
+  });
+});
+
+// ============ 项目规则随包搬运（AGENTS.md 存在才打包；恢复严格镜像） ============
+
+describe("项目规则随包搬运（AGENTS.md）", () => {
+  it("createBackupZip：规则存在 → 4 条目（含规则内容）；不存在 → 3 条目", async () => {
+    const dir = makeTmpDir();
+    initProjectDir(dir, makeConfig("proj-rule-pack", "规则打包"));
+    await openProject(dir);
+    const project = getCurrentProject() as NonNullable<ReturnType<typeof getCurrentProject>>;
+
+    expect(Object.keys(unzipSync(createBackupZip(project))).sort()).toEqual([DATA_DB_FILE_NAME, OUTLINE_FILE_NAME, PROJECT_FILE_NAME].sort());
+
+    writeAgentsFile(dir, "规则正文");
+    const entries = unzipSync(createBackupZip(project));
+    expect(Object.keys(entries).sort()).toEqual([AGENTS_FILE_NAME, DATA_DB_FILE_NAME, OUTLINE_FILE_NAME, PROJECT_FILE_NAME].sort());
+    expect(new TextDecoder().decode(entries[AGENTS_FILE_NAME])).toBe("规则正文");
+  });
+
+  it("restore 旧包（包内无 AGENTS.md）→ 删除本机规则文件（严格镜像）", async () => {
+    const dir = makeTmpDir();
+    initProjectDir(dir, makeConfig("proj-rule-old", "旧包无规则"));
+    writeAgentsFile(dir, "本机独有规则");
+    const app = await openProject(dir);
+    const fileName = fakeBackupName(11);
+    mkdirSync(join(dir, BACKUPS_DIR_NAME), { recursive: true });
+    writeFileSync(join(dir, BACKUPS_DIR_NAME, fileName), bookZipBytes(dir)); // 三文件（不含规则）
+
+    const res = await app.request("/api/v1/project/backup/restore", {
+      method: "POST",
+      headers: HOST_HEADERS,
+      body: JSON.stringify({ fileName }),
+    });
+
+    expect(res.status).toBe(200);
+    expect(readAgentsFile(dir)).toBeNull();
+  });
+
+  it("restore 含规则的包 → 项目规则被覆盖为包内版本（无规则包不涉本机时也不报错）", async () => {
+ // 源项目（有规则） vs 目标项目（有另一份规则）：同一 project id（覆盖恢复按 id 命中）
+    const src = makeTmpDir();
+    initProjectDir(src, makeConfig("proj-rule-new", "源书"));
+    writeAgentsFile(src, "包内规则\n");
+    const dst = makeTmpDir();
+    initProjectDir(dst, makeConfig("proj-rule-new", "目标书"));
+    writeAgentsFile(dst, "本机旧规则");
+    const app = await openProject(dst);
+    const fileName = fakeBackupName(12);
+    mkdirSync(join(dst, BACKUPS_DIR_NAME), { recursive: true });
+    writeFileSync(
+      join(dst, BACKUPS_DIR_NAME, fileName),
+      zipSync({
+        [PROJECT_FILE_NAME]: readFileSync(join(src, PROJECT_FILE_NAME)),
+        [OUTLINE_FILE_NAME]: readFileSync(join(src, OUTLINE_FILE_NAME)),
+        [DATA_DB_FILE_NAME]: readFileSync(join(src, DATA_DB_FILE_NAME)),
+        [AGENTS_FILE_NAME]: readFileSync(join(src, AGENTS_FILE_NAME)),
+      }),
+    );
+
+    const res = await app.request("/api/v1/project/backup/restore", {
+      method: "POST",
+      headers: HOST_HEADERS,
+      body: JSON.stringify({ fileName }),
+    });
+
+    expect(res.status).toBe(200);
+    expect(readAgentsFile(dst)).toBe("包内规则\n");
+  });
+
+  it("包内无规则且本机也无规则（ENOENT 容忍）→ 恢复不报错", async () => {
+    const dir = makeTmpDir();
+    initProjectDir(dir, makeConfig("proj-rule-none", "双方无规则"));
+    const app = await openProject(dir);
+    const fileName = fakeBackupName(13);
+    mkdirSync(join(dir, BACKUPS_DIR_NAME), { recursive: true });
+    writeFileSync(join(dir, BACKUPS_DIR_NAME, fileName), bookZipBytes(dir));
+
+    const res = await app.request("/api/v1/project/backup/restore", {
+      method: "POST",
+      headers: HOST_HEADERS,
+      body: JSON.stringify({ fileName }),
+    });
+
+    expect(res.status).toBe(200);
+    expect(readAgentsFile(dir)).toBeNull();
   });
 });
 

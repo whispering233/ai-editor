@@ -10,6 +10,7 @@ import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { unzipSync, zipSync } from "fflate";
 import {
+  AGENTS_FILE_NAME,
   DATA_DB_FILE_NAME,
   OUTLINE_FILE_NAME,
   PROJECT_FILE_NAME,
@@ -754,6 +755,18 @@ describe("computeCloudSync：三态判定（集合基准 + 本机 mtime，不含
     const out = computeCloudSync(project, true, files([]));
     expect(out.local?.dirty).toBe(false);
     expect(out.state).toBe("synced");
+  });
+
+  it("AGENTS.md 改动**算**本机改动（项目规则也是创作数据，与备份 tick / 自动推送同一把尺子）", () => {
+    const base = new Date(Date.now() + 10_000); // 基准放在未来：夹具文件都算「已同步」
+    writeBookState(project.config.id, { lastSyncAt: base.toISOString(), lastSeenCloudFiles: [] });
+    const agents = join(project.root, AGENTS_FILE_NAME);
+    writeFile(agents, "新的项目规则");
+    const after = new Date(base.getTime() + 500); // 落在 data.db 的 1s 容差窗口内：只有规则严格比较能抓到
+    utimesSync(agents, after, after);
+
+    expect(computeCloudSync(project, true, files([])).local?.dirty).toBe(true);
+    expect(computeCloudSync(project, true, files([])).state).toBe("local-ahead");
   });
 
   it("容差给 data.db / -wal：其 mtime 落在窗口内不算 dirty（防 checkpoint 自激）", () => {
