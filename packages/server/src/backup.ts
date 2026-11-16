@@ -5,7 +5,7 @@
 // （小说带尾部统计段；练习区没有人物/设定/章，到标签为止）
 // （复用导出打包；毫秒精度；类型段：手动备份落「手动」、自动备份/覆盖前快照落「自动」）
 // - 保留策略：每项目保留最近 MAX_BACKUPS_PER_PROJECT 份，超出删除最旧（含覆盖前快照；
-// **只有唯一命名格式的文件参与**——parseBackupFileName 解析，旧命名份留盘但不识别）
+// **只有可解析命名格式（两种形态）的文件参与**——parseBackupFileName 解析，旧命名份留盘但不识别）
 // - 升级兜底：打开项目时若 .backups/ 有文件但无一可解析（旧命名残留）→ ensureParseableBackup
 // 立即生成一份新格式备份（不重命名旧份：旧份无设备/统计信息，硬补会谎报）
 // - 自动定时器：跟随当前项目生命周期（middleware/project.ts setCurrentProject 挂载启停），
@@ -290,7 +290,7 @@ export function ensureParseableBackup(project: ProjectContext): boolean {
  * 重命名备份（POST /project/backup/rename）：**只改名称段**，时间戳/类型/设备保持（统计段仅小说保留）。
  *
  * 
- * 1. fileName 白名单校验：仅接受 parseBackupFileName 可解析的唯一命名格式
+ * 1. fileName 白名单校验：仅接受 parseBackupFileName 可解析的命名格式（两种形态）
  * `<YYYYMMDD-HHmmssSSS>-<自动|手动>-<设备>[-<标签>][-人物N-设定N-章N].zip`（^$ 锚定 + 设备/标签
  * 部分拒绝 /\\，天然防路径分隔符与 `..` 穿越；旧命名不可解析 ⇒ 无从改名）→ 非法 400 VALIDATION_ERROR
  * 2. 文件不存在 → 404 VALIDATION_ERROR
@@ -1113,7 +1113,7 @@ function writeFileAtomic(filePath: string, data: Uint8Array): void {
 /**
  * 从备份恢复当前项目（POST /project/backup/restore）：
  *
- * 1. fileName 白名单校验：仅允许 `.backups/` 下的**唯一命名格式**
+ * 1. fileName 白名单校验：仅允许 `.backups/` 下的**可解析命名格式（两种形态）**
  * `<YYYYMMDD-HHmmssSSS>-<自动|手动>-<设备>[-<标签>][-人物N-设定N-章N].zip`（shared parseBackupFileName，
  * ^$ 锚定 + 设备/标签部分拒绝 /\\，天然防路径分隔符与 `..` 穿越；旧命名不可解析 ⇒ 一并被拒）；
  * 格式合法但文件不存在 → 404

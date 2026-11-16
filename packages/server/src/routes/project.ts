@@ -834,7 +834,7 @@ projectRoutes.post("/backup", async (c) => {
 // POST /api/v1/project/backup/rename —— 重命名备份（只改名称段，时间戳与 kind 保持）
 //
 // 请求体（projectBackupRenameReqSchema）：
-// - fileName 必填：.backups/ 下唯一命名格式（parseBackupFileName 白名单校验 → 非法 400）
+// - fileName 必填：.backups/ 下可解析命名格式（parseBackupFileName 白名单校验 → 非法 400）
 // - name 可选：非空 → sanitizeBackupName 规范化（非法 400）；空串/缺省 → 清除名称段
 // 语义：重命名只改标签段（时间戳/类型/设备/统计保持原份的值，kind 不随重命名改变）；
 // 幂等——新文件名与原文件名相同 → 返回当前条目（不报错）。备份不存在 → 404。
@@ -849,7 +849,7 @@ projectRoutes.post("/backup/rename", async (c) => {
 // POST /api/v1/project/backup/restore —— 从备份恢复当前项目（覆盖恢复）
 //
 // 流程：
-// 1. fileName 白名单校验（仅 .backups/ 下唯一命名格式，防路径穿越）→ 非法 400
+// 1. fileName 白名单校验（仅 .backups/ 下可解析命名格式，防路径穿越）→ 非法 400
 // 2. 覆盖前自动快照（复用备份管道，参与保留策略——后悔药）→ 备份不存在 404
 // 3. 备份包校验（zip/白名单//user_version 三态）→ 400/409 零触碰
 // 4. 原子替换三文件 + 项目规则 + 重连 data.db + 同步内存 config + 重启定时器（restoreBackup）

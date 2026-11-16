@@ -485,7 +485,7 @@ describe("writeBackup 与保留策略", () => {
     for (let i = 0; i < 21; i++) {
       writeFileSync(join(backupsDir, fakeBackupName(i)), "x");
     }
-    writeFileSync(join(backupsDir, "notes.txt"), "非法文件"); // 不在唯一命名格式内
+    writeFileSync(join(backupsDir, "notes.txt"), "非法文件"); // 不在可解析命名格式内
     writeFileSync(join(backupsDir, "20260813-101500.zip"), "旧命名"); // 旧秒级：不解析 ⇒ 不参与清理
     pruneBackups(backupsDir);
     expect(existsSync(join(backupsDir, "notes.txt"))).toBe(true); // 非法文件不参与清理
@@ -1293,7 +1293,7 @@ describe("POST /project/backup/restore", () => {
     expect(cfg.status).toBe(200);
   });
 
-  it("自定义名称备份可恢复（唯一命名格式含标签段）", async () => {
+  it("自定义名称备份可恢复（可解析命名格式含标签段）", async () => {
     const dir = makeTmpDir();
     initProjectDir(dir, { ...makeConfig("proj-named-restore", "命名恢复"), prompt: "旧提示词" });
     const app = await openProject(dir);
@@ -1315,7 +1315,7 @@ describe("POST /project/backup/restore", () => {
     expect(readProjectFile(dir)?.prompt).toBe("旧提示词"); // 数据回滚
   });
 
-  it("旧命名份不可恢复（白名单只认唯一命名格式：旧秒级 → 400）", async () => {
+  it("旧命名份不可恢复（白名单只认可解析命名格式：旧秒级 → 400）", async () => {
     const dir = makeTmpDir();
     initProjectDir(dir, { ...makeConfig("proj-legacy-restore", "旧命名恢复"), prompt: "旧提示词" });
     const app = await openProject(dir);
