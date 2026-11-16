@@ -139,14 +139,19 @@ describe("写作页 · 桌面（rail + 正文列）", () => {
     expect(html).toContain("第1卷");
     expect(html).toContain("第1章");
     expect(html).toContain("2章");
-    // 2b：展开态 = 右边界 6px 手柄 + 右边界中线上的收起圆钮（窄条只在收起态）
+    // 展开态 = 右边界 6px 手柄 + 页头标题行最左的收起按钮（DESIGN.md `writing-page`「宽度与收起」）
     expect(html).toContain('aria-label="调整卷章导航栏宽度"');
     expect(html).toContain('role="separator"');
     expect(html).toContain('aria-label="收起卷章导航栏"');
     expect(html).not.toContain('aria-label="展开卷章导航栏"');
-    // 收起入口是面板内子栏专用的单箭头圆钮，不再是整栏双箭头（DESIGN.md `icon-button`）
-    expect(html).toContain("ant-btn-circle");
+    // 普通 `icon-button`（text 变体 + 单箭头），不是圆钮、也不是整栏双箭头
+    expect(html).toContain("anticon-left");
+    expect(html).not.toContain("ant-btn-circle");
     expect(html).not.toContain("anticon-double-left");
+    // 位置 = 标题行最左（在「写作」标题之前）
+    expect(html.indexOf('aria-label="收起卷章导航栏"')).toBeLessThan(
+      html.indexOf(">写作<"),
+    );
   });
 
   it("无 id：page-title「写作」+「从左侧选择一章开始写作」（不落空态）", () => {
@@ -284,25 +289,38 @@ describe("写作页 · 卷章导航栏宽度与收起（2b）", () => {
     expect(render()).toContain("width:200px");
   });
 
-  it("桌面收起态：32px 窄条 + 中线同款圆钮，不渲染 rail / 手柄 / 收起按钮；正文列仍在（宽度保留）", () => {
+  it("桌面收起态：rail = 0px（不渲染 rail / 窄条 / 手柄），页头 toggle 转为「展开」，正文列吸收宽度", () => {
     stubRailStorage({ width: 333, collapsed: true });
     const html = render({ chapterId: "ch-1" });
     expect(html).toContain('aria-label="展开卷章导航栏"');
-    expect(html).toContain("w-8");
-    // 窄条中线是同一枚单箭头圆钮（不是双箭头 `»`），与展开态同一形态
-    expect(html).toContain("ant-btn-circle");
-    expect(html).not.toContain("anticon-double-right");
+    expect(html).toContain('aria-expanded="false"');
+    expect(html).toContain("anticon-right");
+    expect(html).not.toContain("ant-btn-circle");
+    // 收起 = 0px：rail 完全不渲染（无 header 标题 / 无内联宽度）+ 无窄条占位 + 无手柄
     expect(html).not.toContain(">卷章<");
+    expect(html).not.toContain('aria-label="卷章导航栏"');
+    expect(html).not.toContain("width:333px");
+    expect(html).not.toContain("w-8");
     expect(html).not.toContain('aria-label="调整卷章导航栏宽度"');
     expect(html).not.toContain('aria-label="收起卷章导航栏"');
+    // 正文列照常渲染（宽度保留在存储里，展开恢复原宽）
     expect(html).toContain("上一章");
   });
 
-  it("窄屏无收起：存储的 collapsed 不生效，rail 全宽无窄条 / 手柄", () => {
+  it("收起且无章：提示从页头展开导航栏，不再指向已消失的左栏", () => {
+    stubRailStorage({ width: 240, collapsed: true });
+    const html = render();
+    expect(html).toContain('aria-label="展开卷章导航栏"');
+    expect(html).toContain("从页头左侧展开卷章导航栏，选择一章开始写作");
+    expect(html).not.toContain("从左侧选择一章开始写作");
+  });
+
+  it("窄屏无收起：存储的 collapsed 不生效，rail 全宽无窄条 / 手柄 / 页头 toggle", () => {
     stubRailStorage({ width: 240, collapsed: true });
     const html = render({ desktop: false });
     expect(html).toContain("w-full");
     expect(html).not.toContain('aria-label="展开卷章导航栏"');
+    expect(html).not.toContain('aria-label="收起卷章导航栏"');
     expect(html).not.toContain('aria-label="调整卷章导航栏宽度"');
   });
 });
@@ -328,18 +346,20 @@ describe("写作页 · 专注模式", () => {
 });
 
 describe("写作页 · 错误态", () => {
-  it("大纲已加载但 chapterId 不在可见大纲：错误条 + 返回章节目录，不渲染编辑器、不自动回退", () => {
+  it("大纲已加载但 chapterId 不在可见大纲：错误条 + 返回章节目录，不渲染编辑器、不自动回退；页头 toggle 仍在", () => {
     const html = render({ chapterId: "ch-missing" });
     expect(html).toContain("章节不存在或已删除");
+    expect(html).toContain('aria-label="收起卷章导航栏"');
     expect(html).toContain('href="#/writing"');
     expect(html).toContain("返回章节目录");
     expect(html).not.toContain("上一章");
     expect(html).not.toContain("下一章");
   });
 
-  it("有 id 但大纲未就绪：正文只给骨架，不先挂编辑器（坏 chapterId 不先发 404）", () => {
+  it("有 id 但大纲未就绪：正文只给骨架，不先挂编辑器（坏 chapterId 不先发 404）；页头 toggle 仍在", () => {
     const html = render({ chapterId: "no-such-chapter", outline: null, outlineLoading: true });
     expect(html).toContain("animate-pulse");
+    expect(html).toContain('aria-label="收起卷章导航栏"');
     expect(html).not.toContain("章节不存在或已删除");
     expect(html).not.toContain("上一章");
     expect(html).not.toContain("下一章");

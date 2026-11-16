@@ -20,7 +20,7 @@
 // 判定与文件名规则在 lib/document-io（node 可测）；对话框与下载走既有全局 confirm / 临时 <a download>。
 // 导入落地必须换 key 重挂编辑器（BlockNote 非受控），再把新内容交给自动保存落盘。
 // 样式纪律：颜色只走 token / 语义变量；块编辑器的改色只在 components/blocknote/blocknote.css。
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import type { OutlineTree } from "@whispering233/ai-editor-shared";
 import { Button, Dropdown } from "antd";
 import { DownOutlined, ExportOutlined, ImportOutlined } from "@ant-design/icons";
@@ -90,9 +90,11 @@ export interface ChapterEditorProps {
   basePath: "/writing";
   /** 保存成功（自动 / 手动 / 409 覆盖）后回调：写作页据此不可变补丁 store 的章统计（不重拉大纲） */
   onSaved?: (info: { charCount: number; updatedAt: string }) => void;
+  /** 页头标题行最左的前置元素（写作页卷章栏的收起 / 展开按钮），透传给 `PageHeader` 的 `leading` */
+  headerLeading?: ReactNode;
 }
 
-export function ChapterEditor({ outline, chapterId, basePath, onSaved }: ChapterEditorProps) {
+export function ChapterEditor({ outline, chapterId, basePath, onSaved, headerLeading }: ChapterEditorProps) {
   // 正文：content 为 null = 尚未取到（加载中 / 加载失败）；loadError 非 null = 加载失败（码 + 文案）
   const [content, setContent] = useState<string | null>(null);
   const [loadError, setLoadError] = useState<LoadFailure | null>(null);
@@ -371,6 +373,7 @@ export function ChapterEditor({ outline, chapterId, basePath, onSaved }: Chapter
         <PageHeader
           title={chapterTitle ?? "正文"}
           truncateTitle
+          leading={headerLeading}
           action={
             <>
               {/* 导入入口：隐藏文件框（浏览器与桌面同一套；按钮触发，选完清空 value 以便重复选同一文件） */}

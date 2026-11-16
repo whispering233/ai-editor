@@ -2,16 +2,15 @@
 //
 // **纯 presenter**：行数据由页面经 `lib/writing.ts` 派生，折叠 state 也由页面持有；本组件不发请求、
 // 不做结构编辑（无新建 / 改名 / 删除 / 拖拽 / 右键菜单——结构编辑唯一入口仍是大纲树）。
-// 宽度 / 收起态由页面持有（hooks/use-writing-rail）：本组件只消费 width / onCollapse；右侧拖拽手柄
-// 由页面作为兄弟渲染（不塞进 rail 宽度内，见 DESIGN.md `writing-page`「宽度与收起」）。
-// 收起入口 = 骑在右边线中线上的单箭头圆钮（面板内子栏专用，与整栏的双箭头镜像对不互串，
-// 见 DESIGN.md §Components `icon-button`「位移例外」）。
+// 宽度 / 收起态由页面持有（hooks/use-writing-rail）：本组件只消费 width；右侧拖拽手柄由页面作为
+// 兄弟渲染（不塞进 rail 宽度内），收起 / 展开入口在正文列页头（`PageHeader` `leading`）——
+// 本栏内不放收起入口（rail header 也不放；见 DESIGN.md `writing-page`「宽度与收起」）。
 //
 // 行几何与大纲树同密度：32px 行高、24px 折叠箭头盒、编号徽标 `min-w-14`（对齐口径见 DESIGN.md
 // §大纲页「缩进列对齐」）；章行是 `<a href="#/writing/:id">`，点击直接进正文，不渲染「写正文」按钮。
 import { useEffect, useRef } from "react";
 import { Button, Typography } from "antd";
-import { LeftOutlined, RightOutlined } from "@ant-design/icons";
+import { RightOutlined } from "@ant-design/icons";
 import { formatTextLength } from "../../lib/manuscript";
 import { errorBannerClass, skeletonClass } from "../../lib/styles";
 import { cn } from "../../lib/utils";
@@ -36,8 +35,6 @@ export interface ChapterRailProps {
   className?: string;
   /** 展开态宽度（px）；不传 = 不设内联宽（窄屏全宽走 className） */
   width?: number;
-  /** 桌面态收起入口；不传 = 不渲染收起按钮（窄屏无收起） */
-  onCollapse?: () => void;
 }
 
 export function ChapterRail({
@@ -50,7 +47,6 @@ export function ChapterRail({
   onRetry,
   className,
   width,
-  onCollapse,
 }: ChapterRailProps) {
   // 换章后把选中行滚进可视区（`nearest`：已在视野内则不跳）。SSR 不跑 effect。
   const selectedRef = useRef<HTMLAnchorElement | null>(null);
@@ -68,32 +64,15 @@ export function ChapterRail({
       aria-label="卷章导航栏"
       style={width === undefined ? undefined : { width }}
       // 桌面展开态分栏线归本栏；窄屏全宽由页面传 `border-r-0`
-      //（DESIGN.md §Layout「分栏边线单所有权」——手柄不画线，只有面板边线能覆盖抽屉 / 窄屏 / 窄条）
-      className={cn("relative flex shrink-0 flex-col border-r border-border", className)}
+      //（DESIGN.md §Layout「分栏边线单所有权」——手柄不画线，只有面板边线能覆盖抽屉 / 窄屏 / 收起）
+      className={cn("flex shrink-0 flex-col border-r border-border", className)}
     >
-      {/* header 40px：只留标题（收起入口是右边界中线的圆钮，不占 header） */}
+      {/* header 40px：只留标题（收起 / 展开入口在正文列页头，不在本栏） */}
       <div className="flex h-10 shrink-0 items-center gap-2 border-b border-border px-3 py-2">
         <Typography.Title level={5} className="min-w-0 flex-1 truncate">
           卷章
         </Typography.Title>
       </div>
-
-      {/* 收起圆钮：骑在右边线正中间（内外各 12px；内探的一半落在行区 p-2 + 行 px-2 的 16px 内边距里，不压章名 / 字数）。
-          定位必须挂包裹层：antd `.ant-btn` 自带 `position: relative`（与 Tailwind `.absolute` 同特异性、
-          但 antd 的 style 注入更晚）⇒ 直接给 Button 加 `absolute` 会被压回 relative 而贴在左边。
-          z 高于拖拽手柄 ⇒ 点它不会触发宽度拖拽。 */}
-      {onCollapse !== undefined && (
-        <div className="absolute top-1/2 -right-3 z-20 -translate-y-1/2">
-          <Button
-            color="default" variant="outlined" shape="circle"
-            size="small"
-            onClick={onCollapse}
-            aria-label="收起卷章导航栏"
-            title="收起卷章导航栏"
-            icon={<LeftOutlined className="text-xs" />}
-          />
-        </div>
-      )}
 
       {/* 行区：独立纵向滚动；p-2 = 8px */}
       <div className="min-h-0 flex-1 overflow-y-auto p-2">

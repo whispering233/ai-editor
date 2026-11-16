@@ -1,5 +1,5 @@
 // 写作页卷章导航栏宽度与收起态 hook（DESIGN.md `writing-page`「宽度与收起」）：
-// - 桌面态（≥1024px）宽度为像素（默认 240，拖拽区间 200–480），可收起为 32px 窄条；宽度保留、展开恢复原宽
+// - 桌面态（≥1024px）宽度为像素（默认 240，拖拽区间 200–480），可收起为 0px；宽度保留、展开恢复原宽
 // - 宽度与收起态持久化 localStorage（key ai-editor:writing-rail，全局一份、不随书；不进项目文件）
 // - 拖拽期间（moveResize）只更新内存态，结束（endResize）时一次写入 localStorage
 // - 纯函数（defaultWritingRailLayout / parseWritingRailLayout）从 hook 抽出供测试；hook 本体依赖 window，node 环境不渲染
@@ -129,7 +129,7 @@ export function useWritingRail(desktop: boolean) {
     });
   }
 
-  /** 切换收起态（收起为窄条 + 展开按钮；宽度保留，展开恢复原宽）；立即持久化 */
+  /** 切换收起态（收起 = 0px、整栏不渲染；宽度保留，展开恢复原宽）；立即持久化 */
   function toggleCollapse() {
     setLayout((prev) => {
       const next = { ...prev, collapsed: !prev.collapsed };

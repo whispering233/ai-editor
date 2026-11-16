@@ -174,13 +174,10 @@ describe("ChapterRail · 否定契约（rail 不是第二个大纲页）", () =>
     expect(html).not.toContain("draggable");
   });
 
-  it("收起按钮只在传入 onCollapse 时渲染（窄屏无收起）；形态 = 中缝单箭头圆钮（非双箭头）", () => {
-    const html = render({ onCollapse: () => {} });
-    expect(html).toContain('aria-label="收起卷章导航栏"');
-    // 面板内子栏专用形态（DESIGN.md §Components `icon-button`「位移例外」）
-    expect(html).toContain("ant-btn-circle");
-    expect(html).not.toContain("anticon-double-left");
-    expect(render()).not.toContain('aria-label="收起卷章导航栏"');
-    expect(render()).not.toContain("ant-btn-circle");
+  it("收起 / 展开入口不在 rail 内（在正文列页头）：无圆钮、无收起按钮", () => {
+    const html = render();
+    expect(html).not.toContain('aria-label="收起卷章导航栏"');
+    expect(html).not.toContain('aria-label="展开卷章导航栏"');
+    expect(html).not.toContain("ant-btn-circle");
   });
 });

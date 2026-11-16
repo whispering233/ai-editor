@@ -25,6 +25,8 @@ export interface PageHeaderProps {
   /** 自绘标题元素（替代 `PageTitle` 薄壳，与 `title` 二选一）——
    * 仅供「标题本身可编辑」的页（参考资料详情：点击进输入框），避免把 `input` 嵌进 `h4` */
   titleNode?: ReactNode;
+  /** 标题行最左的前置元素（如写作页卷章栏的收起/展开按钮）；`titleNode` / `title` 之前 */
+  leading?: ReactNode;
   /** 标题行右侧操作区（刷新/保存/删除/新建等，靠右对齐） */
   action?: ReactNode;
   /** 说明行（标题行下方；字号/颜色由调用方给，如 `text-sm text-muted-foreground`） */
@@ -42,6 +44,7 @@ export interface PageHeaderProps {
 export function PageHeader({
   title,
   titleNode,
+  leading,
   action,
   description,
   controls,
@@ -51,12 +54,15 @@ export function PageHeader({
 }: PageHeaderProps) {
   return (
     <header className={cn("mb-4 flex shrink-0 flex-col", className)}>
-      <div className="flex items-center gap-3">
+      {/* 带 `leading` 时允许换行：标题行宽度不足时操作组落到第二行，标题不被压成 0 宽（2026-11 实测；
+          不传 `leading` 的页面保持单行）。 */}
+      <div className={cn("flex items-center gap-3", leading !== undefined && "flex-wrap")}>
+        {leading !== undefined && <div className="flex shrink-0 items-center">{leading}</div>}
         {titleNode ?? (
           <PageTitle className={cn("min-w-0", truncateTitle && "truncate")}>{title}</PageTitle>
         )}
         {action !== undefined && (
-          <div className="ml-auto flex shrink-0 items-center gap-2">{action}</div>
+          <div className="ml-auto flex min-w-0 flex-wrap items-center justify-end gap-2">{action}</div>
         )}
       </div>
       {description !== undefined && <div className="mt-1">{description}</div>}

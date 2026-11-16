@@ -11,10 +11,9 @@
 // `#/writing/:id` 只显示正文全宽 + 顶部「章节目录」返回条。专注模式隐藏 rail 与返回条。
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import { Button } from "antd";
-import { ArrowLeftOutlined } from "@ant-design/icons";
+import { ArrowLeftOutlined, LeftOutlined, RightOutlined } from "@ant-design/icons";
 import { ChapterEditor } from "../components/manuscript/chapter-editor";
 import { ChapterRail } from "../components/writing/chapter-rail";
-import { CollapseStrip } from "../components/ui/collapse-strip";
 import { EmptyState } from "../components/ui/empty-state";
 import { PageHeader } from "../components/ui/page-header";
 import { ResizeHandle } from "../components/ui/resize-handle";
@@ -98,7 +97,8 @@ export default function Writing({ chapterId }: { chapterId?: string }) {
     window.location.replace(targetHash);
   }, [chapterId, isDesktop, writingTarget]);
 
-  // rail：桌面展开态有；窄屏只在无 id（目录页）时有；桌面收起态换成窄条。专注模式两者都不渲染。
+  // rail：桌面展开态有；窄屏只在无 id（目录页）时有；桌面收起态 = 0px（不渲染 rail，正文列吸收宽度）。
+  // 专注模式两者都不渲染。
   const railCollapsed = isDesktop && railLayout.collapsed;
   const rail =
     !focusMode && (isDesktop || chapterId === undefined) && !railCollapsed ? (
@@ -113,10 +113,31 @@ export default function Writing({ chapterId }: { chapterId?: string }) {
         error={!isDesktop && outlineFailed ? "大纲加载失败，章节目录暂不可用" : null}
         onRetry={retry}
         width={isDesktop ? railLayout.width : undefined}
-        onCollapse={isDesktop ? toggleRailCollapse : undefined}
         className={isDesktop ? undefined : "w-full border-r-0"}
       />
     ) : null;
+
+  // 卷章导航栏收起 / 展开入口：正文列页头标题行最左（`PageHeader` `leading`；DESIGN.md `writing-page`
+  // 「宽度与收起」）。同一枚按钮进四种正文形态；窄屏（无子栏）与专注模式（页头不渲染）都不渲染。
+  // 图标 = 当前点击动作（展开态收起 / 收起态展开）；状态由动态 `aria-label` / `title` / `aria-expanded` 表达。
+  const railToggle =
+    isDesktop && !focusMode ? (
+      <Button
+        color="default" variant="text"
+        size="small"
+        onClick={toggleRailCollapse}
+        icon={
+          railCollapsed ? (
+            <RightOutlined className="text-sm" />
+          ) : (
+            <LeftOutlined className="text-sm" />
+          )
+        }
+        aria-label={railCollapsed ? "展开卷章导航栏" : "收起卷章导航栏"}
+        title={railCollapsed ? "展开卷章导航栏" : "收起卷章导航栏"}
+        aria-expanded={!railCollapsed}
+      />
+    ) : undefined;
 
   const outlineFailureBanner = (
     <div className={cn(errorBannerClass, "flex shrink-0 items-center gap-3")}>
@@ -146,7 +167,7 @@ export default function Writing({ chapterId }: { chapterId?: string }) {
       // GET /manuscript/:id（404 落 console），等大纲到达才发现章不存在。
       bodyContent = (
         <section className="flex min-h-0 flex-1 flex-col">
-          <PageHeader title="写作" />
+          <PageHeader title="写作" leading={railToggle} />
           <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">
             {outlineFailed ? (
               outlineFailureBanner
@@ -160,7 +181,7 @@ export default function Writing({ chapterId }: { chapterId?: string }) {
       // 显式坏 chapterId：不自动回退（最近导航失效由 writing-3 的解析阶段处理）
       bodyContent = (
         <section className="flex min-h-0 flex-1 flex-col">
-          <PageHeader title="写作" />
+          <PageHeader title="写作" leading={railToggle} />
           <div className={cn(errorBannerClass, "flex items-center gap-3")}>
             <span className="min-w-0 flex-1">章节不存在或已删除</span>
             <Button href="#/writing">返回章节目录</Button>
@@ -175,6 +196,7 @@ export default function Writing({ chapterId }: { chapterId?: string }) {
             outline={outline}
             chapterId={chapterId}
             basePath="/writing"
+            headerLeading={railToggle}
             onSaved={({ charCount, updatedAt }) =>
               patchChapterMetadata(chapterId, { textLength: charCount, documentUpdatedAt: updatedAt })
             }
@@ -185,7 +207,7 @@ export default function Writing({ chapterId }: { chapterId?: string }) {
   } else if (isDesktop) {
     bodyContent = (
       <section className="flex min-h-0 flex-1 flex-col">
-        <PageHeader title="写作" />
+        <PageHeader title="写作" leading={railToggle} />
         <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">
           {outline === null ? (
             outlineFailed ? outlineFailureBanner : bodySkeleton
@@ -196,7 +218,11 @@ export default function Writing({ chapterId }: { chapterId?: string }) {
               还没有章节
             </EmptyState>
           ) : (
-            <p className="text-sm text-muted-foreground">从左侧选择一章开始写作</p>
+            <p className="text-sm text-muted-foreground">
+              {railCollapsed
+                ? "从页头左侧展开卷章导航栏，选择一章开始写作"
+                : "从左侧选择一章开始写作"}
+            </p>
           )}
         </div>
       </section>
@@ -214,10 +240,6 @@ export default function Writing({ chapterId }: { chapterId?: string }) {
       )}
     >
       {rail}
-      {/* 桌面收起态：32px 窄条（宽度保留，展开恢复原宽）；窄屏 / 专注不渲染 */}
-      {!focusMode && railCollapsed && (
-        <CollapseStrip side="left" variant="grip" label="展开卷章导航栏" onExpand={toggleRailCollapse} />
-      )}
       {/* 桌面展开态右边界 6px 拖拽手柄；收起态不渲染（拖拽与收起互斥） */}
       {!focusMode && isDesktop && !railCollapsed && (
         <ResizeHandle
