@@ -17,7 +17,7 @@
 >
 > **与云端存档的关系**：云端存档推送的就是这里的一份备份文件（**逐字节拷贝、文件名原样**）；**删书**（本地 + 可选云端目录）走 `POST /project/delete`，具体见 [10-api-project.md](./10-api-project.md) 与 [100-api-cloud.md](./100-api-cloud.md)。
 >
-> **变更检测**：自动备份「有变更才备份」判定只看三文件 mtime（`project.json` / `outline.json` / `data.db` 及其 `-wal`，`data.db`/`-wal` 带 1s 容差）。**`sessions/` 不参与**（会话不进备份，纯聊天不应触发备份或云端推送）。**正文/参考资料的编辑与删除不需要额外探测**——它们写在 `data.db`（WAL 追加）里，`-wal` 变更判定已覆盖。
+> **变更检测**：自动备份「有变更才备份」判定 = 三文件 + `data.db-wal` + 项目规则（`AGENTS.md`，存在才计）的 mtime；`data.db`/`-wal` 带 1s 容差，`project.json` / `outline.json` / `AGENTS.md` 严格比较。**`sessions/` 不参与**（会话不进备份，纯聊天不应触发备份或云端推送）。**正文/参考资料的编辑与删除不需要额外探测**——它们写在 `data.db`（WAL 追加）里，`-wal` 变更判定已覆盖。
 
 ### GET /api/v1/project/backups
 

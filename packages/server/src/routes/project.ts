@@ -355,7 +355,7 @@ function listResponse(c: Context, result: { rootPath: string; books: ProjectList
 projectRoutes.post("/close", (c) => {
   const project = getCurrentProject();
   if (project !== null) {
- // 自动推送（卡 7）：「工作段结束」语义——变更判定 = 三文件（`sessions/` 不参与），不受 2h 节流。
+ // 自动推送（卡 7）：「工作段结束」语义——变更判定 = 创作数据（三文件 + `AGENTS.md`；`sessions/` 不参与），不受 2h 节流。
  // **fire-and-forget**（不 await）：网络差时一次 push 可能数秒，不能拖住关闭；失败只记
  // lastAutoPushError + 日志（响应语义与无云盘时完全一致）。推送只读 .backups/ 与 cloud.json，
  // 不碰 data.db 连接，故先启动再关连接安全
@@ -367,7 +367,7 @@ projectRoutes.post("/close", (c) => {
   return c.json(ok({ saved: true as const }));
 });
 
-// GET /api/v1/project/export —— 导出当前项目三文件为 zip
+// GET /api/v1/project/export —— 导出当前项目三文件 + 可选项目规则为 zip
 //
 // 响应：application/zip **二进制**（通用约定显式例外，见 shared
 // types/api.ts PROJECT_EXPORT_FILE_NAMES 注释）；Content-Disposition attachment，
@@ -852,7 +852,7 @@ projectRoutes.post("/backup/rename", async (c) => {
 // 1. fileName 白名单校验（仅 .backups/ 下唯一命名格式，防路径穿越）→ 非法 400
 // 2. 覆盖前自动快照（复用备份管道，参与保留策略——后悔药）→ 备份不存在 404
 // 3. 备份包校验（zip/白名单//user_version 三态）→ 400/409 零触碰
-// 4. 原子替换三文件 + 重连 data.db + 同步内存 config + 重启定时器（restoreBackup）
+// 4. 原子替换三文件 + 项目规则 + 重连 data.db + 同步内存 config + 重启定时器（restoreBackup）
 projectRoutes.post("/backup/restore", async (c) => {
   const project = requireCurrentProject();
   const raw = await c.req.json().catch(() => null);

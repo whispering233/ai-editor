@@ -164,12 +164,12 @@ export interface CloudLocalState {
   /** 本机最后一次成功同步（推/拉）到的云端文件名（= 冲突判定基准） */
   lastPushedFileName: string | null;
   lastSyncAt: string | null;
-  /** 本机创作数据自上次同步后有改动（三文件 + `data.db-wal`；**不含 `.backups/`、也不含 `sessions/`**） */
+  /** 本机创作数据自上次同步后有改动（三文件 + `data.db-wal` + `AGENTS.md`；**不含 `.backups/`、也不含 `sessions/`**） */
   dirty: boolean;
   /** 最新一份本地备份（推送缺省目标） */
   latestBackupFileName: string | null;
   /**
-   * 「有改动未进最新备份」= 最新一份本地备份的时间早于最新创作改动（三文件口径）。
+   * 「有改动未进最新备份」= 最新一份本地备份的时间早于最新创作改动（创作数据口径：三文件 + `AGENTS.md`）。
    * **不随同步前移**：推完旧包后 `state` 会变 `synced`，但它仍为真——用它把「已同步」与
    * 「云端内容不落后」分开表达（卡 B：自动路径在此状态下跳过不推，面板提示先「立即备份」）。
    */
@@ -192,8 +192,8 @@ export type CloudSyncState =
  * `GET /api/v1/cloud/status` 响应（配置段 + `remote` + `local` + `state`，卡 2/4/5 逐步落地）。
  *
  * 判定口径（卡 5 定稿）：
- * - 「云端有更新」= 云端文件集合 ≠ `cloud.json` 里的 `lastSeenCloudFiles`（**不看时间戳**：跨机器时钟偏差会让 head 比较漏报）
- * - 「本机有改动」= 创作数据（三文件 + `data.db-wal` 的 mtime）晚于 `lastSyncAt`
+ * - 「云端有更新」= 云端文件集合 ≠ `cloud.json` 里的 `lastSeenCloudFiles`（**不看时间戳**：跨机器时钟偏差会让 head 比较漏报；集合只计可解析备份名，`.tmp-*` 等不参与）
+ * - 「本机有改动」= 创作数据（三文件 + `data.db-wal` + `AGENTS.md` 的 mtime）晚于 `lastSyncAt`
  * - 无同步记录（`lastSyncAt` 缺失）时按「本机有改动」处理（保守：先推/先拉由用户决定）
  */
 export interface CloudStatus {

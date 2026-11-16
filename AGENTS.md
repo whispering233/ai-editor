@@ -32,6 +32,7 @@
 - **出站 HTTP**：服务启动时安装全局 undici dispatcher（`packages/server/src/http-dispatcher.ts`，与 pi CLI 同款：连接族退避 + 环境代理 + 空闲超时）。**不要在业务代码里另建 fetch/agent**——否则丢失代理与连接行为（真实故障场景见 v0.0.32 CHANGELOG）。云端存档的 WebDAV 请求同样走它。
 - **云端存档（v0.0.38 定稿，2026-09 修订）**：凭据与同步状态的唯一载体 = `<创作根>/.ai-editor/cloud.json`（0600 明文；**不进项目文件 / 备份 zip / 任何 API 响应**），读写唯一入口 = `packages/server/src/cloud/state.ts`。
   - **拉取 / restore / import 一律只覆盖三文件 + 项目规则**（`AGENTS.md` 存在才进包；**包内无该条目则删除本机规则文件**，严格镜像；不碰 `sessions/`）；云端并集与 `cloud.json` 的 `baseEntries` 已废止（字段保留、读侧容忍、不再写）。
+  - **变更判定只有一把尺子**：`hasFileChangesSince`（三文件 + `data.db-wal` + `AGENTS.md`；容差只给 `data.db`/`-wal`）是备份 tick / 云端 dirty / 自动推送的唯一判定入口，**不得再起第二套**；云端文件集合只计可解析备份名（`.tmp-*` 等不参与，否则一次失败上传会让「云端有更新」永久亮）。
   - **新机器恢复 = 列 + 导入新书**（`GET /cloud/remote-books` / `POST /cloud/import-book`）：导入时**必须**顺手写该书 book state（`lastPushedFileName` = 导入的那份 / `lastSeenCloudFiles` / `lastSyncAt`）并把那份 zip 落进新书 `.backups/`——不写就会一打开就弹冲突。
   - **地址语义 = 用户云盘根**；工作根 `<云盘根>/ai-editor/` 由 `createWebdavClient` **唯一一处拼接**（配置/UI 都只表达云盘根，不做「截断再拼回」）；`ensureWorkingRoot()` 幂等建「云盘根 + 工作根」。
   - **备份命名唯一格式**（写入 = 解析，`shared/utils/backup.ts` 单正则；逐段语义、保留策略与“不解析旧命名”口径见 `docs/db/schema.md`「自动备份目录」）：三类旧命名**不解析**（留盘不列表）、**不做重命名迁移**；打开项目时若 `.backups/` 有文件但无一可解析 → 兜底生成一份（`ensureParseableBackup`）。

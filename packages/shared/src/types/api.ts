@@ -423,7 +423,7 @@ export const PROJECT_EXPORT_OPTIONAL_FILE_NAMES = [AGENTS_FILE_NAME] as const;
  * {success,data}」通用约定的显式例外；Content-Disposition: attachment;
  * filename*=UTF-8''<书名>.zip（RFC 5987）
  * - zip 内三文件：project.json + outline.json + data.db（导出前 wal_checkpoint(TRUNCATE)
- * 保证 data.db 主文件完整快照；key 存用户级配置，天然不入包）
+ * 保证 data.db 主文件完整快照；key 存用户级配置，天然不入包）+ **可选** `AGENTS.md`（项目规则，存在才含）
  * - 错误：无当前项目 → 409 NO_PROJECT_OPEN（服务端补充码，与 /config 一致）；
  * 三文件缺失任一 → 500 INTERNAL_ERROR（打开的项目三文件必然齐全，缺失即损坏）
  * - 二进制响应不走 Zod parse——以本注释 + PROJECT_EXPORT_FILE_NAMES 常量表达
@@ -1410,7 +1410,7 @@ export type CloudPushReq = z.infer<typeof cloudPushReqSchema>;
 
 // POST /api/v1/cloud/pull：从云端拉取一份备份应用到当前项目（卡 5）
 // - file_name 缺省 = 云端 head；须通过 parseBackupFileName 白名单（服务端校验 → 400）
-// - 语义 = 三文件覆盖（`sessions/` 是纯本地目录，不写不删），见 docs/api/100-api-cloud.md
+// - 语义 = 三文件 + 项目规则覆盖（`sessions/` 是纯本地目录，不写不删），见 docs/api/100-api-cloud.md
 export const cloudPullReqSchema = z
   .object({
     file_name: z.string().optional(),

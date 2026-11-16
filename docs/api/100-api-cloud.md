@@ -16,7 +16,7 @@
 > **请求预算**：每次刷新 ≤ 3 次 PROPFIND（`dirName` 缓存命中 2 次：书目录 + 目录列举；缓存失效需扫云根 +1）。
 > 云端检查失败不影响本端点成功返回（`remote: null` + `errorCode`，`state: "unreachable"`）。
 >
-> **三态判定**（`docs/design/40-cloud-sync.md` §3）：`云端有更新` = 云端文件集合 ≠ `lastSeenCloudFiles`（**不看时间戳**）；
+> **三态判定**（`docs/design/40-cloud-sync.md` §3）：`云端有更新` = 云端文件集合 ≠ `lastSeenCloudFiles`（**不看时间戳**；集合只计可解析备份名，`.tmp-*` 等不参与）；
 > **职责分离**：云端**永不创建备份**；自动路径（定时 / 关闭项目）在 `local.backupStale === true` 时**跳过不推**（不写 `lastAutoPushError`）；用户主动同步时由 `cloud-stale-backup-dialog` 二选一（立即手动备份并推送 / 上传旧备份）。
 >
 > **自动推送**：不新起定时器，挂在自动备份 tick 链上——自动备份频率开启时按备份频率 tick，频率关闭则不排程（自动推送随之停用，见 `40-cloud-sync.md` §5）；节流基准 = `cloud.json` 的 `lastAutoPushAt`（仅自动路径推进）；失败只记 `lastAutoPushError` + 日志，不弹窗不阻塞（见 `docs/design/40-cloud-sync.md` §5）。
