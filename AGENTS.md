@@ -2,14 +2,12 @@
 
 面向编码 agent 的协作入口。**设计文档是单一事实来源**：本文件只回答「读什么」「怎么协作」，并登记设计文档不承载的**代码级硬约束**——凡能在 `docs/` 里查到的内容，这里不复述。
 
-## 文档即契约（阅读顺序）
+## 文档即契约
 
-`docs/design/00-master-design.md`（产品定位与设计原则）→ `architecture.md`（技术栈 / 分包与依赖方向 / pi 嵌入形态）→ 详细设计（`10-data-model.md` → `20-context.md` → `30-agent-loop.md` → `40-cloud-sync.md` / `50-desktop.md` / `60-practice.md`）→ 按职责读 `docs/api/`（先 `00-api-index.md` + `api-public.md`）与 `docs/db/schema.md` → 前端改动必读 `docs/ui/DESIGN.md`（**视觉与布局唯一契约**：改样式先改它）。
+**文档地图与阅读顺序 = 仓库根 `docs-map.md`**（唯一索引来源，本文件不复述）。
 
 - 改动前先读对应文档；发现文档之间或文档与代码矛盾，**先停下提问**，不要自行发明。
 - pi 的行为以 `node_modules` 里实际安装的 `@earendil-works/*` 代码 / 类型为准，禁止凭记忆写接口。
-- 状态与演进：根 `CHANGELOG.md`（逐版本事实）+ `docs/design/tasks.md`（当前任务卡）+ `docs/design/backlog.md`（未排期遗留项与有意口径）。
-- 运行 / 构建 / 发布 = `docs/design/build.md`；配置载体与读写边界 = `docs/design/config.md`。
 
 ## 协作流程
 
