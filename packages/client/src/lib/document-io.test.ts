@@ -1,13 +1,16 @@
-// 正文导入导出通用件（卡 12.6）走查：md 往返有损判定、块 JSON 浅校验 / 空文档分支、
-// 导入分派（坏 JSON → 可见错误 / md 有损 → 先确认 / 无差异 → 直接覆盖）。契约 docs/api/110-api-manuscript.md「导入导出（无端点）」。
+// 正文导入导出通用件（卡 12.6；2026-11 补单章 TXT）走查：md 往返有损判定、块 JSON 浅校验 / 空文档分支、
+// 导入分派（坏 JSON → 可见错误 / md 有损 → 先确认 / 无差异 → 直接覆盖）、单章 TXT 导出（标题回退 / 两种排版 /
+// 空内容 / 文件名 / 非法 JSON 不抛）。契约 docs/api/110-api-manuscript.md「导入导出（无端点）」。
 // （文件名 sanitize 的用例已随实现搬到 shared `utils/file-name.test.ts`）
 // 「块 JSON ↔ md」由持有编辑器实例的一侧以函数参数传入，本文件用 stub 替代（仓内无 jsdom，真实互转
 // 与下载的系统文件行为由浏览器走查承担——同 tasks.md 卡 12.5 口径）。
 import { describe, expect, it } from "vitest";
 import {
+  chapterTxtLabel,
   decodeTextFileBytes,
   exportDocumentJson,
   exportDocumentMarkdown,
+  exportDocumentTxt,
   MARKDOWN_LOSSY_NOTICE,
   markdownImportCheck,
   markdownImportConfirmMessage,
@@ -50,6 +53,85 @@ describe("exportDocumentMarkdown（有损：文件名 + 有损提示）", () => 
     for (const word of ["颜色", "对齐", "嵌套", "媒体"]) {
       expect(MARKDOWN_LOSSY_NOTICE).toContain(word);
     }
+  });
+});
+
+describe("chapterTxtLabel（单章 TXT 的标题行：编号 / 章名回退）", () => {
+  it("编号 + 章名 → `第M章 章名`", () => {
+    expect(chapterTxtLabel("第3章", "起风了")).toBe("第3章 起风了");
+  });
+
+  it("章名空白 → 只留编号", () => {
+    expect(chapterTxtLabel("第3章", "   ")).toBe("第3章");
+    expect(chapterTxtLabel("第3章", null)).toBe("第3章");
+  });
+
+  it("编号取不到（大纲未加载 / 非可见章）→ 只用章名", () => {
+    expect(chapterTxtLabel(null, "起风了")).toBe("起风了");
+    expect(chapterTxtLabel("  ", "起风了")).toBe("起风了");
+  });
+
+  it("都空 → `正文`", () => {
+    expect(chapterTxtLabel(null, null)).toBe("正文");
+    expect(chapterTxtLabel("", "  ")).toBe("正文");
+  });
+});
+
+describe("exportDocumentTxt（单章纯文本：shared buildNovelTxt / novelTxtFileName）", () => {
+  /** 两段正文的块 JSON（投影 = 段间空行，与 content_text 同源口径） */
+  const blocks = JSON.stringify([
+    { type: "paragraph", content: [{ type: "text", text: "第一段", styles: {} }] },
+    { type: "paragraph", content: [{ type: "text", text: "第二段", styles: {} }] },
+  ]);
+
+  it("保真：标题行 + 空行 + 正文原样；CRLF、无 BOM、末尾一个换行", () => {
+    const file = exportDocumentTxt(blocks, "起风了", "第3章 起风了", "preserve");
+    expect(file).toEqual({
+      fileName: "起风了.txt",
+      body: "第3章 起风了\r\n\r\n第一段\r\n\r\n第二段\r\n",
+    });
+    expect(file.body.charCodeAt(0)).not.toBe(0xfeff);
+  });
+
+  it("网文排版：段首两个全角空格、段间不空行；文件名带 -网文", () => {
+    const file = exportDocumentTxt(blocks, "起风了", "第3章 起风了", "webnovel");
+    expect(file).toEqual({
+      fileName: "起风了-网文.txt",
+      body: "第3章 起风了\r\n\r\n　　第一段\r\n　　第二段\r\n",
+    });
+  });
+
+  it("空章（空串 / 空数组 / 纯空白块）→ 只有标题行（两种排版）", () => {
+    const expected = { fileName: "起风了.txt", body: "第3章 起风了\r\n" };
+    expect(exportDocumentTxt("", "起风了", "第3章 起风了", "preserve")).toEqual(expected);
+    expect(exportDocumentTxt("[]", "起风了", "第3章 起风了", "preserve")).toEqual(expected);
+    const whitespaceBlock = JSON.stringify([
+      { type: "paragraph", content: [{ type: "text", text: "   " }] },
+    ]);
+    expect(exportDocumentTxt(whitespaceBlock, "起风了", "第3章 起风了", "preserve")).toEqual(
+      expected,
+    );
+    expect(exportDocumentTxt("", "起风了", "第3章 起风了", "webnovel")).toEqual({
+      fileName: "起风了-网文.txt",
+      body: "第3章 起风了\r\n",
+    });
+  });
+
+  it("非法 JSON → 空文本、不抛（导出成只有标题行的文件）", () => {
+    expect(exportDocumentTxt("{坏 JSON", "起风了", "第3章 起风了", "preserve")).toEqual({
+      fileName: "起风了.txt",
+      body: "第3章 起风了\r\n",
+    });
+  });
+
+  it("文件名走 shared sanitize（标题含保留字符也能落地；标题不是章名时由调用点兜底）", () => {
+    const file = exportDocumentTxt(blocks, "起风 / 了", "第3章 起风了", "preserve");
+    expect(file.fileName).toBe("起风 了.txt");
+  });
+
+  it("标题行不进 sanitize（显示标签原样）", () => {
+    const file = exportDocumentTxt("[]", "正文", "第3章 起风/了", "preserve");
+    expect(file.body).toBe("第3章 起风/了\r\n");
   });
 });
 

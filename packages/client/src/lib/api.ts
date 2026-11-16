@@ -20,6 +20,7 @@ import type {
   DeltaRecord,
   EntitySummary,
   ErrorCode,
+  NovelTxtLayout,
   OutlineTree,
   PracticeDraftPutRes,
   PracticePieceDetail,
@@ -837,10 +838,13 @@ export function deleteProject(body: {
  * 解析 Content-Disposition 的文件名（RFC 5987，服务端格式
  * `attachment; filename="book.zip"; filename*=UTF-8''<书名>.zip`）：
  * - `filename*`（percent 编码，中文书名）优先，decodeURIComponent 解码
- * - 回退 ASCII `filename="..."`；解码失败（非法 percent 序列）/无 header → "project.zip"
- * 纯函数（可单测）：文件名缺失回退 "project.zip"
+ * - 回退 ASCII `filename="..."`；解码失败（非法 percent 序列）/无 header → `fallback`
+ * 纯函数（可单测）：文件名缺失回退 `fallback`（默认 `project.zip`；TXT 导出传 `book.txt`）
  */
-export function parseContentDispositionFilename(header: string | null): string {
+export function parseContentDispositionFilename(
+  header: string | null,
+  fallback = "project.zip",
+): string {
   if (header !== null) {
     const star = /filename\*\s*=\s*UTF-8''([^;]+)/i.exec(header);
     if (star) {
@@ -853,28 +857,35 @@ export function parseContentDispositionFilename(header: string | null): string {
     const plain = /filename\s*=\s*"?([^";]+)"?/i.exec(header);
     if (plain) return plain[1];
   }
-  return "project.zip";
+  return fallback;
 }
 
-/** 二进制 zip 下载端点（/project/export 备份包 / /project/export-novel 小说文档）共用响应形态
- * （二进制例外：不走 apiFetch 的 JSON 解析） */
-export interface ExportProjectZipRes {
+/** 下载端点共用响应形态（zip 备份包 / 小说文档 zip / 整本 TXT；二进制 / 纯文本例外：
+ * 不走 apiFetch 的 JSON 解析） */
+export interface ExportDownloadRes {
   blob: Blob;
- /** 下载文件名（Content-Disposition 解析；缺失回退 "project.zip"） */
+ /** 下载文件名（Content-Disposition 解析；缺失回退调用方给的 fallback） */
   filename: string;
 }
 
+/** 成功响应的 Content-Type 白名单（白名单式判定，**零误伤**：其余 2xx 一律不当下载产物） */
+const ARCHIVE_CONTENT_TYPE = /zip|octet-stream/i;
+const PLAIN_TEXT_CONTENT_TYPE = /^text\/plain\b/i;
+
 /**
- * 下载类端点的响应分流主体（`exportProjectZip` / `exportNovelZip` 共用）。
- * **不走 apiFetch**——成功响应是 application/zip **二进制**（通用约定「成功 {success,data}
+ * 下载类端点的响应分流主体（`exportProjectZip` / `exportNovelZip` / `exportNovelTxt` 共用）。
+ * **不走 apiFetch**——成功响应是二进制 zip 或纯文本（通用约定「成功 {success,data}
  * JSON 包裹」的显式例外），错误响应仍是 JSON 包裹（409 NO_PROJECT_OPEN / 400 VALIDATION_ERROR 等）。
  * 响应分流（ora-1 守卫收紧）：
- * - **白名单式判定二进制**：仅 2xx 且 Content-Type 含 zip/octet-stream 才当 zip 返回
- * （服务端恒发 application/zip，octet-stream 为中间层改写兼容；守卫零误伤）——
- * 其余 2xx（如中间层 200 text/html）抛 CLIENT_NETWORK_ERROR，不把 HTML 当 zip 下载
+ * - **白名单式判定成功响应**：仅 2xx 且 Content-Type 命中 `accept` 才当下载产物
+ * （服务端恒发 application/zip / text/plain，octet-stream 为中间层改写兼容）——
+ * 其余 2xx（如中间层 200 text/html）抛 CLIENT_NETWORK_ERROR，不把 HTML 当产物下载
  * - JSON（或非 2xx）：复用统一错误包裹解析抛 ApiError（错误码透传）
  */
-async function fetchZipDownload(path: string): Promise<ExportProjectZipRes> {
+async function fetchDownload(
+  path: string,
+  options: { accept: RegExp; filenameFallback: string },
+): Promise<ExportDownloadRes> {
   let res: Response;
   try {
     res = await fetch(buildUrl(path));
@@ -882,32 +893,52 @@ async function fetchZipDownload(path: string): Promise<ExportProjectZipRes> {
     throw new ApiError(CLIENT_NETWORK_ERROR, err instanceof Error ? err.message : "网络请求失败");
   }
   const contentType = res.headers.get("content-type") ?? "";
-  if (res.ok && (contentType.includes("zip") || contentType.includes("octet-stream"))) {
+  if (res.ok && options.accept.test(contentType)) {
     const blob = await res.blob();
     return {
       blob,
-      filename: parseContentDispositionFilename(res.headers.get("content-disposition")),
+      filename: parseContentDispositionFilename(
+        res.headers.get("content-disposition"),
+        options.filenameFallback,
+      ),
     };
   }
   if (contentType.includes("application/json")) {
     const json: unknown = await res.json().catch(() => null);
     if (isErrorEnvelope(json)) throw new ApiError(json.error.code, json.error.message);
   }
- // 非预期响应（2xx 非 zip / 非 JSON 错误响应）：不当作 zip 下载
+ // 非预期响应（2xx 非白名单类型 / 非 JSON 错误响应）：不当作下载产物
   throw new ApiError(CLIENT_NETWORK_ERROR, `非预期响应（HTTP ${res.status}）`);
 }
 
 /** 导出当前项目为 zip 备份包（「GET /project/export」：三文件 project.json/outline.json/data.db + 可选 AGENTS.md，存在才含） */
-export function exportProjectZip(): Promise<ExportProjectZipRes> {
-  return fetchZipDownload("/project/export");
+export function exportProjectZip(): Promise<ExportDownloadRes> {
+  return fetchDownload("/project/export", {
+    accept: ARCHIVE_CONTENT_TYPE,
+    filenameFallback: "project.zip",
+  });
 }
 
 /**
  * 导出当前项目正文为 markdown 小说文档 zip（「GET /project/export-novel」：卷/章目录树 +
  * 章正文投影，`{书名}-小说文档.zip`）。响应契约与 `/project/export` 同口径（二进制 + JSON 错误）。
  */
-export function exportNovelZip(): Promise<ExportProjectZipRes> {
-  return fetchZipDownload("/project/export-novel");
+export function exportNovelZip(): Promise<ExportDownloadRes> {
+  return fetchDownload("/project/export-novel", {
+    accept: ARCHIVE_CONTENT_TYPE,
+    filenameFallback: "project.zip",
+  });
+}
+
+/**
+ * 导出当前项目正文为整本单文件 TXT（「GET /project/export-novel-txt」：UTF-8 无 BOM + CRLF，
+ * `{书名}.txt` / `{书名}-网文.txt`）。响应 = `text/plain; charset=utf-8`，错误仍是 JSON 包裹。
+ */
+export function exportNovelTxt(layout: NovelTxtLayout): Promise<ExportDownloadRes> {
+  return fetchDownload(`/project/export-novel-txt?layout=${encodeURIComponent(layout)}`, {
+    accept: PLAIN_TEXT_CONTENT_TYPE,
+    filenameFallback: "book.txt",
+  });
 }
 
 /** POST /api/v1/project/import 响应（类型同 shared projectImportResSchema，含 mode 分流字段） */

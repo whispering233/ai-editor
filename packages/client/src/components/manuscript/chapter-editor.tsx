@@ -15,13 +15,14 @@
 // 冲突（409 DOCUMENT_STALE）：对话框二选一——「重新加载（丢弃本地）」重拉服务端版本并换 key 重挂
 // 编辑器，「覆盖保存」重发且**不带 base_updated_at**（服务端据此跳过冲突检查）。
 // 章节不存在 / 已软删（404 OUTLINE_NODE_NOT_FOUND）→ 页面 404 态（写法同 OutlineDetail）。
-// 导入导出（卡 12.6，契约 docs/api/110-api-manuscript.md「导入导出（无端点）」）：纯客户端——导出 md（**先确认有损**）
-// / 块 JSON（无损），导入 md（往返比对，有损时必须用户确认后才覆盖）/ 块 JSON（浅校验失败即可见错误）。
+// 导入导出（卡 12.6；2026-11 补单章 TXT，契约 docs/api/110-api-manuscript.md「导入导出（无端点）」）：纯客户端——导出 md（**先确认有损**）
+// / 块 JSON（无损）/ 纯文本 TXT（两种排版，**不弹确认框**），导入 md（往返比对，有损时必须用户确认后才覆盖）/ 块 JSON（浅校验失败即可见错误）。
 // 判定与文件名规则在 lib/document-io（node 可测）；对话框与下载走既有全局 confirm / 临时 <a download>。
+// TXT 取编辑器最新块 JSON（`latestRef`，**含未保存改动**），排版 / 文件名复用整本 TXT 的 shared 函数。
 // 导入落地必须换 key 重挂编辑器（BlockNote 非受控），再把新内容交给自动保存落盘。
 // 样式纪律：颜色只走 token / 语义变量；块编辑器的改色只在 components/blocknote/blocknote.css。
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import type { OutlineTree } from "@whispering233/ai-editor-shared";
+import type { NovelTxtLayout, OutlineTree } from "@whispering233/ai-editor-shared";
 import { Button, Dropdown } from "antd";
 import { DownOutlined, ExportOutlined, ImportOutlined } from "@ant-design/icons";
 import { PageHeader } from "@/components/ui/page-header";
@@ -49,15 +50,17 @@ import {
   manuscriptErrorAction,
 } from "../../lib/manuscript";
 import {
+  chapterTxtLabel,
   downloadTextFile,
   exportDocumentJson,
   exportDocumentMarkdown,
+  exportDocumentTxt,
   MARKDOWN_LOSSY_NOTICE,
   markdownImportConfirmMessage,
   planDocumentImport,
   readTextFile,
 } from "../../lib/document-io";
-import { findNode } from "../../lib/outline-tree";
+import { findNode, numberOutline } from "../../lib/outline-tree";
 import { useSaveShortcut } from "../../lib/save-shortcut";
 import { errorBannerClass, skeletonClass } from "../../lib/styles";
 import { navigate } from "../../hooks/use-route";
@@ -125,6 +128,11 @@ export function ChapterEditor({ outline, chapterId, basePath, onSaved, headerLea
   const node = outline === null ? null : findNode(outline.children, chapterId);
   const chapterTitle = node !== null && node.type === "chapter" ? node.title : null;
   const neighbors = useMemo(() => chapterNeighbors(outline, chapterId), [outline, chapterId]);
+  /** 章号徽标（`第M章`，展示口径编号 = 大纲页徽标同源）；大纲未加载 / 编号取不到 → null */
+  const chapterLabel = useMemo(
+    () => numberOutline(outline).labels.get(chapterId) ?? null,
+    [outline, chapterId],
+  );
 
   /** 拉取正文（首拉 / 重新加载）；失败按错误码分流（404 → 页面 404 态，其余 → 加载失败 + 重试） */
   async function load(): Promise<void> {
@@ -260,7 +268,7 @@ export function ChapterEditor({ outline, chapterId, basePath, onSaved, headerLea
     await saveContent(latestRef.current ?? "", { force: true });
   }
 
-  // ============ 导入导出（卡 12.6） ============
+  // ============ 导入导出（卡 12.6；2026-11 补 TXT） ============
 
   /** 本章文件名基名（章标题；大纲未加载时回落「正文」，与页头标题同口径） */
   function documentTitle(): string {
@@ -288,6 +296,27 @@ export function ChapterEditor({ outline, chapterId, basePath, onSaved, headerLea
     );
     downloadTextFile(file);
     useUiStore.getState().showToast(`已导出 ${file.fileName}（有损）`);
+  }
+
+  /**
+   * 导出纯文本（TXT，**有损**）：正文取编辑器最新块 JSON（`latestRef`，**含未保存改动**），不读服务端；
+   * **不弹确认框**（有损已在菜单项名里写明）——直接下载 + 成功 toast 文件名。
+   * 文件名基名 = 章名（空 → `正文`）；标题行走 `chapterTxtLabel` 的编号 / 章名回退。
+   */
+  function exportPlainText(layout: NovelTxtLayout): void {
+    try {
+      const file = exportDocumentTxt(
+        latestRef.current ?? "",
+        chapterTitle?.trim() || "正文",
+        chapterTxtLabel(chapterLabel, chapterTitle),
+        layout,
+      );
+      downloadTextFile(file);
+      useUiStore.getState().showToast(`已导出 ${file.fileName}`);
+    } catch {
+      // 防御：产物组装 / 下载抛错都必须可见（不静默失败）
+      useUiStore.getState().showToast("导出纯文本失败", "error");
+    }
   }
 
   /**
@@ -421,9 +450,13 @@ export function ChapterEditor({ outline, chapterId, basePath, onSaved, headerLea
                   items: [
                     { key: "json", label: "导出块 JSON（无损）" },
                     { key: "markdown", label: "导出 markdown（有损）" },
+                    { key: "txt-preserve", label: "导出纯文本（保真）" },
+                    { key: "txt-webnovel", label: "导出纯文本（网文排版）" },
                   ],
                   onClick: ({ key }) => {
                     if (key === "json") exportBlocksJson();
+                    else if (key === "txt-preserve") exportPlainText("preserve");
+                    else if (key === "txt-webnovel") exportPlainText("webnovel");
                     else void exportMarkdown();
                   },
                 }}

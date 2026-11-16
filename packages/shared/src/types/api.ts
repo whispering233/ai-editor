@@ -8,6 +8,7 @@
 import { z } from "zod";
 import { CHARACTER_PRIORITIES, DEFAULT_ENTITY_LIST_LIMIT, ENTITY_TYPES, MAX_ENTITY_LIST_LIMIT } from "../constants/entity.js";
 import { normalizeRelationType, relationTypeSyntaxError } from "../utils/relation-type.js";
+import { NOVEL_TXT_LAYOUTS } from "../utils/novel-export.js";
 import { HOOK_STATUSES, PAYOFF_TIMING } from "../constants/hook.js";
 import { CONFLICT_LEVELS } from "../constants/outline.js";
 import { BACKUP_FREQUENCIES } from "../constants/backup.js";
@@ -428,6 +429,17 @@ export const PROJECT_EXPORT_OPTIONAL_FILE_NAMES = [AGENTS_FILE_NAME] as const;
  * 三文件缺失任一 → 500 INTERNAL_ERROR（打开的项目三文件必然齐全，缺失即损坏）
  * - 二进制响应不走 Zod parse——以本注释 + PROJECT_EXPORT_FILE_NAMES 常量表达
  */
+
+/**
+ * GET /api/v1/project/export-novel-txt（Query）：`layout` 缺省 = `preserve`（服务端按缺省取）。
+ * 响应同样**非 JSON 包裹**（`text/plain; charset=utf-8`，契约见
+ * `docs/api/10-api-project.md` §GET /api/v1/project/export-novel-txt），故无 res schema。
+ * 非法取值 → 400 VALIDATION_ERROR（本 schema 的唯一消费点 = 该路由）。
+ */
+export const projectExportNovelTxtQuerySchema = z.object({
+  layout: z.enum(NOVEL_TXT_LAYOUTS).optional(),
+});
+export type ProjectExportNovelTxtQuery = z.infer<typeof projectExportNovelTxtQuerySchema>;
 
 // POST /api/v1/project/import（已落）
 // - 请求：multipart/form-data 文件上传——field "file"（zip 备份包）+ field "name"（书名，

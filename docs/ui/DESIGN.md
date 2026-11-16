@@ -584,6 +584,7 @@ components:
 **`writing-page`（写作页，2026-11）** — 一级导航「写作」（排在「大纲」之前，仅小说工作区）的页面；路由 `#/writing` / `#/writing/:chapterId`。**中栏内 master-detail**（不是页内 tab、不改左栏高亮）：左 = **卷章导航栏**（默认 240px，可拖拽 200–480px，可收起为 0px（正文列吸收宽度）；展开态由卷章栏自身 1px 右边线充当分栏线、收起态不渲染 rail / 无分栏线；自身纵向滚动），右 = **正文列**（吸收剩余宽度，承载章正文的页头 + 写作面）。两列都铺满中栏高度（外壳与内边距的抵消见 §Layout「写作页的中栏内分栏」）。
 - **卷章导航栏 = 只读结构导航，不是第二个大纲页**：顶部 header（40px、`px-3 py-2`、`section-title`「卷章」，`border-b {colors.hairline}`；**header 不放收起钮**）；行区容器 `p-2` = 8px 内边距，行内几何与人物工作台同密度：卷行 = 折叠箭头（`RightOutlined` + `!collapsed && "rotate-90"`，24px 盒；无子行时同几何空占位）+ `第N卷`（`TypeChip`，`min-w-14`）+ 卷名（`truncate`）+ 右侧 `N章`（caption、muted、`tabular-nums`）；章行 = 24px 缩进占位 + `第N章` + 章名（`truncate`）+ 右侧字数（`metadata.textLength > 0` 才渲染，`N 字` / `N.N 千字`，格式化单源 = `lib/manuscript.ts` 的 `formatTextLength`，muted、`tabular-nums`）。行高 32px、`{rounded.sm}`、无行底线；hover = `surface-soft`；**选中 = `bg-accent`（`surface-muted`）+ 文字不变色 + `aria-current="page"`**（与左栏导航同一选中语言）。**顺序 = 阅读序**（卷文件序 → 卷内章序）；**存量根级章在顶层就地显示、按原文件位置夹在卷组之间**（不造「未分卷」伪卷）。**0 章卷保留卷行**（`0章`、无子行、无箭头）。**默认全展开**；折叠状态是页面 state（**不写 localStorage**、刷新复位、切章不重置）。换章时选中行 `scrollIntoView({ block: "nearest" })`。
 - **点击章行直接进正文**（`#/writing/:chapterId`），**不再有「写正文」入口**；点击卷行只折叠 / 展开。**rail 无改名 / 新建 / 删除 / 结构拖拽 / 右键菜单**（宽度拖拽见下条；结构编辑唯一入口仍是大纲树；扩展旋钮见 `backlog.md`）。
+- **页头导入 / 导出（2026-11 补 TXT）**：页头操作区 = `上一章 / 下一章 / 导入 / 导出`；导出下拉四项 = `导出块 JSON（无损）` / `导出 markdown（有损）` / `导出纯文本（保真）` / `导出纯文本（网文排版）`。TXT 两项不弹确认框，成功后 toast 文件名；正文取编辑器最新块 JSON（含未保存改动），与整本 TXT 共用同一 `buildNovelTxt`。导入仍只认 `.md` / `.json` / `.txt`（`.txt` 按 markdown 有损导入，不新增 TXT 导入格式）。
 - **宽度与收起（2026-11 修订）**：默认 240px，拖拽区间 200–480px；右边界 = 6px `ResizeHandle`（`role="separator"` + `aria-label="调整卷章导航栏宽度"`，**不画线**、hover / 拖拽整条染成半透明带；分栏线由卷章栏自身 `border-r` 承担，见 §Layout「分栏边线单所有权」；拖拽期间页面禁文本选中）。**收起入口 = 正文列页头标题行最左的单箭头按钮**（`PageHeader` `leading` 槽；当前点击动作：收起 `LeftOutlined`、展开 `RightOutlined`；`icon-button` 表皮，**不是圆钮**；`aria-label` / `title` = `收起卷章导航栏` / `展开卷章导航栏`，`aria-expanded`；**常显**，不靠 hover）。DOM 在正文列，不在 rail 内；rail header 仍不放收起钮。**四种正文形态（骨架 / 显式坏章 / 正文 / 桌面无章）渲染同一枚**；窄屏（<1024）与专注模式不渲染。拖动过程只更新内存，`pointerup` 一次写入 `localStorage` `ai-editor:writing-rail` 的 `{ width, collapsed }`；收起 / 展开立即写。**收起 = 0px**（不渲染 rail、无窄条、无占位；正文列吸收宽度；展开恢复原宽）；收起态不渲染拖拽手柄；宽度 / 收起态全局一份（同 `ai-editor:panels`，不随书）；窄屏（<1024）rail 全宽、无拖拽 / 收起；专注模式 rail / 页头都不渲染。
 - **最近导航（恢复上次写作，2026-11 修订）**：`#/writing` 无 id 且桌面端时，按 **最近打开 → 服务端最近编辑 → 空态** 解析目标章并 `window.location.replace("#/writing/" + id)`（**replace 不入历史**，避免「写作 ↔ 大纲」后退打转；`navigate()` 是 push，不能用）。
   - **最近打开** = `localStorage` `ai-editor:writing-last-opened` 的 per-book 映射 `{ [projectId]: chapterId }`（只存 id，不存正文；打开 `#/writing/:id` 且该章仍在可见大纲时写入，窄屏也写）。命中的 id 必须仍在当前书**可见大纲**（未软删）；已删 / 换书 / 脏值 → 忽略。
@@ -730,16 +731,19 @@ components:
 
 **`cloud-remote-books-dialog`（从云端恢复，新机器路径）** — 书架「导入备份」旁并列 `button-default`「从云端恢复…」（打开即拉 `GET /cloud/remote-books`；未配置云盘由服务端 409 引导去设置页云端面板，复用跨页意图）：可滚动行列表（`data-row`）= 书名（解析不出回退目录名）+ `caption-text` 元信息（最近备份时间 · 份数 · 大小）+ 行尾状态——「本机已有」置灰（`type-badge`）/ 该目录无备份置灰 / 可导入行给 `button-default`「导入」；导入成功关框 + toast + 刷新书架（**不自动打开**，与导入备份一致）。
 
-**`export-book-dialog`（导出类型，2026-09）** — 当前工作区条「导出」不再直接下载，先弹受控 Dialog：标题 `导出《书名》` + **竖排单选项**（antd `Radio.Group`，默认选中第一项）+ Footer `[取消]` + `[导出]`（primary；在途 disabled + loading，沿用导出防连点）。
+**`export-book-dialog`（导出类型，2026-09；2026-11 加纯文本）** — 当前工作区条「导出」不再直接下载，先弹受控 Dialog：标题 `导出《书名》` + **竖排单选项**（antd `Radio.Group`，默认选中第一项）+ Footer `[取消]` + `[导出]`（primary；在途 disabled + loading，沿用导出防连点）。
 
 | 选项 | caption（`caption-text`） | 产物 |
 | :--- | :--- | :--- |
 | `项目压缩文件`（默认） | `{书名}.zip · 三文件 + 项目规则（若有）· 可再导入（无损）` | `GET /project/export` |
 | `小说文档` | `{书名}-小说文档.zip · 卷/章 markdown 目录树 · 有损` | `GET /project/export-novel` |
+| `纯文本` | `{书名}.txt · 整本单文件 · UTF-8 · 有损` | `GET /project/export-novel-txt` |
 
-**落盘 = 默认下载目录**（两条都走同一 `<a download>` 管道，**框内无目录选择控件**；桌面版直写目录树属未排期项，见 `../design/backlog.md`）。有损提示写在第二项的 caption 里，**不另弹二次确认**（选项本身就是用户的选择；单章页头「导出 markdown」那次确认是另一条路径）。无可见章时服务端 400，框内 toast 报错（「本书还没有章节」）。
+**「纯文本」的排版勾选（2026-11）**：选中第三项后，在单选组下方（`Radio.Group` 之外）显示 antd `Checkbox`「网文排版（段首缩进、段间不空行；文件名加 -网文）」，默认不勾选、不记忆、在途随导出禁用；勾选只影响该次导出。`exportBookOptions(workspaceKind)` 的可选集口径不变：练习工作区仍只有 `项目压缩文件`，小说工作区三项。
 
-**可选导出项按工作区类型收窄（2026-10）**：`小说文档` 是小说语义（服务端 `export-novel` 对练习工作区 400 `KIND_MISMATCH`）⇒ **练习工作区只给 `项目压缩文件` 一项**（唯一实现 = `exportBookOptions(workspaceKind)`，调用点不另写过滤）；小说工作区两项不变。
+**落盘 = 默认下载目录**（三条都走同一 `<a download>` 管道，**框内无目录选择控件**；桌面版直写目录树属未排期项，见 `../design/backlog.md`）。有损提示写在第二、三项的 caption 里，**不另弹二次确认**（选项本身就是用户的选择；单章页头「导出 markdown」那次确认是另一条路径）。无可见章时服务端 400，框内 toast 报错（「本书还没有章节」）。
+
+**可选导出项按工作区类型收窄（2026-10）**：`小说文档` / `纯文本` 是小说语义（服务端 `export-novel` / `export-novel-txt` 对练习工作区 400 `KIND_MISMATCH`）⇒ **练习工作区只给 `项目压缩文件` 一项**（唯一实现 = `exportBookOptions(workspaceKind)`，调用点不另写过滤）；小说工作区三项。
 
 > 本小节**不新增色值 / 字号 / 圆角**：沿用 `button-default` / `button-primary` / `card` / `data-row` / `icon-button` / `type-badge` / `caption-text` / `section-title` / 受控 Dialog（复选项与单选组都沿用 antd `Checkbox` / `Radio` 走全局 seed 派生；导出类型框不引 Tooltip、不写死样式）。
 
