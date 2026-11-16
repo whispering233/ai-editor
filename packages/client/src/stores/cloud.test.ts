@@ -79,7 +79,7 @@ beforeEach(() => {
   vi.mocked(apiGetProjectBackups).mockResolvedValue({ backups: [] });
 });
 
-describe("cloudBadgeTone：角标只在三种状态亮", () => {
+describe("cloudBadgeTone：角标只在需要用户动手时亮", () => {
   it("conflict = error；local-ahead / remote-ahead = warning；其余（含 unreachable/未读到）不亮", () => {
     expect(cloudBadgeTone(status("conflict"))).toBe("error");
     expect(cloudBadgeTone(status("local-ahead"))).toBe("warning");
@@ -90,6 +90,15 @@ describe("cloudBadgeTone：角标只在三种状态亮", () => {
     expect(cloudBadgeTone(status("unconfigured"))).toBeNull();
     expect(cloudBadgeTone(status("no-project"))).toBeNull();
     expect(cloudBadgeTone(null)).toBeNull();
+  });
+
+  it("local-ahead 仅自动推送关闭时亮 warning（开启 = 会被自动处理，不需要动手）", () => {
+    expect(cloudBadgeTone(status("local-ahead", { autoPush: true }))).toBeNull();
+    expect(cloudBadgeTone(status("local-ahead", { autoPush: false }))).toBe("warning");
+  });
+
+  it("remote-ahead 与自动推送无关（云端更新仍需用户决定是否拉取）", () => {
+    expect(cloudBadgeTone(status("remote-ahead", { autoPush: true }))).toBe("warning");
   });
 });
 

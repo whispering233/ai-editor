@@ -31,12 +31,15 @@ import { useUiStore } from "./ui";
 /** 设置页「备份」pane 的二级项（跨页跳转意图的目标） */
 export type SettingsBackupPane = "cloud";
 
-/** 角标语义色：`conflict` = error（需人裁决）、未推改动/云端更新 = warning（有事可做、非错误）；
- * 其余状态不显示角标（`unreachable` 明确不亮——见 DESIGN.md §538）。 */
+/** 角标语义色 = **只在需要用户动手时亮**：`conflict` = error（需人裁决）、`remote-ahead` = warning
+ * （云端有更新，要不要拉由用户定）；`local-ahead` 仅**自动推送关闭**时 warning——自动推送开着时它会被
+ * 自动处理、不需要动手（长期常亮的红点会失去提示意义）。其余状态不显示角标
+ * （`unreachable` 明确不亮——见 DESIGN.md §538）。 */
 export function cloudBadgeTone(status: CloudStatus | null): "error" | "warning" | null {
   if (status === null) return null;
   if (status.state === "conflict") return "error";
-  if (status.state === "local-ahead" || status.state === "remote-ahead") return "warning";
+  if (status.state === "remote-ahead") return "warning";
+  if (status.state === "local-ahead") return status.autoPush ? null : "warning";
   return null;
 }
 
