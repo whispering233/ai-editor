@@ -329,6 +329,49 @@
 - **产物不可再导入**：`POST /project/import` 只认 `/project/export` 的三文件 + 可选规则包。
 - 客户端落盘 = 与 `/project/export` 同一条 `<a download>` 管道（默认下载目录；**zip 内才是目录树**，不解压不是磁盘目录树）。
 
+### GET /api/v1/project/export-novel-txt
+
+导出当前项目**正文**为单个纯文本文件（`.txt`；用户侧入口与 `/project/export-novel` 并列，见 [`../ui/DESIGN.md`](../ui/DESIGN.md) §书架主页 `export-book-dialog`）。
+
+> **同 `/project/export`：响应为原始文本（`text/plain; charset=utf-8`），不走 `{success, data}` 包裹**；`Content-Disposition: attachment; filename="book.txt"; filename*=UTF-8''<书名>.txt`（RFC 5987；网文排版为 `<书名>-网文.txt`）。
+
+```typescript
+// Query
+layout?: "preserve" | "webnovel"; // 缺省 "preserve"；其他值 → 400 VALIDATION_ERROR
+
+// Res: 200 —— text/plain; charset=utf-8
+//  Body: 单个 .txt（UTF-8 无 BOM、CRLF、末尾一个换行）
+//   第N卷 卷名
+//   <空行>
+//   第M章 章名
+//   <空行>
+//   <该章正文投影 document_records.content_text>
+//   ...
+```
+
+**排版口径**：
+
+- `preserve`（默认）：正文原样（段间保留 `content_text` 的空行），不自动缩进；卷 / 章标题前后各一个空行。
+- `webnovel`：普通段落去掉行首空白后加两个全角空格 `　　`，连续段落之间不空行；卷 / 章标题前后各一个空行。
+- 非段落块（标题 / 列表 / 引用 / 代码 / 表格 / 图片 / 分隔线）按 `content_text` 原样保留、不缩进，并与前后内容空一行；v1 以「段首标记」判定（`#` / `- ` / `1. ` / `> ` / `|` / 代码围栏 / `![` / `---`），代码围栏内的行不缩进，不做块级精确判定（已知边界见 [`../design/backlog.md`](../design/backlog.md)）。
+- 章标题由本端点生成，**不带 `#`**；不要复用 `buildNovelChapterMarkdown` 的 `# ` 前缀。正文里的标题块按非段落块原样保留。
+- **不写书名、不写目录**；首行就是第一个卷 / 章标题；文件名承载书名。
+- 卷标题 = `第N卷 卷名`、章标题 = `第M章 章名`；名字 `trim` 后为空 → 只留标签（不写「未命名」）；**标题用原始名（不 sanitize；sanitize 只用于文件名）**。
+- 顺序 = `numberVisibleOutline.chapters` 的阅读序（`orderVisibleChapters` 先序；含存量直挂 root 的章，根级章按章号插入）；**无可见章的卷不输出卷标题**；软删节点不输出。
+- **空章保留标题行**（无正文）；不产出空文件。
+- 文件末尾 = 一个换行（CRLF 的最后一行也是 `\r\n`）。
+- 整本只读**已保存**的 `content_text`；未保存改动以写作页自动保存为准（单章 TXT 则取编辑器当前内容，见 [`110-api-manuscript.md`](./110-api-manuscript.md) §导入导出）。
+
+**语义**：
+
+- 导出**当前打开项目**（无项目 → 409 `NO_PROJECT_OPEN`，与 `/config` 一致）。
+- **仅小说工作区**（`kind = "novel"`）：练习工作区 → 400 `KIND_MISMATCH`（客户端据此在书架弹窗隐藏该选项）。
+- **无可见章 → 400 `VALIDATION_ERROR`**（不产空文件）。
+- 只读 `data.db` 行（一次批量取 `content_text` 投影，不读块 JSON），**不做 wal_checkpoint**、不写项目目录任何文件。
+- 只含**正文**：参考资料 / 人物 / 设定 / 伏笔 / 时间轴 / 对话历史都不进文件（`sessions/` 从不进任何导出）。
+- **产物不可再导入**：`POST /project/import` 只认 `/project/export` 的三文件 + 可选规则包。
+- 单章 TXT 不走本端点（纯客户端，见 [`110-api-manuscript.md`](./110-api-manuscript.md) §导入导出）。
+
 ### POST /api/v1/project/import
 
 导入备份 zip（校验 + 原子搬入；分流：**id 匹配书架已有项目 → 覆盖恢复，不匹配 → 导入为新书**）。
