@@ -51,7 +51,7 @@
   local: null | {            // 本机侧状态（未打开项目 → null）
     lastPushedFileName: string | null;   // **冲突判定基准** = 本机最后一次成功同步（推/拉）到的云端文件名
     lastSyncAt: string | null;           // 上次同步成功时刻（ISO 8601）；null = 从未同步过
-    dirty: boolean;                      // 本机创作数据自 lastSyncAt 后有改动（三文件 + data.db-wal；**不含 .backups/、也不含 sessions/**）
+    dirty: boolean;                      // 本机创作数据自 lastSyncAt 后有改动（三文件 + data.db-wal + 项目规则 AGENTS.md；**不含 .backups/、也不含 sessions/**）
     latestBackupFileName: string | null; // 最新一份本地备份（推送缺省目标）
     backupStale: boolean;                 // 「最新备份早于最新改动」**且**「有未同步改动（dirty）」＝「有改动未进备份」；
                                           //   拉取/恢复后为 false（覆盖前快照的时间戳早于写入的文件，只看 mtime 会误报）
@@ -185,7 +185,7 @@
 }
 ```
 
-**流程**：`GET` 云端那份 → **覆盖前自动快照本机当前状态**（restore 管道既有）→ `validateBackupPackage`（zip 结构/白名单/三文件齐全/data.db `user_version` 三态分流）→ **工作区类型校验（2026-10）**：包内 `kind`（缺失/未知 → `novel`）必须等于当前工作区的 `kind`，不等 → **400 `KIND_MISMATCH`**（不动三文件内容；口径与本地 restore 同源，见 [20-api-backup.md](./20-api-backup.md)）→ **三文件 + 项目规则覆盖**（`project.json` 的 `name` 与 `kind` 都归一为当前工作区、`id` 保留——与 restore 同口径；**包内无 `AGENTS.md` → 删除本机规则文件**，严格镜像；**正文与参考资料在 `data.db` 内，随覆盖走**；**不触碰 `sessions/`**——不写不删，存量旧包内的 `sessions/**` 条目接受并忽略）→ 重连 data.db + 版本对齐 + 重启备份定时器 → 更新 `lastSeenHeadFileName` / `lastSyncAt` / `lastSeenCloudFiles`。
+**流程**：`GET` 云端那份 → **覆盖前自动快照本机当前状态**（restore 管道既有）→ `validateBackupPackage`（zip 结构/白名单/三文件齐全/data.db `user_version` 三态分流）→ **工作区类型校验（2026-10）**：包内 `kind`（缺失/未知 → `novel`）必须等于当前工作区的 `kind`，不等 → **400 `KIND_MISMATCH`**（不动三文件 + 项目规则；口径与本地 restore 同源，见 [20-api-backup.md](./20-api-backup.md)）→ **三文件 + 项目规则覆盖**（`project.json` 的 `name` 与 `kind` 都归一为当前工作区、`id` 保留——与 restore 同口径；**包内无 `AGENTS.md` → 删除本机规则文件**，严格镜像；**正文与参考资料在 `data.db` 内，随覆盖走**；**不触碰 `sessions/`**——不写不删，存量旧包内的 `sessions/**` 条目接受并忽略）→ 重连 data.db + 版本对齐 + 重启备份定时器 → 更新 `lastSeenHeadFileName` / `lastSyncAt` / `lastSeenCloudFiles`。
 
 **同步状态更新**：`lastPushedFileName` = **拉到的这份**（既是新的冲突判定基准，也是「本机已基于该版本」的标记——拉取后立刻推送不会被判冲突）；`lastSeenHeadFileName` = 云端 head；`lastSeenCloudFiles` = 拉取时的云端文件集合。
 

@@ -157,7 +157,7 @@
 
 **项目规则同属覆盖组**（2026-11）：包内有 `AGENTS.md` → 原样写入；包内没有 → **删除本机规则文件**（严格镜像：包内缺 = 该项目当时没有规则；旧包同样适用）。覆盖前自动快照留有覆盖前的规则，误删可回滚。恢复 / 拉取后**当前会话仍沿用装配时读到的旧规则**，换会话（或重启）才生效——既有行为，不额外热更新。
 
-**工作区类型（`kind`）同口径**：拉取/恢复/导入都是「三文件覆盖」，对小说工作区与练习工作区（`kind = "practice"`）**完全同构**；包内 `kind` 与目标工作区不符 → 400 `KIND_MISMATCH`（与 `POST /project/import` / `backup/restore` 同一套，见 `../api/20-api-backup.md` 与 `../api/error-code.md`）。
+**工作区类型（`kind`）同口径**：拉取/恢复/导入都是「三文件 + 项目规则覆盖」，对小说工作区与练习工作区（`kind = "practice"`）**完全同构**；包内 `kind` 与目标工作区不符 → 400 `KIND_MISMATCH`（与 `POST /project/import` / `backup/restore` 同一套，见 `../api/20-api-backup.md` 与 `../api/error-code.md`）。
 
 ### 删除一本书（本地 + 云端）
 
