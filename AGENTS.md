@@ -1,98 +1,121 @@
 # AGENTS.md
 
-面向编码 agent 的协作入口。**设计文档是单一事实来源**——本文件只回答「读什么」与「怎么协作」，不重复文档内容。
+面向编码 agent 的协作入口。**设计文档是单一事实来源**：本文件只回答「读什么」「怎么协作」，并登记设计文档不承载的**代码级硬约束**——凡能在 `docs/` 里查到的内容，这里不复述。
 
 ## 文档即契约（阅读顺序）
 
-`docs/design/00-master-design.md`（产品定位与设计原则）→ `architecture.md`（技术栈 + 分包与依赖方向 + pi 嵌入形态）→ 详细设计（`10-data-model.md` → `20-context.md` → `30-agent-loop.md`，只讲「为什么 + 不变式」）→ 按职责读 `docs/api/`（先 `00-api-index.md` + `api-public.md`）与 `docs/db/schema.md`（字段/端点契约的「是什么」）→ 前端改动必读 `docs/ui/DESIGN.md`（**视觉与布局唯一契约**；改样式先改它）。
+`docs/design/00-master-design.md`（产品定位与设计原则）→ `architecture.md`（技术栈 / 分包与依赖方向 / pi 嵌入形态）→ 详细设计（`10-data-model.md` → `20-context.md` → `30-agent-loop.md` → `40-cloud-sync.md` / `50-desktop.md` / `60-practice.md`）→ 按职责读 `docs/api/`（先 `00-api-index.md` + `api-public.md`）与 `docs/db/schema.md` → 前端改动必读 `docs/ui/DESIGN.md`（**视觉与布局唯一契约**：改样式先改它）。
 
-- 任何改动前先读对应文档；发现文档之间或文档与代码矛盾，先停下提问，不要自行发明。
-- 涉及 pi 的行为以 `node_modules` 里实际安装的 `@earendil-works/*`（1.4.0）代码/类型为准，**禁止凭记忆写接口**。
-- 状态与演进：根 `CHANGELOG.md`（逐版本事实）+ `tasks.md`（当前任务卡）+ `backlog.md`（未排期遗留项与有意口径）。云端存档另见 `docs/design/40-cloud-sync.md` 与 `docs/api/100-api-cloud.md`。
-- 运行/构建/发布：`build.md`；配置载体与读写边界：`config.md`；桌面版（Electron 外壳）设计：`50-desktop.md`。
+- 改动前先读对应文档；发现文档之间或文档与代码矛盾，**先停下提问**，不要自行发明。
+- pi 的行为以 `node_modules` 里实际安装的 `@earendil-works/*` 代码 / 类型为准，禁止凭记忆写接口。
+- 状态与演进：根 `CHANGELOG.md`（逐版本事实）+ `docs/design/tasks.md`（当前任务卡）+ `docs/design/backlog.md`（未排期遗留项与有意口径）。
+- 运行 / 构建 / 发布 = `docs/design/build.md`；配置载体与读写边界 = `docs/design/config.md`。
 
 ## 协作流程
 
-- 任务以 `docs/design/tasks.md` 为清单：按卡开发，垂直切片、一次一张、一卡一 commit、独立验证、卡内不做卡外顺手改动；完成后清理卡片并向用户汇报。
-- 每卡「实现 fixer + 独立验证 oracle」双代理；并行卡片用临时分支 + git worktree，验证后合回 main 并清理。
-- 并行派工的硬要求（2026-09 实测）：子代理必须显式 `context: "fresh"`——`worker` 默认 fork 会把父会话的**编排叙事**当成自己的进度（实测三道 fixer 全部零改动回 PASS）；每份任务需带**硬完成判据**（`git log` 必须含新 commit + `git status` 干净，无 commit 不许报 PASS）与「汇报必附 commit hash / 命令输出」条款。
-- 验证：`pnpm typecheck` / `pnpm lint` / `pnpm -r test`；**单包测试的 filter 必须与 package.json 的 `name` 逐字一致**（`pnpm --filter @whispering233/ai-editor-<pkg> test`；⚠ 桌面包名**无 scope** = `ai-editor-desktop`，加前缀同样空跑）——短名（如 `--filter server`）或写错前缀都会打印 `Scope: 0 of 8 workspace projects` 并**静默什么都不跑**（2026-09 实测踩坑：验收证据因此可能全是空的）；⚠ fresh clone 先 `pnpm -r build` 再 typecheck；UI 改动额外用浏览器核一次像素；**改桌面版主进程（依赖/import）后必须跑打包态启动冒烟**（`build.md`：`typecheck` 绿 ≠ 打包态能起）。
-- 提交信息用中文，遵循 conventional commits（如 `feat(doc): ...`）。文档里的日期标注用**真实日期**（`date +%F`，与 CHANGELOG 版本头同源）——不凭记忆写月份（曾整批标成 `2026-10`，实际是 `2026-09`）。**合同文档不写任务卡编号**（`docs/api/`、`docs/db/`、`docs/ui/`、`docs/design/` 正文里的「卡 N / 批次 N」——卡清空后编号即成悬空引用；`backlog.md` 保留登记来源，代码注释里的历史阶段编号按 provenance 保留）。
-- 日常不 push、不建 PR、不新增 CI；远端与 CI 仅服务发布链路（push `v*` tag 触发 `.github/workflows/`）。
+- 任务以 `docs/design/tasks.md` 为清单：垂直切片、一次一张、一卡一 commit、独立验证；卡内不做卡外顺手改动，完成后清卡并汇报。
+- 每卡「实现 fixer + 独立验证 oracle」双代理；并行卡片用临时分支 + `git worktree`，验证后合回 main 并清理。
+- 并行派工硬要求：子代理必须显式 `context: "fresh"`（默认 fork 会把父会话的编排叙事当成自己的进度）；任务卡必须带硬完成判据（`git log` 含新 commit + `git status` 干净，无 commit 不许报 PASS），并要求汇报附 commit hash / 命令输出。
+- 验证命令：`pnpm typecheck` / `pnpm lint` / `pnpm -r test`。**单包测试的 filter 必须与 package.json 的 `name` 逐字一致**（桌面包名无 scope = `ai-editor-desktop`），写错会打印 `Scope: 0 of 8 workspace projects` 并静默空跑；fresh clone 先 `pnpm -r build` 再 typecheck；UI 改动额外用浏览器核一次像素；改桌面版主进程（依赖 / import）后必须跑打包态启动冒烟。
+- 提交信息用中文、遵循 conventional commits；文档里的日期用真实日期（`date +%F`）。**合同文档（`docs/api` / `docs/db` / `docs/ui` / `docs/design` 正文）不写任务卡编号**——卡清空后编号即成悬空引用；`backlog.md` 保留登记来源，代码注释里的历史阶段编号按 provenance 保留。
+- 日常不 push、不建 PR、不新增 CI；远端与 CI 只服务发布链路（push `v*` tag 触发 `.github/workflows/`）。
 
 ## 版本发布
 
-按 `docs/design/build.md`「正式发布链路」执行（当前发布面 = 5 个 npm 包：shared/db/tools/agent/server + 同一 tag 的 **Windows 安装包三资产**：`.exe` + `latest.yml` + `.exe.blockmap`）。
+按 `docs/design/build.md`「正式发布链路」执行（发布面清单以该节为准，不在此复述）。
 
-## 代码级硬约束（设计文档不承载实现细节，仅此处登记）
+## 代码级硬约束
 
-- **pi 依赖 exact pin**：`@earendil-works/*` 一律写精确版本（当前 `1.4.0`），禁止 `^`/`~`；升级 = 一个显式 commit 齐抬版本（`pi-ai`/`pi-coding-agent`）+ 全量测试 + 无锁安装冒烟，并复查三处「与 pi 同构」断言（最近验证 = 1.4.0：pi-ai `auth/resolve.js`（凭据解析顺序）与 pi-coding-agent `core/http-dispatcher.js` 相对 1.3.0 **逐字节相同**；会话格式 `CURRENT_SESSION_VERSION` 仍为 3、`SessionInfo`/`SessionHeader`/`SessionStats`/`ContextUsage` **逐行相同**（`session-manager.d.ts` 整体零差异）；`server/src/http-dispatcher.ts` 与 pi `core/http-dispatcher.ts` **已知差异仅**「不跟踪 `installedGlobalFetch`——重复调用只换 dispatcher、不重装 fetch」）。typebox 的 `Type`/`Static` 经 `pi-ai` 重导出，不单独装 typebox。**传递依赖不再需要自建解析锁**：1.3.0 起上游把内部 pi 依赖（`pi-agent-core`/`pi-codemode`/`pi-tui`/`pi-mcp`/`pi-telemetry`）全部写成精确版本，并删除了 `chord` 依赖 ⇒ 历史上为绕开 `pi-codemode@1.2` 导出移除而写的两个 `@earendil-works/pi-codemode: "1.0.4"` 直接依赖已删除（**不要因为旧笔记或 CHANGELOG 的历史条目把它们加回来**）。**但「无锁安装」仍是唯一的验收口径**：`pnpm pack:test` + `pnpm start:test`（或 CI 的 `verify-installed`）——`pnpm test` 绿不代表装得上（2026-10 的 `pi-codemode` 导出移除只在无锁安装里现形）。**声明位置按 import 性质**：运行时 import 必须进 `dependencies`（`server` 曾把 `pi-ai`/`pi-coding-agent` 放进 `devDependencies`——靠 `agent` 包的传递依赖 hoist 才跑得起来，pnpm 严格布局下会解析失败）。**升级后还要复核模型目录**：provider 家集合有增删改名就要同步 `PROVIDER_ICONS`；用户已选模型可能被上游下架——`packages/agent/src/runtime/project-runtime.ts` 的 `resolveDefaultModel` 对取不到的模型**静默回落到首个可用模型**（不报错），故每次升级都要顺手看一眼设置页，别把它当 bug 查。
-- **pi 配置/凭据的唯一读写入口** = `packages/server/src/model-runtime.ts` 的 `getModelRuntime()` / `getSettingsManager()`；业务代码不得直读 `~/.pi/agent/auth.json`/`settings.json`（会话 id、模型目录、凭据状态一律经 pi API）。
-- **凡调 LLM 一律走 pi 的 Agent 路径**：`createAgentSessionServices` + `createAgentSessionFromServices` + `SessionManager`，**禁止直连 `ModelRuntime.completeSimple`、禁止自建 fetch/agent/请求头**——provider 特化头（opencode 系 `x-opencode-session`，缺则 400 MissingSessionID）、重试/超时设置、思考档位只在 pi 的 Agent 包装层生效，自己补等于无限期跟随上游。
-- **出站 HTTP**：服务启动时安装全局 undici dispatcher（`packages/server/src/http-dispatcher.ts`，与 pi CLI 同款：连接族退避 + 环境代理 + 空闲超时）。**不要在业务代码里另建 fetch/agent**——否则丢失代理与连接行为（真实故障场景见 v0.0.32 CHANGELOG）。云端存档的 WebDAV 请求同样走它。
-- **云端存档（v0.0.38 定稿，2026-09 修订）**：凭据与同步状态的唯一载体 = `<创作根>/.ai-editor/cloud.json`（0600 明文；**不进项目文件 / 备份 zip / 任何 API 响应**），读写唯一入口 = `packages/server/src/cloud/state.ts`。
-  - **拉取 / restore / import 一律只覆盖三文件 + 项目规则**（`AGENTS.md` 存在才进包；**包内无该条目则删除本机规则文件**，严格镜像；不碰 `sessions/`）；云端并集与 `cloud.json` 的 `baseEntries` 已废止（字段保留、读侧容忍、不再写）。
-  - **变更判定只有一把尺子**：`hasFileChangesSince`（三文件 + `data.db-wal` + `AGENTS.md`；容差只给 `data.db`/`-wal`）是备份 tick / 云端 dirty / 自动推送的唯一判定入口，**不得再起第二套**；云端文件集合只计可解析备份名（`.tmp-*` 等不参与，否则一次失败上传会让「云端有更新」永久亮）。
-  - **新机器恢复 = 列 + 导入新书**（`GET /cloud/remote-books` / `POST /cloud/import-book`）：导入时**必须**顺手写该书 book state（`lastPushedFileName` = 导入的那份 / `lastSeenCloudFiles` / `lastSyncAt`）并把那份 zip 落进新书 `.backups/`——不写就会一打开就弹冲突。
-  - **地址语义 = 用户云盘根**；工作根 `<云盘根>/ai-editor/` 由 `createWebdavClient` **唯一一处拼接**（配置/UI 都只表达云盘根，不做「截断再拼回」）；`ensureWorkingRoot()` 幂等建「云盘根 + 工作根」。
-  - **备份命名两种形态**（写入 = 解析，`shared/utils/backup.ts` 唯一实现；小说 = `<时间戳>-<自动|手动>-<设备>[-<标签>]-人物N-设定N-章N.zip`，练习区 = `<时间戳>-<自动|手动>-<设备>[-<标签>].zip`、**无统计段**；逐段语义、保留策略与“不解析旧命名”口径见 `docs/db/schema.md`「自动备份目录」）：三类旧命名**不解析**（留盘不列表）、**不做重命名迁移**；打开项目时若 `.backups/` 有文件但无一可解析 → 兜底生成一份（`ensureParseableBackup`）。
-  - **凭据不得进文件名段**（2026-09 安全修复，不可回退）：设备名与备份标签都会进 `.backups/` 文件名 + 上传云盘 + 冲突框展示 ⇒ 等于 WebDAV 应用密码一律 400（唯一比较口径 = `cloud/state.ts` 的 `equalsCredential`；写侧 = `writeCloudConfig` + `backup.ts` 的 `writeBackup`/`renameBackup` 两入口）；读侧 `configuredDeviceName` 把存量坏值当未配置（回退 hostname，立刻止漏）。**新增任何「用户文本进文件名」的入口都要挂同一守卫。**
-  - **三态与「有未备份改动」**：`local.backupStale` = `hasUnbackedChanges` **且** `dirty`（拉取/恢复后必为 false；`backupStale` 不随同步前移）；**自动推送的守卫用纯 `hasUnbackedChanges`**（更严格，避免推旧包上云）——两处口径不同是有意的。
-  - **自动推送复用备份 tick 链**（**不得新增第二套定时器**：排程条件恒等于「自动备份频率开启」，频率关闭即不排程、自动推送一并停；`AUTO_PUSH_THROTTLE_MS` 只是同一 tick 链上的节流窗口，不是排程间隔）；节流基准 `lastAutoPushAt` 只由定时路径推进；失败只记 `lastAutoPushError`（清除点 = `pushBackup` 成功写）。
-  - **云端写入协议**：`PUT .tmp-<名>` → `MOVE` 成正式名（同名同大小已存在则跳过上传；`MOVE` 撞 409/412 时删目标重试一次）；书目录名 `<书名>-<id>` 被云盘拒时回退 `ai-editor-<id>` → `<id>`（回退扫描认 `name === id || endsWith('-'+id)`）；清理只删可解析时间戳或 `.tmp-` 前缀，**带用户标签的永不删**。
-  - **坚果云实测口径**（改 WebDAV 客户端前必读）：`PROPFIND` 对不存在的集合回 `207`+空 body（**空 multistatus = 不存在**）；`MKCOL` **不带尾斜杠**；集合删除要**尾斜杠 + `Depth: infinity`**；根目录**不可直接写文件**（探针写工作子目录）；对单段名字长度限制严（`400 IllegalArgument / sandbox name is too long`）；`MOVE` 目标已存在时**不认 `Overwrite: T`**。
-  - **并集语义已废止（2026-09）**：会话不进包 ⇒ pull 不再做目录合并；`overwriteProjectFiles` 只做**纯覆盖**（若仍带合并参数随本口径一并移除），restore/import/pull 都不得写或删本机 `sessions/`。
-- `db` 查询层统一经 `queryDb` 取 drizzle 实例，**禁止绕过直接 `prepare`**（迁移管线除外）；JSON 列（data/changes/metadata）一律 text 模式 + 行映射防御解析，**禁用 drizzle `mode:'json'`**（坏 JSON 会打挂整表查询）。
-- **对话历史唯一存储 = 项目目录 `sessions/`，文件格式与命名归 pi（session v3）**：会话 id 是**不透明值**，服务端只能经「磁盘发现 + header id 映射」解析为路径，**禁止用客户端传入值拼接路径**；旧 v1 扁平文件留在磁盘但不读取。写文件类迁移（`up(db, ctx)`）必须幂等（整文件重写），崩溃后重跑收敛。
-- **pi 的三处会话侧口径（换版时实测，别按记忆写）**：① 模型请求入参是 `TranscriptContext`——提示词与工具声明在 `messages` 首条 system 消息里（结构化 `sections` + `toolsAdded`），**顶层 `systemPrompt` 不存在**；断言提示词要走 pi-ai 的 `getCurrentSystemPrompt(messages)`，不要读 `request.systemPrompt`。② 会话列表 `messageCount` **必须**是可见消息数（`projectSessionMessages(entries).length`），**禁用** pi `SessionInfo.messageCount`（它含 pi 写入的首条 system 条目，会让界面「N 条消息」比历史面板多 1）。③ 会话文件落盘时机 = **首条 user 消息**（1.0.4 起；0.87.1 及更早要等首条 assistant）⇒ `SessionManager.create()` 之后盘上暂无文件，且首轮中止/进程被杀会留一条只含 user 消息的会话（历史面板照常列出，不是缺陷）。
-- **导出三条出口（2026-09 / 2026-11）**：`GET /project/export`（三文件 + 可选 `AGENTS.md` 的 zip，**导入侧唯一认的包**）、`GET /project/export-novel`（正文 markdown 卷/章目录树 zip：`{书名}/第N卷 {卷名}/第M章 {章名}.md`）与 `GET /project/export-novel-txt`（正文单个 `.txt`：`layout=preserve|webnovel`，UTF-8 无 BOM + CRLF；不写书名 / 目录、按阅读序、空章留标题）。两个 novel 出口**只读项目数据（编号来自 `outline.json`、正文来自 `data.db`）、不产 Delta、不做 wal_checkpoint、不写项目目录、不可再导入**；编号/命名/正文组装**一律消费 shared**（`numberVisibleOutline` 卷号 + `orderVisibleChapters` 章号 + `sanitizeDocumentFileName` 文件名 + `novel-export` 条目/正文 + `buildNovelTxt` / `novelTxtFileName` TXT 组装）——**卷号规则只活在 shared `outline-numbering.ts`**（大纲页徽标与导出同源），服务端/客户端都不得复刻；章文件正文 = `content_text` 投影（`blocksToPlainMd`，内联样式有损，见 `backlog.md`）。弹窗文案与默认项契约 = `docs/ui/DESIGN.md` §书架主页 `export-book-dialog`（三条都走 `<a download>`，落默认下载目录）。单章 TXT = 纯客户端（写作页页头导出下拉，保真 / 网文排版两项），正文取 `latestRef` 最新块 JSON → `blocksToPlainMd` → 同一 `buildNovelTxt`；不新增端点。
-- **项目目录内的 `sessions/` = 纯本地目录（2026-09 起，唯一随包目录已废止）**：不进任何 zip（备份 / 导出 / 云端），不参与备份与云端的变更判定，恢复类操作（restore / import / 云 pull）对它**不写不删**；import / pull 侧继续**接受并忽略**存量包内的 `sessions/**` 条目（否则用户自己的旧备份全变废包）。`createBackupZip` 只出三文件（+ 可选 `AGENTS.md`）这一条路径。**正文与参考资料不是目录**：它们在 `data.db` 的 `document_records` 里（随三文件自动继承备份/导出/云/恢复），项目目录下**不得**再引入 `references/`、`manuscript/` 一类文档目录。
-- **任何切换当前项目的端点后，客户端必须收敛项目镜像**（重拉 config + outline + 书架）：服务端 `currentProject` 是单例事实源，客户端只是镜像——镜像过期会出现「书架高亮旧书、点开看到新项目数据、云端状态不重查」。
-- **删书（`POST /project/delete`）**：删前若 `cloud.json` 有该书的 book state → 先推送一份最新状态，失败默认中止（`force` 才继续）；删当前书要关连接 + 清 `currentProject` + 抹 `lastProject`；云端目录删除是 best-effort（本地已删的结果不回退）。**不得绕过这套口径直接 `rm -rf` 书目录**。
-- **工作区类型（`kind`，2026-10）**：创作根下的顶层单位 = **工作区**，`project.json` 的 `kind`（缺省 `novel`；`practice` = 文风仿写练习）决定目录映射（shared 常量表：`novel → books/`、`practice → practice/`）、AI 工具集与内核提示词、路由守卫、左栏导航。**库不隔离、表隔离**：所有工作区共用同一个 `data.db` 与**一条**迁移链（备份包 / 云端整包 / 恢复 / 导入校验全部自动继承）；语义不同的数据各用**专属表**，**禁止塞进 `entities` 或通用 kv 表**（`entities.type` 带 CHECK、加值即重建表；JSON 提取查询已多次踩过坏 JSON 打挂整表的坑）；**表结构声明单源**（建表 SQL 与迁移 DDL 逐字同形，**不按 kind 建表**）。**工具集按 kind 收窄是结构性边界**（`ToolDefinition.scope` + 装配过滤，不靠提示词）：练习工作区**不注册**小说工具与 `propose_*`。kind 不匹配的端点/字段一律 400 `KIND_MISMATCH`（`current_position` / `deduction_nodes` 是小说语义；`export-novel` 仅小说）。**覆盖类写包入口也要校验 kind**（2026-10 裁定）：`POST /project/backup/restore`、`POST /cloud/pull`、`POST /project/import` 的 id 命中覆盖恢复——包内 `kind`（缺失/未知 → shared 兜底 `novel`）≠ 目标工作区 `kind` → 400 `KIND_MISMATCH` 且**不动三文件 + 项目规则**（旧包缺字段即小说包：在小说工作区正常恢复并补写 `kind`，在练习工作区被拒）；**新建入口不校验**（无目标），仍按包内 kind 落目录。契约：`docs/design/60-practice.md`、`architecture.md`「工作区类型与能力收窄」、`docs/db/schema.md`。
-- **作家文风练习（2026-10）**：**一位预置作家 = 一个 `kind="practice"` 工作区**（`project.json` 的 `author_id`）——作家为产品预置（不可新建 / 预置作家不可改名，删除 = 重置；工作区显示名可在书架重命名、`author_id` 不变；`author_id` 缺失 / 未知的存量练习区**不在根首页列出**）。**结构边界**：练习工作区**不注册**小说工具与 `propose_*`；工具面无**任何**写稿工具（用户稿唯一写入口 = `PUT /practice/samples/:id` / `PUT /practice/free/:id`）。**单源位置**：预置素材 = `shared/src/authors/`（介绍 / 作品清单 / 风格说明；**不预置作品正文**；**仅风格说明可被用户覆盖**，落 `data.db` 专属表，读 = 覆盖 `??` 预置，删除行 = 恢复预置；结构化统计画像登记为升级路径，**现在不预留空列**）；数据 = 三张专属表（`docs/db/schema.md`）；工具清单 / 点名 / 分页常量 = `docs/api/tool-calling.md`（上限常量**插值**进工具描述）；注入 = 客户端只发 id、服务端现读（`docs/design/60-practice.md` §8）。**易踩的坑**：点评卡引用**按字段分源**（`sample_quotes` ⊆ 依据、`draft_quotes` ⊆ 稿件；依据 = 仿写取范文 / 自由练习取风格说明），空串 / 纯空白走同一条丢弃路径；出题工具在**题目非空时抛错拒写**；练习稿是**纯文本**（不引块编辑器、**不扩** `document_records.owner_kind`）；范文文件导入必须走 `readTextFile`（UTF-8 → **GB18030 回落**，禁 `file.text()`）。**新增练习页 = 三处同改**：`components/nav/nav-items.tsx` 项集 / `lib/workspace-route-guard.ts` 的练习专属首段常量 / 「练习区无回收站、无概览」前提（见 `docs/ui/DESIGN.md` §导航与外壳）。
-- **码字统计（2026-11）**：日统计唯一表 `writing_stats_daily`（`data.db`）；唯一写入口 = `PUT /api/v1/manuscript/:chapterNodeId` 按 `content_text` 正差 best-effort 累计（删除不扣、不回溯、无独立写端点），唯一读端点 = `GET /api/v1/writing-stats`。HUD 数字只存客户端内存（不落库 / 不进备份云），位置唯一 key `ai-editor:stats-panel`，同一本书跨页 / 跨章保留到退出、换书归零。统计页日期 / 热力档位 / 趋势范围单源 = `client/src/lib/writing-stats.ts`；热力绿阶 `--heat-*` 只定义在 `client/src/index.css`（禁止再用主色透明度拼档）；月历固定周数以 `MONTH_CALENDAR_WEEKS` 为源，改卡片几何先改 `docs/ui/DESIGN.md` 的高度契约。
-- **块文档（正文/参考资料）**：真相 = `document_records.content`（块数组 JSON，章节 id / `ref-*` 为 key），投影 = 服务端派生的 `content_text`（**只能服务端写**，派生失败不得阻断保存）；库写入唯一入口 = db 包的文档 helper（禁止绕过直接写表）；保存正文**不产生 Delta、不推进 `current_position`**；**正文只能挂章**（REST/工具/UI 三面同口径）。**AI 侧只有只读工具**（`get_chapter_text` 单章分页读投影；`get_entity('reference')` 返回投影文本）——任何文档写工具一律不得注册（`@blocknote/xl-*` 类能力禁用）；聚焦章时 `buildFocusText` 注入「标题 + 摘要 + 正文前 `FOCUS_CHAPTER_EXCERPT_CHARS` 字符（标注节选）」，不整章灌入。
-- **第三方块编辑器**：`@blocknote/core|react|ariakit` **exact pin**（升级 = 显式 commit + 全量测 + 浏览器像素核对，同 pi 纪律）；**禁止 `@blocknote/xl-*`**（GPL/商业，且 AI 改写能力在包）；改色唯一入口 = `packages/client/src/components/blocknote/blocknote.css`（不得在调用点写 `--bn-*` 覆盖）；**写作面偏好**（字体/字号/行高/纸张/纹理/段首缩进）唯一存储 = `localStorage` `ai-editor:writing`（全局一份，两处书写面共用，不进项目文件/备份/云），下传只经 `--writing-*` / `--paper-bg` 变量间接引用（档位常量 = `hooks/use-writing-prefs.ts`，测试断言与 `DESIGN.md` 同值）；写作工具条内置在块编辑器组件（常显、`sticky`），详见 `docs/ui/DESIGN.md` §写作面；`server`/`tools`/`db`/`agent` 不得依赖任何 `@blocknote/*`（服务端不解析块结构）。**写作面的两个易踩坑（2026-09 实测各花掉一轮修复）**：① **工具条不得自任滚动容器**——`position: sticky` 已使它成为库 tooltip / ariakit 下拉的包含块，再叠加 `overflow` 就会把它们裁掉（窄幅靠折行，不靠滚动）；② **写作面高度链要三处接通、且中间不得用 `items-start`/`self-start` 截断**（交叉轴不拉伸 ⇒ 下游 `flex:1` 拿不到剩余空间，表现为「短正文缩成一小块」）。**页头常驻**（批 17 起：`section: h-full min-h-0 flex flex-col` + 内容进内层 `flex min-h-0 flex-1 flex-col overflow-y-auto`；写作页 / 参考资料列表·详情 / 人物工作台 / 时间轴已采用，其余页见 `backlog.md`）——新增中栏页面照这个模板写。**参考资料不再有磁盘文件与扫描**（旧 `references/` 目录不读、不打包；外部编辑改走单文件导入导出，md 导入/导出必须先提示有损）；**参考资料「分类」（`data.type`）在列表分类列与详情页头都是同一枚 `TypeChip`**，中文名映射单一来源 = `lib/reference.ts` 的 `referenceTypeLabel()`（禁止在两个页面各手抄一份）。
-- **数值单源（2026-09 三连发教训）**：任何上限/缺省/阈值常量**只在定义处出现**——散文与注释一律引用常量名或函数名，**不得复述数字**；模型需要看到的数字（工具 `description`）必须由常量**插值**生成，并有测试断言两者同值。已收口：`get_chapter_text` / `get_practice_sample` 的文本分页（`DEFAULT_TEXT_PAGE_CHARS` / `MAX_TEXT_PAGE_CHARS`，章正文与练习共用同一对）、`analyze_hook_health` 的半衰期映射（shared `DEFAULT_HALF_LIFE`）、`listEntities` 的 limit（shared `MAX_ENTITY_LIST_LIMIT` / `DEFAULT_ENTITY_LIST_LIMIT`，client 侧多处调用点同源）、工具结果上限（`TOOL_RESULT_MAX_TOKENS`）、聚焦章节选（`FOCUS_CHAPTER_EXCERPT_CHARS`）、提案 TTL（`PROPOSAL_TTL_MS`）、SSE 心跳（`DEFAULT_HEARTBEAT_MS`）、思维链预览（`THINKING_PREVIEW_MAX_CHARS`，正则由常量派生）、聊天贴底阈值（`STICK_BOTTOM_THRESHOLD_PX`）、列表摘要截断（长度单一定义 = db `toSummary`）、练习各上限（`MAX_PRACTICE_EXCERPT_LABEL_CHARS` / `MAX_PRACTICE_TOPIC_CHARS` / `MAX_PRACTICE_BRIEF_CHARS` / `MAX_PRACTICE_STYLE_PACK_CHARS` / `MAX_PRACTICE_SAMPLE_CHARS` / `MAX_PRACTICE_DRAFT_CHARS` / `MAX_FEEDBACK_DIMENSIONS`）等。（同一形状三次复发：改值漏改 description / 漏改 schema 注释 / 注释与实现早已漂移；根治手段是「不复述」而非「记得同步」。）
-- **工具层**：参数 schema 用 TypeBox（放 `packages/tools`，**不放 `shared`**——client 不打包 schema）；`execute` 抛错即失败（不得把失败编码进 `content`）；工具结果超 `TOOL_RESULT_MAX_TOKENS` 截断并显式告知；`propose_*` 的预览细节**只走 `details`**（随 `tool_execution_end` 帧下发），`content` 只给 `proposal_id` + 一句话摘要。
-- **联网检索（2026-10）**：出站工具两个 = `web_search`（DeepSeek `/v1/tools/search`）+ `fetch_content`（`/v1/tools/fetch`），各一次 `fetch`，全局 dispatcher 自动带代理；凭据只经 `getModelRuntime().getAuth("deepseek")`（不新增配置文件、不直读 `auth.json`）；`need_content` 恒 false、不落盘缓存（抓取也无缓存，同一 URL 重复调用重复计费）、不做多供应商回退；失败直接抛错（401/402/403/404/408/413/429/5xx 映射为可读文案），不重试。上限常量单源：搜索条数（默认 / 上限）/ 单条摘要异常上限 / 查询长度 = `packages/tools/src/schemas/web-search.ts`、URL 长度 = `schemas/fetch.ts`，均插值进工具描述；单条结果硬上限 = `TOOL_RESULT_MAX_TOKENS`；`count` 是期望条数、不做事后硬切；仅摘要超异常上限时带 `truncated`；工具作用域 = `common`。来源卡片直接读工具结果 `content` JSON（AUTO 工具没有 `details`）。新增任何联网工具前先改 `docs/api/tool-calling.md`。
-- **SSE 契约**：`POST /chat` 的帧集与字段以 `docs/api/80-api-chat.md` 为准（pi 事件投影，唯一实现点 = `agent/src/runtime/events.ts`）；不得回退旧事件名。
-- **会话状态栏（`session-status-bar`）**：输入区最底一行只读观测层（占用 / 费用 / 解码速度 / 缓存命中率 / 累计 tokens），配置行 = 模型 / 思考强度 / 自动确认（YOLO，默认关）——**配置（可写、全局、跨会话不变）与状态（只读、每会话一份）不混排**。数字**全部由服务端算好下发**：占用 = pi `getContextUsage()`；账目（含 `cacheHitRate` / `subscription`）= agent 包 `sessionUsage()`（口径 = pi `getSessionStats()`，订阅判定用 `ModelRuntime.isUsingSubscription()` 而非 `isUsingOAuth`）；速度 = agent 包 `createSpeedMeter()`（首个增量 → `message_end`，四项守卫）——**UI 不累加、不计时、不复算分母**（格式化 / 阈值 / 段优先级单源 = `client/src/lib/session-status.ts`；窄栏用容器查询声明式隐藏，不引 antd Tooltip、不 JS 测宽）。**`contextUsage` 的 `tokens`/`percent` 可为 `null`**（压缩后 / 历史会话占用未知）⇒ 帧与响应照发、UI 渲染 `? · 窗口`，不得因未知而丢帧或整段消失；历史会话只带窗口不重建占用（pi `estimateContextTokens` 未导出，复刻 = 第二套口径）。
-- **全站 `Ctrl/Cmd + S` = 保存当前内容 + 生成本地存档**（2026-09）：键位常量 = `client/src/lib/save-shortcut.ts` 的 `SAVE_SHORTCUT_KEY`（设置页清单 `lib/shortcuts.ts` 引用同一常量，禁止两处手抄字面量）；保存动作走注册栈 `registerSaveHandler`（后注册者优先 = 行内编辑胜过页面级）；**存档唯一注册者 = `AppShell` 的 `useSaveArchive`**（节流常量 `SHORTCUT_BACKUP_THROTTLE_MINUTES`），不得另起第二个存档注册点或第二套定时器；**页面保存动作失败必须 `return false`**（各页自己 catch ⇒ promise 恒 resolve，只有这个信号能阻断存档）；全站 `preventDefault`（拦浏览器原生「保存网页」）。
-- `client` 聊天链路：SSE 解析唯一实现是 `hooks/use-sse.ts`（勿另起炉灶）；store 的 loadSeq/msgSeq 竞态、**事件级流身份守卫**（旧流迟到帧不得污染新会话/工具卡/状态提示）与「中止在途 SSE」约定改动时必须保持。
-- **聊天消息流（`chat-message-stream`，2026-09）**：一条 assistant 消息内顺序 = **思维链 → 工具行 → 正文 → 历史提案卡（只读，若有）**（live 组卡在消息流末尾，不塞进单条消息），且**流式期与重载后必须同序**——运行态工具行一律并入流式消息的 `toolCalls`（`tool_execution_start` 追加并按 id 防重，`message_end` 按 id **合并**而非覆盖），**不得再另起一份「消息之后」的工具行列表**（会出现「答案在工具行上方」+ 同 id 重复行）。工具行渲染**唯一归一入口 = `ChatPanel` 的 `asToolCall`**（三种形状：服务端投影 `{id,name,arguments}` = SSE 帧与历史接口的同一份投影 / 运行态内部 `{id,tool,args}` / LLM wire）——新增工具行来源绕过它就丢 args（展开只剩动词短语）。`thinkingStreaming` 是**轮级**布尔量（本轮首次 `thinking_start` 置位 → `agent_end`/中断收尾；中途 `thinking_end` **不折叠**，逐次折/展 = 思考块高度反复跳变）。**自动滚动只在用户贴底时跟随**（`STICK_BOTTOM_THRESHOLD_PX`；无条件贴底 = 用户上滚读思考过程被逐帧拽回 + 抖动），`DESIGN.md` 的 `chat-message-stream` 是完整契约。
-- **提案 UI（2026-11）**：live 组卡一轮一张（单条也同形态），批量按钮走客户端串行 confirm/reject，逐条记账、失败继续、成功只刷一次；YOLO 仅在 `agent_end` 正常结束（无 `stopReason`）时自动确认全部 pending，开关 `ai-editor:yolo` 默认关；**历史只读卡**从 assistant 消息 `toolCalls` 的 `propose_*` 重建，无状态 / 按钮 / 名称解析，按 `toolCallId` 与 live 去重，不新增表 / API。`PROPOSAL_TYPE_LABELS` 必须覆盖 `PROPOSAL_TOOLS` 全集；历史摘要无有效行时回退原始 JSON（id 原样）。
-- `client` 视觉：**颜色/选中面 token 只能改 `AntdProvider.tsx`**（唯一改色入口，并同步 `docs/ui/DESIGN.md` 登记表）；**块编辑器的 `--bn-*` 映射只能改 `components/blocknote/blocknote.css`**（同一份登记表维护）；守卫 `design-discipline.test.ts`（源码扫描：`lucide-import` / `hardcoded-color` / `important-class` / `ad-hoc-font-size` / `primary-bg-token` / `dropdown-menu-selectable` / `antd-root-override` / `cssvar-scope` / `no-dynamic-class` / `button-variant-color` / `danger-color-variant`）与 `components/antd-tokens.test.ts`（派生 token 对比度）。**antd 6 的 `Button` 在 `color` 与 `variant` 同时给出时忽略 `danger` 糖**（实测渲染为常规墨色）——危险色图标按钮一律写 `color="danger" variant="text"`（新增 `danger-color-variant` 守卫拦住反例）。**不变式：深墨主色（`#37352f`）下任何由 `colorPrimary` 派生的「浅底」token 都不可信**（antd 派生的是中深灰，2.26:1 不可读）——`colorInfo` 与主色同值（为 Progress 描边）⇒ 它的派生面（Alert info 的 `colorInfoBg`/`colorInfoBorder`）同样不可信、已显式覆盖；选中面亦已覆盖。新增 antd 组件（Tree/Table 行选、Cascader、DatePicker…）时先扩 token 守卫。antd Select 浮层默认跟随触发器宽度 ⇒ 窄触发器必须 `popupMatchSelectWidth={false}`。**缩进列几何**（大纲/设定/面板树的折叠箭头 vs 无子节点占位）依赖 antd `controlHeightSM`（= 24px）：占位宽恒 `w-6`，左偏随该行自身 gap（大纲 `-ml-2` / 设定 `-ml-1` / 能力面板无偏移）；**摘要第二行 / 就地新建行复用同一条占位链，禁止手写 `pl-*` 像素**（设定页曾 `pl-5`，比标题列左偏 6px）；叶子行是空占位，不是 `disabled` 箭头；折叠箭头恒为 `RightOutlined` + `!collapsed && "rotate-90"`（折叠横指 / 展开下指，四处自绘缩进行同一写法）——`antd-tokens.test.ts` 有该值断言，antd minor 升级报红时同步改占位宽。**antd 组件会给 `.ant-btn` 注入 `position: relative`**（与 Tailwind `.absolute` 同特异性、但 antd 注入更晚）⇒ 把 `absolute` / `fixed` / `sticky` 直接写在 antd 组件的 `className` 上会被静默压回、元素贴到错误位置（2026-11 图标按钮实测，test 与 typecheck 全绿）：定位一律挂外层包装 `div`；同类再现即加源码扫描规则（`backlog.md` 有登记）。
-- 仓库路径：`docs/`、`scripts/`、`test-project/` 在仓库根；包内路径相对 `packages/`。`test-project/` 整体不入库（含运行时生成的 `.ai-editor/config.json`：`debug` 开关 + `lastProject`）；创作根 `.ai-editor/config.json` 只属服务端（`debug` 用户手编、`lastProject` 服务端在 open 成功后合并写入，见 `config.md`）。
-- **第三方图标资产只有一个**：`packages/client/public/provider-icons.svg`（供应商品牌 logo，@lobehub/icons 派生、MIT 许可头内嵌于文件）。**不要为此引入 `@lobehub/icons` 包**（9MB + peer `@lobehub/ui` 树）。
-- **本产品品牌标记（2026-09 起）**：品牌标记 = `components/brand/app-mark.tsx`（内联 SVG、`currentColor`、**无尺寸 API**；功能性自绘图标另有 `components/ui/panel-toggle-icon.tsx`，仅用于三栏整栏开关，非品牌资产）；系统面负形版 = `client/public/brand-icon.svg`（**一个文件兼 favicon 与桌面应用图标源**，桌面 `electron-builder.yml` 的三平台 `icon:` 指向它，**不得另存副本**）。改图标后**必须重打包并核对产物**（AppImage 解包看 `hicolor/` 与 `.DirIcon`、`.desktop` 身份三行、`app.asar` 里的 `desktopName`、真实窗口 WM_CLASS / Windows 包任务栏图标）——`typecheck` / 构建成功都不代表图标被采纳；负控制必须三处 `icon:` 全删（只删 `linux.icon` 会经 `mac.icon` 回退拿到同一张图，得出错误结论）；**Linux 桌面身份 = `desktopName` + `linux.syncDesktopName`**（`.desktop` 文件名 / `StartupWMClass` / 真实 WM_CLASS 三处同值，portal 身份靠它）——见 `50-desktop.md` §5.3。
-- 左栏导航入口语义（**书架 = 顶部标识、概览 = 书名按钮、一级导航无「概览」**）与两处品牌资产例外（`provider-icon` / `app-mark`）见 `docs/ui/DESIGN.md`；开机直达书籍只在 `hooks/use-enter-last-book.ts` 做**首帧一次**（勿在 Dashboard / AppShell 加常驻重定向——会把「回书架」弹回去）。
-- **同一路由组件的「形态」状态也是状态**（v0.0.37 实测）：`Dashboard` 的 `mode` prop 在 `#/` → `#/overview` 之间**不重挂载**（`useEnterLastBook` 自动进书只是改 prop），凡是 `if (mode !== "overview") return` 的 effect 必须把 `mode` 写进依赖数组——漏了它，effect 只会在 mount 时那次（此时 config 尚未到）跑一次，之后永不重跑：表现为阅读进度停在原始 id、大纲概览永远骨架。新增/搬动这类「路由形态 gate」的 effect 时逐个核对依赖。
-- **章级锚点三件套（2026-09）**：`current_position`、变更记录触发节点（`POST /delta` 的 `node_id`）、伏笔锚点（`plants`/`advances`/`resolves` 的源端）**一律只支持 `chapter`**；写入侧三层同口径（REST 路由 / AI 提案层 / executor 兜底），`compute_state` 的 `at_node_id` 不限层级。**UI 侧三个选章下拉同步收窄为仅章**（人物页进度节点 / 通用 compute 探针 / `#/hooks/:id` 预计回收节点，统一走 `lib/outline-tree.ts` 的 `chapterNodeOptions`；`Timeline`/`create-relation-dialog` 的节点选择是自由引用，**有意保持全层级**）。**REST/工具保持泛型**是登记过的分层（不与前端同宽），别顺手收紧。
-- **推演节点标记（剧情推演，2026-09）**：`project.json` 的 `deduction_nodes`（**章** id 数组，顺序 = 可见章先序，写侧归一）；**编号/文案/顺序的唯一来源 = shared `orderVisibleChapters` / `buildDeductionMarks`**（UI 徽标、注入文本、AI 工具三处派生，禁止手抄；与服务端 `deriveChapterOrder` 仍不同源）。**客户端提交基底必须用可见标记**（`lib/deduction.ts` 的 `toggledDeductionNodes`）——拿 raw `config.deductionNodes` 回传会把失效 id 送回服务端，而写侧对任一失效 id 严格 400 ⇒ 该书标记操作**永久锁死**（2026-09 实测缺陷）；悬浮球注入只发 `focus_deduction` 布尔（服务端现读 `project.json` 展开），**AI 侧只有查询工具 `get_deduction_marks`、无任何改标记能力**；页头「清除推演标记」= **集合级**清空入口（仅**有可见标记**时渲染、写 `[]`——全量替换下唯一能同时收敛可见标记与盘上失效 id 的写法）。
-- **大纲页 = 树视图 + 展示口径编号（2026-11 起单视图）**：`#/outline` 不再有「章视图」，写作入口独立成一级页 `#/writing`（见下条）。页头右端组（`ml-auto` 挂**组容器**，组内按钮缺席不丢右对齐）= `[清除推演标记（有可见标记时）] [全部折叠] [+新建卷]`。卷/章行徽标 = `第N卷` / `第N章`（`TypeChip` + `min-w-14` + `tabular-nums`），场景行仍「场」；**取色 = 卷红褐 / 章·场软灰**（`TypeChip` `tone="soft"`；状态徽标仍红；token 单源 = `index.css` 的 `--type-badge-border-soft`）。**编号 = 展示口径**（只计未软删节点 ⇒ 删后重排；**编号派生单源 = shared `outline-numbering.ts` 的 `numberVisibleOutline`**——卷号规则只活在那里，`lib/outline-tree.ts` 的 `numberOutline` 只做「节点 id → 徽标文案」适配），**不得**与服务端 `deriveChapterOrder`（含软删、保 Delta/伏笔引用稳定）混用或互为替代（先读 `10-data-model.md` §4）。
-- **写作页 = 卷章导航栏 + 正文（2026-11）**：一级导航「写作」在「大纲」**之前**（仅小说工作区），路由 `#/writing` / `#/writing/:chapterId`；旧 `#/manuscript/:id` 一律 `location.replace` 到 `#/writing/:id`。中栏内 master-detail（同人物工作台）：rail 默认 240px、可拖拽 200–480px、可收起为 0px（正文列吸收宽度；宽度 / 收起态持久化 `localStorage` `ai-editor:writing-rail`）、**只做导航**（卷行 = `第N卷` + 卷名 + `N章` + 折叠箭头；章行 = 缩进 + `第N章` + 章名 + 字数；根级存量章顶层就地；0 章卷保留；选中 `bg-accent` + `aria-current`；折叠态 session-only），正文列吸收剩余宽度。**rail 无新建/改名/删除/结构拖拽**（宽度拖拽是独立手柄；结构编辑唯一在大纲树），点章即进正文、**不再有「写正文」入口**。**最近导航 = 最近打开优先、服务端最近编辑回退**：最近打开 = `localStorage` `ai-editor:writing-last-opened` 的 per-book 映射 `{ [projectId]: chapterId }`（只存 id；打开 `#/writing/:id` 且仍在可见大纲时写，窄屏也写），命中且仍在可见大纲才用；失效则回退 `GET /outline?with_metadata=true` 的章 `metadata.documentUpdatedAt`（= `document_records.updated_at`）最大值；桌面端 `#/writing` 无 id 时 `location.replace` 跳目标（`navigate` 是 push，不能用），**不是** `current_position`；窄屏先显示目录（两级互斥，正文全宽 + 顶部「章节目录」返回条），专注模式连 rail 一起隐藏。**大纲加载在页壳、编辑器面板不自行拉树**；保存成功后只不可变补丁该章 `textLength`/`documentUpdatedAt`，不重拉树；编辑器子树挂 `key={chapterId}`，页面与 rail 不重挂。
-  - **收起入口与分栏线**：整栏收起 = `main-toolbar` 两端的静态 `PanelToggleIcon`（唯一功能性自绘图标例外；左端 / 右端，仅桌面；图标不随态换向，动态 `aria-label` / `title` / `aria-expanded`）；写作页子栏收起 = 正文页头标题行最左的单箭头按钮（`PageHeader` `leading` 槽；带 `leading` 时标题行 / 操作组可换行，避免窄中栏裁切；当前点击动作：收起 `LeftOutlined` / 展开 `RightOutlined`，普通 `icon-button` 不是圆钮；窄屏 / 专注不渲染）。**整栏面板图标与子栏单箭头不得互串**。分栏线**单所有权**：归面板（`NavRail` `border-r` / `ChatPanel` `border-l` / 卷章栏桌面展开态 `border-r`），6px `ResizeHandle` 只管热区与 hover 染色、**不画线**（窄屏传 `w-full border-r-0`）——见 `DESIGN.md` §Layout「分栏边线单所有权」。
-  - **行块几何**：rail 复用大纲树的 24px 折叠箭头盒（无子卷同几何空占位）与 `min-w-14` 编号徽标；**就地输入行唯一实现 = `components/outline/inline-input.tsx`**（只在树视图用，rail 不引）；编号不扩散到详情页/选章下拉——见 `backlog.md`。
-- **大纲层级（2026-09 收紧）= 章只能挂卷**：`root` 仅接纳卷（写入侧三面同口径：db `assertCanHold` 单点（创建/移动共用）/ tools 提案层与 LLM 工具描述 / client `parentOptionsForType`）；**存量根级章读容忍**（内嵌 `child: 卷|章` 类型形状与映射保留，能渲染/改名/删除/拖进卷，不能再新建或移回 root，**无迁移**）——改类型形状/映射前先读 `10-data-model.md` §2。
-- **`computeState` = 章序前缀累积**（不是树父链）：状态 = 初始 `data` + 「章序 ≤ 目标进度章」的全部已确认 Delta；目标节点→进度章：章→自身、场景→所属章、卷→该卷最后一个未软删章。章序 = **文件位置序（含软删章，编号不重排）**，「当前章」退化必须取**最后一个未软删章**。
-- **character 数据分层**（`docs/db/schema.md`「人物 data 分层」）：不可变（`role`/`description`/`priority`）**不参与 Delta**；可变字段 + 能力面板**叶子**走点分路径（`ability_panel.火系.等级`，仅标量 `set`/`update`）。字段白名单的**单一定义 = `shared/src/constants/delta.ts`**（`SET_ONLY_FIELDS` / `REMOVED_CHARACTER_FIELDS` / `IMMUTABLE_FIELDS`），client/tools **禁止手抄**。
-- **角色优先级（`character.data.priority`，2026-09）**：四档**有序**枚举的单一定义 = shared `CHARACTER_PRIORITIES` / `CHARACTER_PRIORITY_LABELS`（UI 下拉、AI 工具说明、db 排序 rank 一律派生，禁止手抄清单/中文）；**未分级 = 键缺失 / `null` / 未知值**（不是第五档）。列表 `sort=priority` **固定升序**（`order` 不参与，同 event/timepoint 先例）：rank → 未分级沉底 → `updated_at` 降序 → `id`；**该排序 SQL 必须带 `json_valid` 守卫**（裸 `json_extract` 遇非法 JSON 行会 `malformed JSON` 打挂整表查询，不可回退）；rail 默认档 = 角色优先级，**同档内无手动序**（有意，见 `backlog.md`）。
-- **人物页是工作台**（`#/characters` master-detail，无独立列表页）：右栏 = `components/character/character-detail.tsx`（**四 tab**：人物档案可编辑 / 阅读进度只读 / 人物关系网 / 其他关联 · N——关系两块是**平级 tab**，不在字段 tab 之下；字段区 = 一个 card 内的**档案式网格**，「基础信息 / 可变数据」分区已删，阅读进度值画纯文本）；泛型 `EntityList`/`EntityDetail` 只服务 setting/location（**已冻结，不再承载新能力**）。新增 antd 组件/样式前先扩 `DESIGN.md` 与 token 守卫。
-- **关系类型属性单一来源** = shared `RELATION_TYPE_META`（`Record<RelationType, { label, group, symmetric }>`，group ∈ character/structure/anchor/hook/mount/canvas）：client 标签、人物页人↔人子集、对话框排除集、tools 冲突检测的对称口径**一律派生**，禁止再手抄清单。自定义类型语法校验（`trim` 非空 / ≤32 / 禁控制字符）的单一来源 = shared 纯函数（REST schema、db `createRelation` 守卫、client 预校验共用）；AI 工具 `relation_type` 仍是预定义 `z.enum`（有意分层）。
-- **关联总览端点筛选（`#/relations`）**：源类型 / 目标类型两个独立下拉，各自空 = 不限、两端 AND；**不再提供「任一端」OR**。选项与中文名派生 `ENDPOINT_TYPE_LABEL`（含 `outline_node`），前缀常显「源」/「目标」；名称搜索仍是源 / 目标名任一命中。见 `docs/ui/DESIGN.md` §relations-view。
-- **db 打开只有一条管道** = `packages/server/src/middleware/project.ts` 的 `openProjectDatabase`（开机 `detectProject` 与 `POST /project/open` 共用）：迁移前快照、未来版本拒绝（不重建）、无迁移路径才重建兜底；**缺 `data.db` 的「全新空库」直接写 `SCHEMA_VERSION`**（不重置 `outline.json`）。
-- **变异/探针验证**：禁止用硬链接副本 + 就地截断写（会写穿 inode 污染源仓库，真实发生过）；只能 `cp -r` 真副本或 `git worktree`，恢复后必须复跑全量回归（见 `build.md`）。
-- **桌面版（`packages/desktop`）硬约束**（详见 `docs/design/50-desktop.md`）：`electron` **44.3.0 exact pin**（同 pi 纪律：升级 = 显式 commit + 三平台重打包验证）；**preload 必须 CJS**（源文件 `preload.cts`——沙箱 preload 不支持 ESM，而 `sandbox: true` 是既定基线），主进程 ESM；服务走主进程 in-process `startServer()`（**不开子进程**），退出复用 `ServerHandle.close()`；窗口加载 `http://127.0.0.1:<实际端口>` 且**端口分段独占**（显式传入 shared `PORT_RANGES.desktop`，与 web 生产 / dev 分段互不相交）——`localStorage` 按 origin 隔离，端口漂移 = 主题/面板偏好重置；**三形态端口分段唯一定义 = shared `constants/ports.ts`**（server / `vite.config` / desktop 全部派生，禁止复述字面量）；应用级配置唯一载体 = `<userData>/desktop.json`（`projectRoot`），**CLI 形态永不读**；桌面包**不得依赖 `process.cwd()` / 命令行参数**；日志落 `<userData>/logs/ai-editor.log`；原生能力只经 preload 的 `pickDirectory()`，client 侧一律能力检测（浏览器形态行为不变）。
-  - **打包链路不可省项**：`pnpm deploy --prod`（依赖收集）+ `npmRebuild: false`（N-API 免 rebuild）+ 显式 `linux.executableName`（scope 名里的 `@` 会被 AppImage 工具链拒收）——见 `build.md`「桌面版」。
-  - **Electron 42+ 无 postinstall**（改懒下载）：`pnpm install` 不下载 electron 二进制，开发态首次 `electron .` 才下；不要在 install 阶段依赖它存在。
-  - **能力检测唯一入口** = `packages/client/src/lib/desktop.ts` 的 `desktopBridge()`（浏览器形态/SSR 返回 null）；桌面版专属 UI 一律据此条件渲染，**禁止在组件里直接摸 `window.aiEditorDesktop`**（否则浏览器形态会出现半个入口或直接白屏）。
-  - **workflow 不写 pnpm `version`**：版本从根 `packageManager` 读（单一事实源）；三个 workflow（release / publish / desktop）同由 push `v*` tag 触发，写死版本会导致本地与 CI 静默漂移。
-  - **打包分工（2026-09 定）**：**本地只打 Linux 包**（`pnpm desktop:dist`，用于自查）；**Windows 包只由 CI 出**（`desktop.yml` 只跑 windows-latest；macOS/Linux 两项在 matrix 里注释保留）——Windows 本地交叉构建需 Wine，不往开发机装该依赖；macOS 需 mac runner。本地要验 Windows 包时用手动触发 + `gh run download`，不要重推 tag（见 `build.md`）。
-  - **升级路径守卫不可回退**：`installer.nsh` 的 `customUnInstall` 开头必须保留 `${If} ${isUpdated}` / `${If} ${Silent}` 早退（升级时安装器会以 `/S /KEEP_APP_DATA --updated` 调旧卸载器；漏了这层就会在升级时弹「清除使用数据」、点了「是」即删书库与 `%APPDATA%\AI Editor`——v0.0.44 真机事故，v0.0.45 修，见 `50-desktop.md` §5.1）。
-  - **卸载清理的安全约束（不可简化）**：`packages/desktop/build/installer.nsh` 删目录前**必须先验签名文件**（`<书库>/.ai-editor/library.json`，由 `writeLibraryMarker` 每次启动幂等写入）——书库目录名 `AI Editor` 是通用名，按名 `RMDir /r` 会误删用户早先自己建好的同名目录（不可恢复）。`<userData>` 的存在性检查用 `desktop.json`。改这段脚本前先读 `50-desktop.md` §5.1。
-  - **自动更新（Windows 安装态，v0.0.44 起）**：`electron-updater` **6.8.9 exact pin**（与 electron-builder 26 同线；7.x 改了 `quitAndInstall` 签名与 `autoInstallEvent`，不要混用）；**该包是 CJS ⇒ 必须默认导入 + 解构**（`import electronUpdater from "electron-updater"`；具名导入在打包态直接崩、而 typecheck 不报）；只对 Windows 安装态生效（主进程 `win32` 守卫）；`autoInstallOnAppQuit = false`，**只在用户确认后**先 `await closeServer()` 再 `quitAndInstall(true, true)`；**每个 Release 必须三资产齐全**（`.exe` + `latest.yml` + `.exe.blockmap`，**缺 `latest.yml` ⇒ 所有旧版检查更新直接失败**；资产名不得含空格——磁盘名/资产名/`latest.yml` 的 url 必须逐字一致）——见 `50-desktop.md` §5.2 / `build.md`。
-- 测试：各包 `test` script = `vitest run`；各包 tsconfig 已 `exclude: ["src/**/*.test.ts"]`，不要改回——**`*.test.ts` 不进 `pnpm typecheck`**，编译期断言（`satisfies` / 穷尽性检查）必须写在 src 模块里。⚠ **`.test.tsx` 仍会被 typecheck**（exclude 通配不盖 `.tsx`；client 的 SSR 测试属此列——这是**有意保留**：改测试时类型错要在 `pnpm typecheck` 期暴露，真正的隐患是误以为「测试不会被检查」而在测试里写坏类型。**改 shared/db/tools 的 `src` 后先 `pnpm -r build` 再 typecheck/下游测试**：client 的编译期断言与 server/tools 测试读的是上游 **dist**，不重建会给假绿（卡 8.3 oracle 实证）。
-- **产品非目标**：不做超长小说正文生成、也不做批量导入式拆解（理由与口径见 `docs/design/00-master-design.md` 的「批量导入边界」声明）——重新引入前必须先改设计文档，不要就地恢复。
-- 延期项：多标签页并发（**正文已有局部防守**：块文档保存带版本戳 → 409 `DOCUMENT_STALE`；结构化数据与参考资料仍是后写覆盖）、undo、token 统计的**聚合 / 审计面**（会话级用量已随状态栏落地，勿当成没做）、跨书参考资料导入（MVP 不做，勿顺手实现）；其余遗留项与有意口径见 `docs/design/backlog.md`。
+设计文档不承载实现约定，只在此登记；改了对应代码就同步改这里。
+
+### 依赖与运行时
+
+- 第三方运行时依赖一律**精确版本**（`@earendil-works/*`、`@blocknote/core|react|ariakit`、`electron`、`electron-updater`；禁 `^` / `~`）。升级 = 一个显式 commit 齐抬版本 + 全量测试 + **无锁安装冒烟**（`pnpm pack:test` + `pnpm start:test`；`pnpm test` 绿不代表装得上）+ 该包的浏览器 / 打包态核对。
+- typebox 的 `Type` / `Static` 经 `pi-ai` 重导出，不单独装 typebox。传递依赖不需要自建解析锁（上游内部 pi 依赖均为精确版本）。**声明位置按 import 性质**：运行时 import 进 `dependencies`。
+- 升级 pi 后复查三处「与 pi 同构」断言：`packages/server/src/http-dispatcher.ts` 与 pi `core/http-dispatcher.ts` 的差异只允许「不跟踪 `installedGlobalFetch`」；pi-ai 凭据解析顺序；会话文件类型（`session-manager.d.ts`）。
+- 升级后复核模型目录：provider 家集合有增删改名要同步 `PROVIDER_ICONS`；`resolveDefaultModel` 对取不到的已选模型静默回落首个可用模型（不是缺陷）。
+- 凡调 LLM 一律走 pi 的 Agent 路径（`createAgentSessionServices` + `createAgentSessionFromServices` + `SessionManager`）；禁止直连 `completeSimple`、禁止自建 fetch / agent / 请求头——provider 特化头、重试 / 超时、思考档位只在 pi 的包装层生效。
+- pi 配置与凭据的唯一读写入口 = `packages/server/src/model-runtime.ts` 的 `getModelRuntime()` / `getSettingsManager()`；业务代码不得直读 `~/.pi/agent/auth.json` / `settings.json`。
+- 出站 HTTP 走服务启动时安装的全局 undici dispatcher（`packages/server/src/http-dispatcher.ts`：连接族退避 + 环境代理 + 空闲超时）；业务代码不要另建 fetch / agent（云端 WebDAV 同样走它）。
+
+### pi 会话侧口径
+
+- 模型请求入参是 `TranscriptContext`：提示词与工具声明在 `messages` 首条 system 消息里，**顶层 `systemPrompt` 不存在**；断言提示词用 pi-ai 的 `getCurrentSystemPrompt(messages)`。
+- 会话列表 `messageCount` 必须是可见消息数（`projectSessionMessages(entries).length`），禁用 pi `SessionInfo.messageCount`（它含首条 system 条目）。
+- 会话文件在**首条 user 消息**落盘 ⇒ `SessionManager.create()` 之后盘上暂无文件；首轮中止会留只含 user 消息的会话（历史面板照常列出，不是缺陷）。
+- 会话 id 是**不透明值**：服务端只能经「磁盘发现 + header id 映射」解析路径，禁止用客户端传入值拼接路径；旧 v1 扁平文件留盘但不读取。
+
+### 数据库
+
+- 查询层统一经 `queryDb` 取 drizzle 实例，禁止绕过直接 `prepare`（迁移管线除外）；JSON 列（data / changes / metadata）一律 text 模式 + 行映射防御解析，**禁用 drizzle `mode:'json'`**。
+- db 打开只有一条管道 = `packages/server/src/middleware/project.ts` 的 `openProjectDatabase`（开机 `detectProject` 与 `POST /project/open` 共用）；缺 `data.db` 的全新空库直接写 `SCHEMA_VERSION`（不重置 `outline.json`）。
+- 写文件类迁移（`up(db, ctx)`）必须幂等（整文件重写）；JSON 提取查询必须带 `json_valid` 守卫（裸 `json_extract` 遇坏 JSON 会打挂整表查询）。
+- 表结构声明单源（建表 SQL 与迁移 DDL 逐字同形，不按 `kind` 建表）；语义不同的数据各用**专属表**，禁止塞进 `entities` 或通用 kv 表。
+- Delta 字段白名单单一定义 = `shared/src/constants/delta.ts`（`SET_ONLY_FIELDS` / `REMOVED_CHARACTER_FIELDS` / `IMMUTABLE_FIELDS`），client / tools 禁止手抄。
+
+### 云端存档
+
+契约、协议与实测口径见 `docs/design/40-cloud-sync.md`、`docs/api/100-api-cloud.md`；实现侧单点：
+
+- 凭据与同步状态唯一载体 = `<创作根>/.ai-editor/cloud.json`（不进项目文件 / 备份 zip / 任何 API 响应），读写唯一入口 = `packages/server/src/cloud/state.ts`。
+- 变更判定只有一把尺子 `hasFileChangesSince`（备份 tick / 云端 `dirty` / 自动推送共用）；自动推送复用备份 tick 链，**不得新增第二套定时器**（`AUTO_PUSH_THROTTLE_MS` 是节流窗口，不是排程间隔）。
+- 备份命名写入 = 解析，唯一实现 = `shared/utils/backup.ts`。**凭据不得进文件名段**：新增任何「用户文本进文件名」的入口都要挂同一守卫（写侧 `writeCloudConfig` / `writeBackup` / `renameBackup`，读侧 `configuredDeviceName` 把坏值当未配置）。
+- 删书前若 `cloud.json` 有该书 book state → 先推送一份最新状态，失败默认中止（`force` 才继续）；不得绕过这套口径直接 `rm -rf` 书目录。
+
+### API / 工具 / SSE
+
+- 导出出口契约见 `docs/api/10-api-project.md`。实现侧单源：卷号 / 章号 / 文件名 / TXT 组装一律消费 shared（`outline-numbering.ts` 的 `numberVisibleOutline`、`orderVisibleChapters`、`sanitizeDocumentFileName`、`novel-export.ts`），服务端与客户端不得复刻；与服务端 `deriveChapterOrder`（含软删、保引用稳定）不是同一口径，不得互为替代。
+- 工具参数 schema 用 TypeBox，放 `packages/tools`（**不放 `shared`**：client 不打包 schema）；`execute` 抛错即失败；`propose_*` 的预览细节**只走 `details`**（随 `tool_execution_end` 帧下发），`content` 只给 `proposal_id` + 一句话摘要。
+- 工作区类型（`kind`）的能力收窄与覆盖类写包入口校验见 `docs/design/60-practice.md` / `architecture.md`；实现上是 `ToolDefinition.scope` + 装配过滤（结构性边界，不靠提示词）。
+- SSE 帧集与字段以 `docs/api/80-api-chat.md` 为准；唯一实现点 = `packages/agent/src/runtime/events.ts`，不得回退旧事件名。
+
+### 数值单源
+
+- 任何上限 / 缺省 / 阈值 / 档位常量**只在定义处出现**：散文与注释引用常量名，不复述数字；模型需要看到的数字必须由常量**插值**进工具 `description`，并有测试断言两者同值。
+- 客户端派生（格式化 / 阈值 / 段优先级 / 热力档位 / 日历固定周数 `MONTH_CALENDAR_WEEKS`）同样单源：`client/src/lib/session-status.ts`、`client/src/lib/writing-stats.ts`；`--heat-*` 等 CSS 变量只定义在 `client/src/index.css`。
+
+### 前端
+
+- 任何切换当前项目的端点之后，客户端必须收敛项目镜像（重拉 config + outline + 书架）——服务端 `currentProject` 是单例事实源，客户端只是镜像。
+- 同一路由组件的「形态」状态也是状态：`Dashboard` 的 `mode` 在 `#/` ↔ `#/overview` 之间不重挂载，凡 `if (mode !== "overview") return` 的 effect 必须把 `mode` 写进依赖数组。
+- 开机直达书籍只在 `hooks/use-enter-last-book.ts` 做首帧一次；勿在 Dashboard / AppShell 加常驻重定向（会把「回书架」弹回去）。
+- **改色唯一入口** = `AntdProvider.tsx`（同步 `DESIGN.md` 登记表）；块编辑器 `--bn-*` 映射唯一入口 = `components/blocknote/blocknote.css`；守卫 = `design-discipline.test.ts` + `components/antd-tokens.test.ts`，新增 antd 组件先扩 token 守卫。
+- antd 组件会给 `.ant-btn` 注入 `position: relative`（与 Tailwind `.absolute` 同特异性、antd 注入更晚）⇒ 定位一律挂外层包装 `div`，不写在 antd 组件 `className` 上；危险色图标按钮写 `color="danger" variant="text"`。
+- 缩进列几何依赖 antd `controlHeightSM`：占位 / 摘要 / 就地新建行复用同一条占位链（不手写 `pl-*` 像素），折叠箭头恒 `RightOutlined` + `!collapsed && "rotate-90"`（`antd-tokens.test.ts` 有该值断言）。
+- 块编辑器升级 = 显式 commit + 全量测 + 浏览器像素核对；禁 `@blocknote/xl-*`；`server` / `tools` / `db` / `agent` 不得依赖 `@blocknote/*`（服务端不解析块结构）。
+- `Ctrl/Cmd + S` = 保存当前内容 + 生成本地存档：键位常量 = `client/src/lib/save-shortcut.ts`；动作走 `registerSaveHandler` 注册栈（后注册者优先）；存档唯一注册者 = `AppShell` 的 `useSaveArchive`；页面保存失败必须 `return false`（阻断存档）。
+- 聊天链路：SSE 解析唯一实现 = `hooks/use-sse.ts`；store 的 loadSeq / msgSeq 竞态、事件级流身份守卫、中止在途 SSE 的约定不得回退；工具行归一唯一入口 = `ChatPanel` 的 `asToolCall`。
+- 提案 UI：`PROPOSAL_TYPE_LABELS` 必须覆盖 `PROPOSAL_TOOLS` 全集；历史只读卡从 `toolCalls` 重建并按 `toolCallId` 与 live 去重，不新增表 / API。
+- 推演标记提交基底必须用可见标记（`lib/deduction.ts` 的 `toggledDeductionNodes`）——拿 raw `config.deductionNodes` 回传会把失效 id 送回服务端，严格 400 会让该书标记操作永久锁死。
+- 写作面：工具条不得自任滚动容器（`sticky` 已是库 tooltip / 下拉的包含块）；高度链三处接通，中间不得用 `items-start` / `self-start` 截断（下游 `flex: 1` 拿不到剩余高度）。
+- 新增练习页 = 三处同改：`components/nav/nav-items.tsx` 项集 / `lib/workspace-route-guard.ts` 的练习首段常量 / 「练习区无回收站、无概览」前提。
+- 文本文件导入（范文等）必须走 `readTextFile`（UTF-8 → GB18030 回落，禁 `file.text()`）。
+- 桌面能力检测唯一入口 = `client/src/lib/desktop.ts` 的 `desktopBridge()`（浏览器形态 / SSR 返回 null）；禁止在组件里直接摸 `window.aiEditorDesktop`。
+- 泛型 `EntityList` / `EntityDetail` 只服务 setting / location，**已冻结**：不再承载新能力（人物页是自有工作台，见 `DESIGN.md`）。
+- 品牌与图标资产：`packages/client/public/provider-icons.svg`（供应商 logo）与 `client/public/brand-icon.svg`（系统面负形版，兼 favicon 与桌面图标源）的用法见 `DESIGN.md` / `50-desktop.md` §5.3；不要引入 `@lobehub/icons`，也不要另存图标副本。
+
+### 桌面版
+
+设计契约见 `docs/design/50-desktop.md`；实现侧不可省：
+
+- preload 必须 CJS（源文件 `preload.cts`，`sandbox: true` 是既定基线），主进程 ESM；服务走主进程 in-process `startServer()`（不开子进程），退出复用 `ServerHandle.close()`；窗口加载 `http://127.0.0.1:<实际端口>`，**端口分段单源 = shared `constants/ports.ts`**（server / `vite.config` / desktop 全部派生，禁止复述字面量）。
+- 应用级配置唯一载体 = `<userData>/desktop.json`；桌面包不得依赖 `process.cwd()` / 命令行参数；日志落 `<userData>/logs/ai-editor.log`；原生能力只经 preload 的 `pickDirectory()`。
+- 打包不可省：`pnpm deploy --prod` + `npmRebuild: false` + 显式 `linux.executableName`（scope 名里的 `@` 会被 AppImage 工具链拒收）；Electron 42+ 无 postinstall（懒下载，install 阶段不要依赖它存在）。
+- `electron-updater` 是 CJS ⇒ 必须默认导入 + 解构（具名导入在打包态直接崩、typecheck 不报）；只在 Windows 安装态、用户确认后先 `await closeServer()` 再 `quitAndInstall(true, true)`。
+- 升级路径守卫不可回退：`installer.nsh` 的 `customUnInstall` 开头保留 `${If} ${isUpdated}` / `${If} ${Silent}` 早退（漏掉会在升级时弹「清除使用数据」）。卸载清理删目录前**必须先验签名文件** `<书库>/.ai-editor/library.json`——书库目录名是通用名，按名 `RMDir /r` 会误删用户自建的同名目录；`<userData>` 存在性检查用 `desktop.json`。
+- 打包分工：本地只打 Linux 包自查，Windows 包只由 CI 出（本地交叉需 Wine）；workflow 不写 pnpm `version`（从根 `packageManager` 读）。
+
+### 测试与验证
+
+- 各包 `test` script = `vitest run`；各包 tsconfig 已 `exclude: ["src/**/*.test.ts"]`，不要改回——**`*.test.ts` 不进 `pnpm typecheck`**，编译期断言（`satisfies` / 穷尽性检查）必须写在 src 模块里；`.test.tsx` 仍会被 typecheck（有意保留）。
+- 改 shared / db / tools 的 `src` 后先 `pnpm -r build` 再 typecheck / 下游测试（下游读上游 **dist**，不重建会给假绿）。
+- 变异 / 探针验证只能用 `cp -r` 真副本或 `git worktree`，禁止硬链接副本 + 就地截断写（会写穿 inode 污染源仓库）；恢复后复跑全量回归。
+
+## 产品非目标与延期项
+
+- 非目标（理由见 `docs/design/00-master-design.md`「批量导入边界」）：不做超长小说正文生成、不做批量拆解导入——重新引入前必须先改设计文档。
+- 延期项与有意口径：`docs/design/backlog.md`（多标签页、undo、token 聚合面、跨书参考资料导入等）。
+
+## 仓库与目录
+
+`docs/`、`scripts/`、`test-project/` 在仓库根；包内路径相对 `packages/`。`test-project/` 整体不入库（含运行时生成的 `.ai-editor/config.json`）；创作根 `.ai-editor/config.json` 只属服务端（`debug` 用户手编、`lastProject` 服务端在 open 成功后合并写入，见 `config.md`）。
