@@ -503,7 +503,7 @@ export default function Dashboard({ mode }: { mode: DashboardMode }) {
     const file = e.target.files?.[0] ?? null;
     setImportFile(file);
     setImportError(null);
-    // 不把 zip 文件名预填为书名：备份命名是 `<时间戳>-<自动|手动>-<设备>-人物N-设定N-章N.zip`，
+    // 不把 zip 文件名预填为书名：备份命名是 `<时间戳>-<自动|手动>-<设备>[-<标签>][-人物N-设定N-章N].zip`，
     // 拿它当书名会把一整串元信息写进目录名与 project.json。书名留空 = 服务端用备份内的书名。
   }
 

@@ -42,7 +42,7 @@ import {
   setCurrentProject,
 } from "./middleware/project.js";
 import { projectRoutes, setProjectRoot } from "./routes/project.js";
-import { BACKUPS_DIR_NAME, createBackupZip, ensureParseableBackup, isAllowedBackupEntry, maybeAutoBackup, pruneBackups, renameBackup, validateBackupPackage, writeBackup, writeProjectFilesFromBackup, writeRawBackupFile } from "./backup.js";
+import { BACKUPS_DIR_NAME, createBackupZip, ensureParseableBackup, isAllowedBackupEntry, listBackups, maybeAutoBackup, pruneBackups, renameBackup, validateBackupPackage, writeBackup, writeProjectFilesFromBackup, writeRawBackupFile } from "./backup.js";
 import { unzipSync } from "fflate";
 
 /** 旧会话格式（v1 扁平 JSONL）夹具写入：备份管道只按目录条目处理 sessions/，与文件内容格式无关 */
@@ -567,6 +567,15 @@ describe("GET /project/backups 与 POST /project/backup", () => {
     expect(manual.fileName).not.toMatch(/-人物\d+-设定\d+-章\d+\.zip$/);
     expect(parseBackupFileName(manual.fileName)?.stats).toBeUndefined();
     expect(existsSync(join(dir, BACKUPS_DIR_NAME, manual.fileName))).toBe(true);
+
+ // 可列出 + 可恢复（白名单 = parseBackupFileName，练习区形态同样合法）
+    expect(listBackups(getCurrentProject()!).map((b) => b.fileName)).toContain(manual.fileName);
+    const restored = await app.request("/api/v1/project/backup/restore", {
+      method: "POST",
+      headers: { ...HOST_HEADERS, "content-type": "application/json" },
+      body: JSON.stringify({ fileName: manual.fileName }),
+    });
+    expect(restored.status).toBe(200);
 
  // 自动备份（同一管道）：类型段换「自动」，同样无统计段
     const auto = writeBackup(getCurrentProject()!, { kind: "auto" });

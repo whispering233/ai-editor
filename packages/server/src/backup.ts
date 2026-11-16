@@ -287,11 +287,11 @@ export function ensureParseableBackup(project: ProjectContext): boolean {
 }
 
 /**
- * 重命名备份（POST /project/backup/rename）：**只改名称段**，时间戳/类型/设备/统计保持。
+ * 重命名备份（POST /project/backup/rename）：**只改名称段**，时间戳/类型/设备保持（统计段仅小说保留）。
  *
  * 
  * 1. fileName 白名单校验：仅接受 parseBackupFileName 可解析的唯一命名格式
- * `<YYYYMMDD-HHmmssSSS>-<自动|手动>-<设备>[-<标签>]-人物N-设定N-章N.zip`（^$ 锚定 + 设备/标签
+ * `<YYYYMMDD-HHmmssSSS>-<自动|手动>-<设备>[-<标签>][-人物N-设定N-章N].zip`（^$ 锚定 + 设备/标签
  * 部分拒绝 /\\，天然防路径分隔符与 `..` 穿越；旧命名不可解析 ⇒ 无从改名）→ 非法 400 VALIDATION_ERROR
  * 2. 文件不存在 → 404 VALIDATION_ERROR
  * 3. 新名称解析：请求未传 name → 清除名称段；传空串/纯空白 → 清除名称段；
@@ -1114,7 +1114,7 @@ function writeFileAtomic(filePath: string, data: Uint8Array): void {
  * 从备份恢复当前项目（POST /project/backup/restore）：
  *
  * 1. fileName 白名单校验：仅允许 `.backups/` 下的**唯一命名格式**
- * `<YYYYMMDD-HHmmssSSS>-<自动|手动>-<设备>[-<标签>]-人物N-设定N-章N.zip`（shared parseBackupFileName，
+ * `<YYYYMMDD-HHmmssSSS>-<自动|手动>-<设备>[-<标签>][-人物N-设定N-章N].zip`（shared parseBackupFileName，
  * ^$ 锚定 + 设备/标签部分拒绝 /\\，天然防路径分隔符与 `..` 穿越；旧命名不可解析 ⇒ 一并被拒）；
  * 格式合法但文件不存在 → 404
  * 2. **覆盖前自动快照**：当前三文件 + 规则（若有）打包为快照存入 .backups/（复用备份管道，

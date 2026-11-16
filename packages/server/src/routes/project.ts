@@ -552,7 +552,7 @@ projectRoutes.post("/import", async (c) => {
 
  // 1. multipart 解析（Hono 4 c.req.parseBody；非 multipart body → 解析失败 → 400）
  // 书名为**可选**：留空 = 用备份内的书名（备份是权威——备份文件名是
- // `<时间戳>-<自动|手动>-<设备>[-<标签>]-人物N-设定N-章N.zip`，拿它当书名是错的）
+ // `<时间戳>-<自动|手动>-<设备>[-<标签>][-人物N-设定N-章N].zip`，拿它当书名是错的）
   const body = await c.req.parseBody().catch(() => null);
   const requestedName = typeof body?.name === "string" ? body.name.trim() : "";
   const file = body?.file;
@@ -815,7 +815,7 @@ projectRoutes.get("/backups", (c) => {
 // POST /api/v1/project/backup —— 立即备份（手动触发；同款管道 + 保留策略清理）
 // 请求体可选 name（手动备份自定义名称，trim 后 1-30 字符；形状校验 zod schema，
 // 名称规范化/权威校验收敛 sanitizeBackupName → writeBackup 唯一执行点）。
-// 手动备份文件名落类型段「手动」（<时间戳>-手动-<设备>[-<标签>]-人物N-设定N-章N.zip）
+// 手动备份文件名落类型段「手动」（<时间戳>-手动-<设备>[-<标签>][-人物N-设定N-章N].zip）
 projectRoutes.post("/backup", async (c) => {
   const project = requireCurrentProject();
   const raw = await c.req.json().catch(() => null);
