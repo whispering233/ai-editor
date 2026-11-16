@@ -136,6 +136,28 @@ describe("search_entities", () => {
     expect(result.items.map((i) => i.id).sort()).toEqual([charA, charB, charC].sort());
   });
 
+  it("超过单页上限 → truncated + next_offset；offset 续读后字段消失", () => {
+    for (let i = 0; i < 205; i++) {
+      createEntity(db, { type: "character", name: `角色${i}` });
+    }
+    const page1 = runSearchEntities(makeCtx(), { type: "character" });
+    expect(page1.items).toHaveLength(200);
+    expect(page1.total).toBe(205);
+    expect(page1.truncated).toBe(true);
+    expect(page1.next_offset).toBe(200);
+
+    const page2 = runSearchEntities(makeCtx(), { type: "character", offset: 200 });
+    expect(page2.items).toHaveLength(5);
+    expect(page2.total).toBe(205);
+    expect(page2.truncated).toBeUndefined();
+    expect(page2.next_offset).toBeUndefined();
+
+ // 越过末页不误报截断（否则模型会拿同一个 offset 反复续读）
+    const beyond = runSearchEntities(makeCtx(), { type: "character", offset: 300 });
+    expect(beyond.items).toEqual([]);
+    expect(beyond.truncated).toBeUndefined();
+  });
+
   it("limit 传 200（db clamp 上限）：超过默认 50 条时全量返回", () => {
  // 插入 60 条同名前缀实体（name 均含「批量」）；默认 listEntities limit 50 会截断
     for (let i = 0; i < 60; i++) {

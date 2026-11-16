@@ -46,22 +46,32 @@ export function runGetEntity(ctx: ToolContext, args: GetEntityArgs): GetEntityRe
 
 // ============ search_entities ============
 
-/** search_entities 结果：匹配实体摘要列表 + 过滤后总数（db listEntities 同构） */
-export type SearchEntitiesResult = EntityListResult;
+/** search_entities 结果：匹配实体摘要列表 + 命中总数；未取完时附续页信息（字段稀疏，取完不出现） */
+export interface SearchEntitiesResult extends EntityListResult {
+  /** true = 后面还有未返回的命中（items 不完整） */
+  truncated?: boolean;
+  /** 下一页的 offset（仅 truncated = true 时出现） */
+  next_offset?: number;
+}
 
 /**
- * 实体搜索（search_entities(type, query, filters?) → 匹配实体列表）。
- * 透传 db listEntities：type + name LIKE 模糊匹配 + **软删过滤**
+ * 实体搜索（search_entities(type, query, filters?, offset?) → 匹配实体列表）。
+ * 透传 db listEntities：type + name LIKE 模糊匹配（query 省略/空串 = 不过滤） + **软删过滤**
  * + filters（tags AND / status 精确匹配，data 字段 JS 过滤）+ 摘要提取（db 单一实现）。
- * limit 取 `MAX_ENTITY_LIST_LIMIT`（数值单源在 shared）：搜索结果尽量全（token 截断由上层按需处理）。
+ * limit 取 `MAX_ENTITY_LIST_LIMIT`（数值单源在 shared）；命中未取完 → truncated + next_offset，
+ * 让模型知道数据不完整并能续读（与文本分页工具的「已截断」约定同构）。
  */
 export function runSearchEntities(ctx: ToolContext, args: SearchEntitiesArgs): SearchEntitiesResult {
-  return listEntities(ctx.db, {
+  const offset = args.offset ?? 0;
+  const result = listEntities(ctx.db, {
     type: args.type,
     q: args.query,
     filters: args.filters,
     limit: MAX_ENTITY_LIST_LIMIT,
+    offset,
   });
+  const nextOffset = offset + result.items.length;
+  return nextOffset < result.total ? { ...result, truncated: true, next_offset: nextOffset } : result;
 }
 
 // ============ get_entity_summary ============
