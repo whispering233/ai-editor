@@ -82,6 +82,7 @@
 - 缩进列几何依赖 antd `controlHeightSM`：占位 / 摘要 / 就地新建行复用同一条占位链（不手写 `pl-*` 像素），折叠箭头恒 `RightOutlined` + `!collapsed && "rotate-90"`（`antd-tokens.test.ts` 有该值断言）。
 - 块编辑器升级 = 显式 commit + 全量测 + 浏览器像素核对；禁 `@blocknote/xl-*`；`server` / `tools` / `db` / `agent` 不得依赖 `@blocknote/*`（服务端不解析块结构）。
 - `Ctrl/Cmd + S` = 保存当前内容 + 生成本地存档：键位常量 = `client/src/lib/save-shortcut.ts`；动作走 `registerSaveHandler` 注册栈（后注册者优先）；存档唯一注册者 = `AppShell` 的 `useSaveArchive`；页面保存失败必须 `return false`（阻断存档）。
+- **大纲页（master-detail）实现侧**：大纲只拉一次（页面壳持有 `useOutlineLoader`，`OutlineDetail` 不自拉，`node` 由壳 `findNode` 派生传入）；选中唯一来源 = URL `#/outline/:nodeId`（`#/outline` 无选中）；detail 的 `useDataRefresh` 只刷关系 / 变更记录，**不得再 `reload()` 整树**；未保存守卫只覆盖 rail / 空白区 / 窄屏返回条（浏览器后退与「写正文」外链仍丢，见 `backlog.md`）；rail 宽度 / 收起态 key `ai-editor:outline-rail`。契约见 `DESIGN.md` `outline-page`。
 - 聊天链路：SSE 解析唯一实现 = `hooks/use-sse.ts`；store 的 loadSeq / msgSeq 竞态、事件级流身份守卫、中止在途 SSE 的约定不得回退；工具行归一唯一入口 = `ChatPanel` 的 `asToolCall`。
 - 提案 UI：`PROPOSAL_TYPE_LABELS` 必须覆盖 `PROPOSAL_TOOLS` 全集；历史只读卡从 `toolCalls` 重建并按 `toolCallId` 与 live 去重，不新增表 / API。
 - 推演标记提交基底必须用可见标记（`lib/deduction.ts` 的 `toggledDeductionNodes`）——拿 raw `config.deductionNodes` 回传会把失效 id 送回服务端，严格 400 会让该书标记操作永久锁死。
