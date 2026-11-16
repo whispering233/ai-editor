@@ -281,7 +281,7 @@
   - 触发条件：再次新增实体类型，或统一类型标签来源时。
   - 升级路径：Trash 与 entity-list 的内联表改派生 shared（各一行 import）。
 - **关联对话框其余下拉的浮层宽度**（卡 8.2 oracle 登记，既有）
-  - 现状：`select-free-input`（关系类型）已加 `popupMatchSelectWidth={false}`；同弹窗另 4 个 `Select` 与通用关联页两个过滤 `Select` 仍跟触发器宽度（长实体名会截断）。
+  - 现状：`select-free-input`（关系类型）已加 `popupMatchSelectWidth={false}`；同弹窗另 4 个 `Select` 与通用关联页三个过滤 `Select` 仍跟触发器宽度（长实体名会截断）。
   - 触发条件：再次触碰这两个文件时。
   - 最小修法：逐个补 `popupMatchSelectWidth={false}`（与人物页排序下拉同口径）。
 - **关联对话框每次打开拉一次全量关系**（卡 8.2；性能边界）
