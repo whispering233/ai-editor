@@ -38,8 +38,10 @@ InkOS 按 sessionKind 切换工具集（chat/play/write 各有不同工具），
 get_entity(type, id)
   → 实体详情（含 data JSON 解析后的字段）
 
-search_entities(type, query, filters?)
+search_entities(type, query?, filters?)
   → 匹配的实体列表（名称 + 类型 + 关键字段摘要）
+  query 省略或空串 = 不过滤名称（列出该类型全部实体，按最近更新降序）——
+    条数上限 = 常量 `MAX_ENTITY_LIST_LIMIT`，返回的 total 为命中总数（items 可能少于 total）
   filters: { tags?: string[], status?: string }
   status 口径（2026-09）：匹配 `data.status`——**实际只在伏笔（hook）上有意义**
     （生命周期 planted/progressing/resolved/abandoned）；character 的 status 字段已移除

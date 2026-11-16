@@ -22,13 +22,14 @@ export const getEntityArgsSchema = Type.Object(
 export type GetEntityArgs = Static<typeof getEntityArgsSchema>;
 
 /**
- * search_entities 入参：type + query（name 模糊匹配）+ filters（data 字段过滤）
+ * search_entities 入参：type + query（name 模糊匹配，可省）+ filters（data 字段过滤）
+ * query 省略 / 空串 = 不过滤名称（列出该类型全部实体；db listEntities 同口径）
  * filters.status：data.status 字符串相等匹配；filters.tags：data.tags 数组须包含全部指定 tags（AND）
  */
 export const searchEntitiesArgsSchema = Type.Object(
   {
     type: entityTypeSchema,
-    query: Type.String(),
+    query: Type.Optional(Type.String()),
     filters: Type.Optional(
       Type.Object(
         {

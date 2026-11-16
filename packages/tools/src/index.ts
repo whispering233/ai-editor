@@ -51,6 +51,7 @@ import {
   CHARACTER_PRIORITIES,
   CHARACTER_PRIORITY_LABELS,
   DEFAULT_HALF_LIFE,
+  MAX_ENTITY_LIST_LIMIT,
   RELATION_TYPES,
   TOOL_PERMISSION,
 } from "@whispering233/ai-editor-shared";
@@ -93,7 +94,10 @@ const queryToolDefs: ToolDefinition[] = [
   {
     name: "search_entities",
     description:
-      "实体搜索：按类型 + 名称关键词模糊匹配（可附 filters：status 精确匹配 data.status——" +
+      "实体搜索：按类型 + 名称关键词模糊匹配（query 省略或空串 = 不过滤名称，即列出该类型全部实体，" +
+      "按最近更新降序、最多 " +
+      MAX_ENTITY_LIST_LIMIT +
+      " 条，返回的 total 为命中总数）。可附 filters：status 精确匹配 data.status——" +
       "**仅伏笔（hook）生命周期有意义**（character 已无该字段）；" +
       "tags 要求 data.tags 数组包含全部指定标签）。返回匹配实体列表（名称 + 类型 + 关键字段摘要）。",
     parameters: searchEntitiesArgsSchema,

@@ -4,7 +4,7 @@
 // + 练习 7（四读三写，scope = practice）+ 通用 2（web_search / fetch_content，scope = common）= 46 个；执行 13 个不暴露）；
 // workspace 依赖 @whispering233/ai-editor-db / @whispering233/ai-editor-shared 解析由 import 在编译/运行期验证
 import { describe, expect, it } from "vitest";
-import { AUTO_TOOLS, CHARACTER_PRIORITIES, CHARACTER_PRIORITY_LABELS, COMMON_TOOLS, DEFAULT_HALF_LIFE, MAX_FEEDBACK_DIMENSIONS, MAX_PRACTICE_BRIEF_CHARS, MAX_PRACTICE_TOPIC_CHARS, PRACTICE_TOOLS, PROPOSAL_TOOLS, TOOL_SCOPES } from "@whispering233/ai-editor-shared";
+import { AUTO_TOOLS, CHARACTER_PRIORITIES, CHARACTER_PRIORITY_LABELS, COMMON_TOOLS, DEFAULT_HALF_LIFE, MAX_ENTITY_LIST_LIMIT, MAX_FEEDBACK_DIMENSIONS, MAX_PRACTICE_BRIEF_CHARS, MAX_PRACTICE_TOPIC_CHARS, PRACTICE_TOOLS, PROPOSAL_TOOLS, TOOL_SCOPES } from "@whispering233/ai-editor-shared";
 import * as m from "./index";
 
 describe("@whispering233/ai-editor-tools 入口冒烟", () => {
@@ -75,6 +75,12 @@ describe("@whispering233/ai-editor-tools 入口冒烟", () => {
     expect(m.getTool("fetch_content")!.scope).toBe("common");
     expect(m.getTool("fetch_content")!.permission).toBe("auto");
     expect(typeof m.runFetchContent).toBe("function");
+ // 实体列表上限防漂移：search_entities 的 description 由 shared MAX_ENTITY_LIST_LIMIT 插值——
+ // 描述里出现的**任何**数字必须恰好 ⊆ {条数上限}（手写数值 / 值改了没同步即报红）
+    const entitySearchDescription = m.getTool("search_entities")!.description;
+    expect(new Set(entitySearchDescription.match(/\d+/g) ?? [])).toEqual(new Set([String(MAX_ENTITY_LIST_LIMIT)]));
+    // 模型得知「不传 query 也能列全」的唯一渠道是描述本身
+    expect(entitySearchDescription).toContain("省略或空串");
  // 维度上限防漂移：两个提交点评卡的 description 由 shared MAX_FEEDBACK_DIMENSIONS 插值生成
     for (const name of ["submit_style_feedback", "submit_free_feedback"]) {
       expect(m.getTool(name)!.description).toContain(`dimensions 最多 ${MAX_FEEDBACK_DIMENSIONS} 个维度`);

@@ -129,6 +129,13 @@ describe("search_entities", () => {
     expect(result.items.map((i) => i.id)).not.toContain(charA);
   });
 
+  it("query 省略 = 不过滤名称（列出该类型全部实体）", () => {
+    const { charA, charB, charC } = seedSearch();
+    const result = runSearchEntities(makeCtx(), { type: "character" });
+    expect(result.total).toBe(3);
+    expect(result.items.map((i) => i.id).sort()).toEqual([charA, charB, charC].sort());
+  });
+
   it("limit 传 200（db clamp 上限）：超过默认 50 条时全量返回", () => {
  // 插入 60 条同名前缀实体（name 均含「批量」）；默认 listEntities limit 50 会截断
     for (let i = 0; i < 60; i++) {
