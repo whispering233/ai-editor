@@ -1,4 +1,4 @@
-// 正文导入导出通用件（卡 12.6）：纯函数 + 极薄 DOM 封装（导出 md / 块 JSON / 纯文本 TXT，导入 md / 块 JSON）。
+// 正文导入导出通用件（卡 12.6；2026-11 补单章 TXT）：纯函数 + 极薄 DOM 封装（导出 md / 块 JSON / 纯文本 TXT，导入 md / 块 JSON）。
 // 契约：docs/api/110-api-manuscript.md「导入导出（无端点）」——**纯客户端、不新增端点**；
 // 浏览器形态与桌面形态同一套实现（`<input type="file">` 读文本 + `Blob` + `<a download>`），不加 preload 能力。
 //

@@ -411,7 +411,7 @@ projectRoutes.get("/export", (c) => {
 // 流程：requireCurrentProject（无项目 → 409，与 /config 一致）→ 读 outline.json 派生展示编号 →
 // 无可见章 → 400（不产空包）→ 一次 IN 查询取 `content_text` 投影（不读块 JSON）→ zipSync。
 // 条目顺序 = 大纲树序阅读序（shared 按 `readOutlineFile` 结果遍历，服务端不重排）。
-// 只读 data.db：**不做 wal_checkpoint**、不写项目目录任何文件（投影已在库内，无需合并 WAL）。
+// 只读项目数据（outline.json 派生编号 + data.db 取 content_text）：**不做 wal_checkpoint**、不写项目目录任何文件（投影已在库内，无需合并 WAL）。
 projectRoutes.get("/export-novel", (c) => {
   const project = requireCurrentProject();
  // 仅小说工作区（同组的 /export 对两种 kind 都放行，因此不能整组挂 → handler 内断言）
@@ -463,7 +463,7 @@ function txtHeading(label: string, title: string): string {
 // 派生阅读序（`numberVisibleOutline`）、批量取 `content_text` 投影、拼卷 / 章标题。
 // 流程：requireCurrentProject（无项目 → 409）→ 仅小说工作区（同组 /export 对两种 kind 都放行，
 // 不能整组挂）→ 校验 `layout` → 无可见章 400（不产空文件）→ 一次 IN 查询取正文投影 → 组装块。
-// 只读 data.db：**不做 wal_checkpoint**、不写项目目录任何文件（同 /export-novel）。
+// 只读项目数据（outline.json 派生编号 + data.db 取 content_text）：**不做 wal_checkpoint**、不写项目目录任何文件（同 /export-novel）。
 projectRoutes.get("/export-novel-txt", (c) => {
   const project = requireCurrentProject();
   assertWorkspaceKind(project, "novel");

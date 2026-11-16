@@ -15,7 +15,7 @@
 // 冲突（409 DOCUMENT_STALE）：对话框二选一——「重新加载（丢弃本地）」重拉服务端版本并换 key 重挂
 // 编辑器，「覆盖保存」重发且**不带 base_updated_at**（服务端据此跳过冲突检查）。
 // 章节不存在 / 已软删（404 OUTLINE_NODE_NOT_FOUND）→ 页面 404 态（写法同 OutlineDetail）。
-// 导入导出（卡 12.6，契约 docs/api/110-api-manuscript.md「导入导出（无端点）」）：纯客户端——导出 md（**先确认有损**）
+// 导入导出（卡 12.6；2026-11 补单章 TXT，契约 docs/api/110-api-manuscript.md「导入导出（无端点）」）：纯客户端——导出 md（**先确认有损**）
 // / 块 JSON（无损）/ 纯文本 TXT（两种排版，**不弹确认框**），导入 md（往返比对，有损时必须用户确认后才覆盖）/ 块 JSON（浅校验失败即可见错误）。
 // 判定与文件名规则在 lib/document-io（node 可测）；对话框与下载走既有全局 confirm / 临时 <a download>。
 // TXT 取编辑器最新块 JSON（`latestRef`，**含未保存改动**），排版 / 文件名复用整本 TXT 的 shared 函数。
@@ -268,7 +268,7 @@ export function ChapterEditor({ outline, chapterId, basePath, onSaved, headerLea
     await saveContent(latestRef.current ?? "", { force: true });
   }
 
-  // ============ 导入导出（卡 12.6） ============
+  // ============ 导入导出（卡 12.6；2026-11 补 TXT） ============
 
   /** 本章文件名基名（章标题；大纲未加载时回落「正文」，与页头标题同口径） */
   function documentTitle(): string {

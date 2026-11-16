@@ -325,7 +325,7 @@
 - 导出**当前打开项目**（无项目 → 409 `NO_PROJECT_OPEN`，与 `/config` 一致）。
 - **仅小说工作区**（`kind = "novel"`）：练习工作区无大纲/正文概念 → 400 `KIND_MISMATCH`（客户端据此在根首页按 kind 隐藏该导出项）。
 - **无可见章 → 400 `VALIDATION_ERROR`**（不产出空包）。
-- 只读 `data.db` 行（一次批量取 `content_text` 投影，不读块 JSON），**不做 wal_checkpoint**、不写项目目录任何文件。
+- 只读项目数据（`outline.json` 派生编号 + `data.db` 批量取 `content_text` 投影，不读块 JSON），**不做 wal_checkpoint**、不写项目目录任何文件。
 - 只含**正文**：参考资料 / 人物 / 设定 / 伏笔 / 时间轴 / 对话历史都不进包（`sessions/` 从不进任何 zip）。
 - **产物不可再导入**：`POST /project/import` 只认 `/project/export` 的三文件 + 可选规则包。
 - 客户端落盘 = 与 `/project/export` 同一条 `<a download>` 管道（默认下载目录；**zip 内才是目录树**，不解压不是磁盘目录树）。
@@ -368,7 +368,7 @@ layout?: "preserve" | "webnovel"; // 缺省 "preserve"；其他值 → 400 VALID
 - 导出**当前打开项目**（无项目 → 409 `NO_PROJECT_OPEN`，与 `/config` 一致）。
 - **仅小说工作区**（`kind = "novel"`）：练习工作区 → 400 `KIND_MISMATCH`（客户端据此在书架弹窗隐藏该选项）。
 - **无可见章 → 400 `VALIDATION_ERROR`**（不产空文件）。
-- 只读 `data.db` 行（一次批量取 `content_text` 投影，不读块 JSON），**不做 wal_checkpoint**、不写项目目录任何文件。
+- 只读项目数据（`outline.json` 派生编号 + `data.db` 批量取 `content_text` 投影，不读块 JSON），**不做 wal_checkpoint**、不写项目目录任何文件。
 - 只含**正文**：参考资料 / 人物 / 设定 / 伏笔 / 时间轴 / 对话历史都不进文件（`sessions/` 从不进任何导出）。
 - **产物不可再导入**：`POST /project/import` 只认 `/project/export` 的三文件 + 可选规则包。
 - 单章 TXT 不走本端点（纯客户端，见 [`110-api-manuscript.md`](./110-api-manuscript.md) §导入导出）。

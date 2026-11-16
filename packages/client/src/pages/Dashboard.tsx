@@ -177,7 +177,7 @@ export default function Dashboard({ mode }: { mode: DashboardMode }) {
   const [importing, setImporting] = useState(false);
   const [importConflict, setImportConflict] = useState(false);
   const [importConflictBase, setImportConflictBase] = useState("");
-  // 导出清单选类型框（卡 E5：先弹框选「项目压缩文件 / 小说文档」，不再点一下直接下载）
+  // 导出清单选类型框（先弹框选「项目压缩文件 / 小说文档 / 纯文本」，不再点一下直接下载）
   const [exportOpen, setExportOpen] = useState(false);
   // 导出进行态（防连点）
   const [exporting, setExporting] = useState(false);
