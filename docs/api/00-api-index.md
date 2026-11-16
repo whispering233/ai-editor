@@ -51,7 +51,7 @@
 | PUT | `/api/v1/entity/setting/:id/move` | 实体 CRUD |
 | POST | `/api/v1/entity/event/:id/move_to` | 实体 CRUD |
 
-### 章正文（[110-api-manuscript.md](./110-api-manuscript.md）)
+### 章正文（[110-api-manuscript.md](./110-api-manuscript.md))
 
 | 方法 | 路径 | 文档 |
 | :--- | :--- | :--- |

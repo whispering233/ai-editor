@@ -128,9 +128,10 @@ pnpm desktop:dist                                      # 全仓构建 + pnpm dep
 0. gh auth status（多账号环境先 gh auth switch——发布/推送用的账号必须是仓库 owner）
 1. 更新根 CHANGELOG.md：把 Unreleased 条目搬运为新版本段（`## [vX.Y.Z] - <日期>`，不带主题后缀；只写条目、不写引用块摘要段——格式口径见该文件头）
 2. pnpm release:version X.Y.Z（--dry-run 预览）——同步 5 个发布包 + client + 根 package.json 版本
-3. git add -A && git commit -m "chore(release): bump version to vX.Y.Z"
+3. git add -A && git commit -m "chore(release): 发布 vX.Y.Z"
 4. git tag -a vX.Y.Z -m "vX.Y.Z"（手动 annotated tag，轻量 tag 不触发发布规范）
-5. git push origin main && git push origin vX.Y.Z
+5. git push origin main
+   git push origin vX.Y.Z
    ⤷ 纪律：tag 永远单独一条 push 命令，**不要攒着补推**（`--tags` / `--follow-tags` 一次新建 >3 个 tag
      时 GitHub 丢弃 tag 事件 → workflow 静默不跑，tag 本身却推上去了；详见「发布管道坑记录」）
    ⤷ 自检（返回 0 = 事件被吞，按「发布管道坑记录」删 tag 后再单独推恢复）：
