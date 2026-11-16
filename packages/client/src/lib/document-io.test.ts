@@ -101,10 +101,20 @@ describe("exportDocumentTxt（单章纯文本：shared buildNovelTxt / novelTxtF
     });
   });
 
-  it("空章（空串 / 空数组 / 纯空白块）→ 只有标题行（不产空文件）", () => {
+  it("空章（空串 / 空数组 / 纯空白块）→ 只有标题行（两种排版）", () => {
     const expected = { fileName: "起风了.txt", body: "第3章 起风了\r\n" };
     expect(exportDocumentTxt("", "起风了", "第3章 起风了", "preserve")).toEqual(expected);
     expect(exportDocumentTxt("[]", "起风了", "第3章 起风了", "preserve")).toEqual(expected);
+    const whitespaceBlock = JSON.stringify([
+      { type: "paragraph", content: [{ type: "text", text: "   " }] },
+    ]);
+    expect(exportDocumentTxt(whitespaceBlock, "起风了", "第3章 起风了", "preserve")).toEqual(
+      expected,
+    );
+    expect(exportDocumentTxt("", "起风了", "第3章 起风了", "webnovel")).toEqual({
+      fileName: "起风了-网文.txt",
+      body: "第3章 起风了\r\n",
+    });
   });
 
   it("非法 JSON → 空文本、不抛（导出成只有标题行的文件）", () => {
