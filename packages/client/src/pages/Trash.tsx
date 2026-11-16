@@ -76,7 +76,7 @@ export default function Trash() {
   /** 列表请求失败（错误码；null = 正常） */
   const [error, setError] = useState<string | null>(null);
   const [reloadTick, setReloadTick] = useState(0);
-  // 数据变更信号（问题 1）：AI 提案确认写库 / InfoBar 刷新按钮 → 重拉回收站列表
+  // 数据变更信号（问题 1）：AI 提案确认写库 / MainToolbar 刷新按钮 → 重拉回收站列表
   // （AI 软删实体/节点会级联入回收站；ref 守卫防首帧重复拉）
   useDataRefresh(() => setReloadTick((t) => t + 1));
   const [purgeTarget, setPurgeTarget] = useState<PurgeTarget | null>(null);

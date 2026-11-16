@@ -925,7 +925,7 @@ export function CharacterDetail({ id, onSaved }: { id: string; onSaved?: () => v
     // 依赖仅 [id]：换角色才重载（loadDetail 每次渲染重建，与既有详情页同取舍）
   }, [id]);
 
-  // 数据变更信号（InfoBar 刷新 / AI 提案确认写库）→ 重拉（表单以服务端权威为准整体重置）
+  // 数据变更信号（MainToolbar 刷新 / AI 提案确认写库）→ 重拉（表单以服务端权威为准整体重置）
   useDataRefresh(() => void loadDetail());
 
   // 阅读进度 tab 需要大纲（进度节点选项）：直达人物页时 store 里可能还没拉——**自动兜底拉取**

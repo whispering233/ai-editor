@@ -21,7 +21,7 @@
 // - AI 排序（F9）：注入聊天预设指令（工具名 propose_reorder_timepoints 保证出现——LLM 依赖
 // 工具名发现）→ 提案卡确认后 Executor 重排 timepoint.sort_order → notifyDataChanged → 本页
 // useDataRefresh 自动重拉（无需本页处理刷新）
-// - 数据刷新：useDataRefresh 订阅 dataVersion（AI 提案确认写库 / InfoBar 刷新按钮）
+// - 数据刷新：useDataRefresh 订阅 dataVersion（AI 提案确认写库 / MainToolbar 刷新按钮）
 import { useEffect, useRef, useState } from "react";
 import type { FormEvent } from "react";
 import { Button, Input, Select } from "antd";
@@ -91,7 +91,7 @@ export default function Timeline() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [reloadTick, setReloadTick] = useState(0);
-  // 数据变更信号（同 HookPanel）：AI 提案确认写库 / InfoBar 刷新按钮 → 重拉全部
+  // 数据变更信号（同 HookPanel）：AI 提案确认写库 / MainToolbar 刷新按钮 → 重拉全部
   useDataRefresh(() => setReloadTick((t) => t + 1));
   /** 全量 occurs_at 挂载边（GET /relation 一次拉全；构建挂载映射；失败降级空数组——
    * 事件全部视为未挂载——不阻塞列表） */

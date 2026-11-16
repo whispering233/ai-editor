@@ -135,12 +135,12 @@ export default function Practice() {
   const [samples, setSamples] = useState<PracticeSampleSummary[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [reloadTick, setReloadTick] = useState(0);
-  /** 首帧是否已拿到列表：重拉（提案确认 / InfoBar）时保留旧列表，不整页回骨架 */
+  /** 首帧是否已拿到列表：重拉（提案确认 / MainToolbar）时保留旧列表，不整页回骨架 */
   const loadedOnceRef = useRef(false);
   /** 新建样本弹窗的预选作品（`null` = 关窗；`{ workId: null }` = 预选「其他」） */
   const [sampleDialog, setSampleDialog] = useState<{ workId: string | null } | null>(null);
 
-  // AI 提案确认 / InfoBar 刷新后重拉（列表数据统一订阅 dataVersion）
+  // AI 提案确认 / MainToolbar 刷新后重拉（列表数据统一订阅 dataVersion）
   useDataRefresh(() => setReloadTick((t) => t + 1));
 
   // 作家解析放渲染期（配置可能晚于样本到达）：分组只依赖当前作家，不缓存一份可能过期的

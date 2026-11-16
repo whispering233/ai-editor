@@ -3,7 +3,7 @@
 // 二级 tab 行（可选）→ 控件行（可选）→ 分割线 → （调用方的内容区块）。
 //
 // ⚠ 分割线规则（契约红线，不要各页自画）：
-// - 页头末尾画 1px `{colors.hairline}`（= Tailwind `bg-border`，与 `info-bar` 底线同档）。
+// - 页头末尾画 1px `{colors.hairline}`（= Tailwind `bg-border`，与 `main-toolbar` 底线同档）。
 // - 控件行由子视图渲染的页（设定树 / 关联总览：工具栏随各自视图结构）传 `divider={false}`，
 //   由那两处在控件行之后自放 `<PageDivider />`——仍复用本模块的唯一实现，不另起分割线写法。
 // - 设置页（二级 tab）：`divider={false}` + 紧接 `<Tabs>`——antd line 型 Tabs 的导航条自带

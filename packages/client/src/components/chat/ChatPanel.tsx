@@ -1453,7 +1453,7 @@ function ChatPanelBody({
 }
 
 // ============ 外壳：桌面静态右栏（≥1024px） / 小屏抽屉（<1024px） ============
-// 整栏收起/展开已归 `info-bar` 右端（2026-11）：收起态由 `AppShell` 整栏不渲染（0px），本组件无收起按钮。
+// 整栏收起/展开已归 `main-toolbar` 右端（2026-11）：收起态由 `AppShell` 整栏不渲染（0px），本组件无收起按钮。
 
 export function ChatPanel({
   open,

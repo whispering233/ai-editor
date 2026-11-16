@@ -117,7 +117,7 @@ export default function CharacterWorkbench({ id }: { id?: string }) {
     };
   }, [q, sort, order, reloadTick]);
 
-  // 全局数据刷新（InfoBar 刷新按钮 / AI 提案确认写库）→ 重拉左栏
+  // 全局数据刷新（MainToolbar 刷新按钮 / AI 提案确认写库）→ 重拉左栏
   useDataRefresh(() => setReloadTick((t) => t + 1));
 
   const railItems = items ?? [];

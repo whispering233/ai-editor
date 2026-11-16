@@ -47,7 +47,7 @@ interface UiState {
 
  /**
  * 大纲定位目标节点 id（transient，U4 方案 A：跨页传参不侵入 hash 路由）：
- * InfoBar/概览页点击「阅读进度」→ 设置后跳 #/outline；Outline 页消费（展开祖先 +
+ * 概览页点击「阅读进度」→ 设置后跳 #/outline；Outline 页消费（展开祖先 +
  * 滚动 + 临时高亮）后 clear。同一时刻仅一个定位请求，页面未消费前保留。
  */
   focusOutlineNodeId: string | null;
@@ -71,13 +71,13 @@ interface UiState {
   setFocusMode: (on: boolean) => void;
 
  /**
- * 数据版本信号（问题 1）：AI 提案确认写库后 / InfoBar 刷新按钮点击时 +1，
+ * 数据版本信号（问题 1）：AI 提案确认写库后 / MainToolbar 刷新按钮点击时 +1，
  * 中栏数据页面（EntityList/EntityDetail/Outline/OutlineDetail/HookPanel/Trash/Dashboard）
  * 订阅本字段变化后重拉各自数据，实现「AI 改完数据中栏同步刷新」。
  * 触发点约定（避免滥用）：
  * - chat store confirmProposal **成功后**调用（reject 不改数据不触发；hook-panel 复合写
  * 是页面本地操作，S9.1 既有 reloadTick 自带刷新，不走全局信号）；
- * - InfoBar 刷新按钮共用本信号（全中栏统一刷新入口，页面侧不再各自加刷新按钮）。
+ * - MainToolbar 刷新按钮共用本信号（全中栏统一刷新入口，页面侧不再各自加刷新按钮）。
  * 页面消费用 ref 记上次版本守卫：dataVersion 初始 0，挂载时 ref 同步当前值，
  * 之后仅真实变化触发，避免首帧挂载重复拉取。
  */

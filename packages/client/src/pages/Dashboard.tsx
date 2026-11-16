@@ -202,7 +202,7 @@ export default function Dashboard({ mode }: { mode: DashboardMode }) {
 
   const noProject = config === null && !configLoading;
   const outlineSummary = outline ? summarizeOutline(outline.children) : null;
-  // 阅读进度标题（id→title 映射；outline 未加载时回退 id 占位，与 InfoBar 同语义）
+  // 阅读进度标题（id→title 映射；outline 未加载时回退 id 占位）
   const positionTitle =
     config?.currentPosition != null
       ? (findOutlineNodeTitle(outline, config.currentPosition) ?? config.currentPosition)
@@ -242,7 +242,7 @@ export default function Dashboard({ mode }: { mode: DashboardMode }) {
     setOutlineAttempted(false);
   }, [mode, config?.id]);
 
-  // 数据变更信号（问题 1）：AI 提案确认写库 / InfoBar 刷新按钮 → 重拉各区块（overview 专属）
+  // 数据变更信号（问题 1）：AI 提案确认写库 / MainToolbar 刷新按钮 → 重拉各区块（overview 专属）
   useDataRefresh(() => {
     if (mode !== "overview") return;
     setEntitiesTick((t) => t + 1);

@@ -1,7 +1,7 @@
-// 中栏 MainPanel：信息条 + 页面内容区（按路由渲染 children；起无 TabBar——
+// 中栏 MainPanel：工具栏 + 页面内容区（按路由渲染 children；起无 TabBar——
 // 导航并入左栏 NavRail）
-// loadConfig 挂载拉取逻辑自原 AppShell 迁移（信息条标题映射数据源）；
-// 失败静默——信息条显示「书架」，书架主页引导创建/打开项目
+// loadConfig 挂载拉取逻辑自原 AppShell 迁移（工具栏已不显示项目信息，仍为右下悬浮「问 AI」
+// 判可用性提供 config）；失败静默——书架主页引导创建/打开项目
 import { useEffect, useLayoutEffect, type ReactNode } from "react";
 import { FloatButton } from "antd";
 import { CommentOutlined } from "@ant-design/icons";
@@ -10,7 +10,7 @@ import { MIDDLE_MIN_WIDTH } from "../../hooks/use-panels";
 import { useProjectStore } from "../../stores/project";
 import { useChatStore } from "../../stores/chat";
 import { useUiStore } from "../../stores/ui";
-import { InfoBar, type PanelToggles } from "./InfoBar";
+import { MainToolbar, type PanelToggles } from "./MainToolbar";
 import { StatsHud } from "../stats/stats-hud";
 
 export function MainPanel({
@@ -31,9 +31,9 @@ export function MainPanel({
   onOpenChat: () => boolean;
   /** 桌面态标记（F7）：中栏 flex-1 弹性吸收左右栏固定宽之外的剩余空间；小屏回退默认 50% 百分比 */
   isDesktop: boolean;
-  /** 整栏收起/展开（桌面态）：直接透传给 `InfoBar` 两端的 toggle */
+  /** 整栏收起/展开（桌面态）：直接透传给 `MainToolbar` 两端的 toggle */
   panelToggles: PanelToggles;
-  /** 专注模式（卡 13.4，仅章正文页）：`InfoBar` 与「问 AI」悬浮球均不渲染
+  /** 专注模式（卡 13.4，仅章正文页）：`MainToolbar` 与「问 AI」悬浮球均不渲染
    * （专注态 AI 入口整体不可达是有意口径，见 DESIGN.md §Layout「专注模式」）；
    * 内容区与滚动容器不变 */
   focusMode?: boolean;
@@ -51,7 +51,7 @@ export function MainPanel({
   const clearCurrentFocus = useUiStore((s) => s.clearCurrentFocus);
   const setFocusMode = useUiStore((s) => s.setFocusMode);
 
-  // 挂载时拉取项目配置（失败静默，信息条显示「书架」不阻塞）
+  // 挂载时拉取项目配置（失败静默——工具栏不显示项目信息，不阻塞渲染）
   useEffect(() => {
     void loadConfig();
   }, [loadConfig]);
@@ -66,9 +66,9 @@ export function MainPanel({
       className="relative flex min-w-0 flex-[5_1_50%] flex-col"
       style={isDesktop ? { flex: "1 1 0%", minWidth: MIDDLE_MIN_WIDTH } : undefined}
     >
-      {/* 信息条在专注模式下隐藏（契约 DESIGN.md §Layout「专注模式」）；内容区不受影响 */}
+      {/* 工具栏在专注模式下隐藏（契约 DESIGN.md §Layout「专注模式」）；内容区不受影响 */}
       {!focusMode && (
-        <InfoBar
+        <MainToolbar
           chatOpen={chatOpen}
           onToggleChat={onToggleChat}
           isDesktop={isDesktop}

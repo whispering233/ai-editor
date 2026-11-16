@@ -105,10 +105,10 @@ export default function Free() {
   const [createOpen, setCreateOpen] = useState(false);
   /** 「让 AI 出题」在途（建行 + 跳转）：防连点 */
   const [creatingTopic, setCreatingTopic] = useState(false);
-  /** 重拉时**仅首帧**置 `null`（后续保留旧列表，避免提案确认 / InfoBar 刷新时整页骨架闪） */
+  /** 重拉时**仅首帧**置 `null`（后续保留旧列表，避免提案确认 / MainToolbar 刷新时整页骨架闪） */
   const loadedOnceRef = useRef(false);
 
-  // AI 提案确认 / InfoBar 刷新后重拉（列表数据统一订阅 dataVersion）
+  // AI 提案确认 / MainToolbar 刷新后重拉（列表数据统一订阅 dataVersion）
   useDataRefresh(() => setReloadTick((t) => t + 1));
 
   useEffect(() => {

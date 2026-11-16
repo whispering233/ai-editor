@@ -113,7 +113,7 @@ export function NavRail({
           : { flex: "1 1 10%" }
       }
     >
-      {/* 顶行：书架入口（点击回书架主页）；整栏收起/展开已归 `info-bar` 左端（2026-11） */}
+      {/* 顶行：书架入口（点击回书架主页）；整栏收起/展开已归 `main-toolbar` 左端（2026-11） */}
       <div className="flex h-12 shrink-0 items-center gap-1 border-b border-border px-2">
         <a
           href="#/"

@@ -5,7 +5,7 @@
 // - **色一律 `currentColor`**：浅色态即 `{colors.primary}`、深色态随 seed（本产品品牌色与文本色同值），
 //   文件内不得出现任何字面色值（`design-discipline.test.ts` 的 `hardcoded-color` 守卫覆盖）。
 // - **尺寸随字号类**（行内 14 `text-sm` / 16 `text-base`，本卡落点固定 16）；**不做 Filled 变体**。
-// - 落点两处、同款：左栏顶部标识（`[标记] 书架`，`#/` 入口）与 `info-bar` 项目名左侧（`[标记] 书名`）。
+// - 落点一处：左栏顶部标识（`[标记] 书架`，`#/` 入口）——中栏工具栏不承载品牌标记。
 // 几何定于 64 视图网格（`viewBox="0 0 64 64"`），显示尺寸由 width/height 缩放。
 import { cn } from "../../lib/utils";
 
@@ -14,7 +14,7 @@ export interface AppMarkProps {
   className?: string;
 }
 
-/** 界内品牌标记（描边态）：左栏顶部标识与 `info-bar` 项目名左侧两处同款 */
+/** 界内品牌标记（描边态）：左栏顶部标识（唯一落点） */
 export function AppMark({ className }: AppMarkProps) {
   return (
     <svg

@@ -1,7 +1,7 @@
 // 当日码字悬浮面板 SSR 走查（`react-dom/server`，仓内无 jsdom）：
 // 标题「码字统计 · 本次」+ 四项指标 + 千分位；练习工作区 / 专注模式不渲染。
 // 契约 = DESIGN.md「当日码字悬浮面板」；数字口径 = lib/writing-session（本测试只验结构）。
-// SSR 预置沿用 InfoBar.test 的手法：zustand 的服务端快照取 getInitialState()
+// SSR 预置沿用 MainToolbar.test 的手法：zustand 的服务端快照取 getInitialState()
 // （setState 对 renderToString 无效），故用 Object.assign 改初值。
 import { renderToString } from "react-dom/server";
 import { afterEach, describe, expect, it } from "vitest";

@@ -5,7 +5,7 @@
 // 约束（改几何/取色前先读该条目）：
 // - **色一律 `currentColor`**、`fill="none"`：色随 `{colors.primary}`，文件内不得出现任何字面色值。
 // - **无尺寸 / 色值 API**：24 viewBox + 固定 16px 显示（约 1.8 stroke），`className` 只做上下文附加类合并。
-// - **只此一处**（仅 `info-bar` 两端的整栏收起/展开）；其余图标仍 `@ant-design/icons`，不得扩散到子栏。
+// - **只此一处**（仅 `main-toolbar` 两端的整栏收起/展开）；其余图标仍 `@ant-design/icons`，不得扩散到子栏。
 import { cn } from "../../lib/utils";
 
 export interface PanelToggleIconProps {
@@ -15,7 +15,7 @@ export interface PanelToggleIconProps {
   className?: string;
 }
 
-/** 整栏收起/展开图标（静态面板图形）：info-bar 左端 `side="left"`、右端 `side="right"` */
+/** 整栏收起/展开图标（静态面板图形）：main-toolbar 左端 `side="left"`、右端 `side="right"` */
 export function PanelToggleIcon({ side, className }: PanelToggleIconProps) {
   return (
     <svg

@@ -337,7 +337,7 @@ export default function EntityDetail({
     // 依赖仅 [entityType, id]：loadDetail 每次渲染重建，但页面切换才需重载（项目未启用 exhaustive-deps 检查）
   }, [entityType, id]);
 
-  // 数据变更信号（问题 1）：AI 提案确认写库 / InfoBar 刷新按钮 → 重拉详情——
+  // 数据变更信号（问题 1）：AI 提案确认写库 / MainToolbar 刷新按钮 → 重拉详情——
   // 表单以服务端权威为准整体重置（AI 改动的字段随之同步，本地未保存编辑被覆盖属预期语义）
   useDataRefresh(() => void loadDetail());
 

@@ -155,13 +155,13 @@ export default function Outline() {
   const configLoading = useProjectStore((s) => s.configLoading);
   // 大纲加载（hook 管首拉/补齐/失败重试；`withMetadata` 保持既有口径——章的字数统计由写作页 rail / 章详情页消费）
   const { reload, retry } = useOutlineLoader({ withMetadata: true });
-  // 跨页定位（U4 方案 A）：ui store 的 transient 目标节点 id——InfoBar/概览页点击「阅读进度」
+  // 跨页定位（U4 方案 A）：ui store 的 transient 目标节点 id——概览页点击「阅读进度」
   // 设置后跳转本页；本页消费（展开祖先+滚动+高亮）后清除，不侵入 hash 路由
   const focusOutlineNodeId = useUiStore((s) => s.focusOutlineNodeId);
   const clearFocusOutlineNode = useUiStore((s) => s.clearFocusOutlineNode);
   const setCurrentFocus = useUiStore((s) => s.setCurrentFocus);
 
-  // 数据变更信号（问题 1）：AI 提案确认写库 / InfoBar 刷新按钮 → 重拉整树；
+  // 数据变更信号（问题 1）：AI 提案确认写库 / MainToolbar 刷新按钮 → 重拉整树；
   // 伏笔标记 effect 依赖 outline 对象，树重拉后自动联动刷新（见该 effect 注释）
   useDataRefresh(() => void reload());
 
@@ -632,7 +632,7 @@ export default function Outline() {
   /**
    * 行级「设为阅读进度」（卡片 1.1）：仅章节点行提供入口（卷/场景行不传菜单项）——
    * 提交实现与详情页共用（lib/current-position.ts），成功后 store 重拉 config 联动
-   * InfoBar「阅读进度」/ 行尾徽标 / 概览页 / compute 预览默认节点。
+   * 概览页「阅读进度」/ 行尾徽标 / compute 预览默认节点。
    * 已是阅读进度 → 菜单项禁用（与行尾「阅读进度」徽标同判据）。
    */
   async function handleSetCurrentPosition(node: OutlineNode) {
@@ -888,7 +888,7 @@ export default function Outline() {
       return (
         <div key={node.id}>
           {/* 节点块（第一行 + 摘要第二行；整块可拖拽：编辑态/自身拖拽中禁用 draggable，避免文本选择与嵌套拖动）；
-              data-node-id 为跨页定位锚点（U4：InfoBar 点击阅读进度 → scrollIntoView 定位）；
+              data-node-id 为跨页定位锚点（U4：概览页点击阅读进度 → scrollIntoView 定位）；
               tabIndex=-1 使行可聚焦（单击选中后按 Enter 触发新建子级 onKeyDown）；
               行级右键菜单（RowContextMenu）——注入会话上下文（focus_node_id）+ 建立关联
               （outline_node 源端点）+ 设为阅读进度（仅章节点行，卡片 1.1）；编辑态不挂右键菜单（行内输入框保留原生文本菜单：复制/粘贴） */}

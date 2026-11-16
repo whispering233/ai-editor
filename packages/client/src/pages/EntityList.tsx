@@ -105,7 +105,7 @@ export default function EntityList({ type }: { type: string }) {
   const [order, setOrder] = useState<"asc" | "desc">("desc");
   /** 重试计数（错误后手动重新加载） */
   const [reloadTick, setReloadTick] = useState(0);
-  // 数据变更信号（问题 1）：AI 提案确认写库 / InfoBar 刷新按钮 → 重拉列表
+  // 数据变更信号（问题 1）：AI 提案确认写库 / MainToolbar 刷新按钮 → 重拉列表
   // （关联 tab 的 RelationsView 以 reloadKey={reloadTick} 联动刷新；设定 tab 树形视图同 key；
   // ref 守卫防首帧重复拉）
   useDataRefresh(() => setReloadTick((t) => t + 1));

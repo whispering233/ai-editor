@@ -1,6 +1,6 @@
 // 「自动推送」区的条件提示（DESIGN.md `cloud-backup-panel`）：开着自动推送但备份频率为「关闭」时，
 // 开关下多一行提示——只提示，不弹窗、不禁用开关。
-// 渲染手法同 InfoBar.test / chat-panel.test（仓内无 jsdom/@testing-library 纪律，用 react-dom/server）：
+// 渲染手法同 MainToolbar.test / chat-panel.test（仓内无 jsdom/@testing-library 纪律，用 react-dom/server）：
 // SSR 下 zustand 取 getInitialState()，故用 Object.assign 预置初值（SSR 不跑 effect，无需 mock 请求）。
 import { renderToString } from "react-dom/server";
 import { afterEach, describe, expect, it } from "vitest";

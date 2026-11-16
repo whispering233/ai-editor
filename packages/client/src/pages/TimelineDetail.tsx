@@ -157,7 +157,7 @@ export default function TimelineDetail({ id }: { id: string }) {
     // 依赖仅 [id]：loadDetail 每次渲染重建，但页面切换才需重载（同 EntityDetail）
   }, [id]);
 
-  // 数据变更信号：AI 提案确认写库 / InfoBar 刷新按钮 → 重拉详情（表单以服务端权威为准重置）+ 标签池 + 挂载数据
+  // 数据变更信号：AI 提案确认写库 / MainToolbar 刷新按钮 → 重拉详情（表单以服务端权威为准重置）+ 标签池 + 挂载数据
   useDataRefresh(() => {
     void loadDetail();
     void loadTagPool();
