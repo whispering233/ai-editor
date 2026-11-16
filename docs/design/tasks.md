@@ -10,20 +10,6 @@
 
 ## 当前任务卡
 
-### R3 写作页卷章栏 0 宽 + 页头 toggle
-
-- **目标**：写作页卷章栏收起 = 0px；收起/展开入口迁到正文列页头标题行最左；删除右边线中缝圆钮。
-- **改动**：
-  - `components/ui/page-header.tsx`：新增 `leading?: ReactNode`，渲染在标题行最左（`titleNode` / title 之前，`action` 仍靠右）。
-  - `components/manuscript/chapter-editor.tsx`：新增 `headerLeading?: ReactNode` 并透传 `PageHeader` 的 `leading`。
-  - `pages/Writing.tsx`：删除 `CollapseStrip` 渲染；`railCollapsed` 时不渲染 rail；同一枚 `railToggle`（桌面 + 非专注；`aria-label` / `title` = `收起卷章导航栏` / `展开卷章导航栏`，`aria-expanded`；图标当前点击动作：收起 `LeftOutlined`、展开 `RightOutlined`；普通 `icon-button`，不是圆钮）传给四种正文形态（骨架 / 显式坏章 / 正文 / 桌面无章）。
-  - `components/writing/chapter-rail.tsx`：删除 `onCollapse` prop、绝对定位圆钮及包裹层；保留 `border-r` 与 6px 拖拽手柄。
-  - `pages/writing.test.tsx`：删 32px 窄条 / 中线圆钮断言，补 0px、页头 toggle、窄屏 / 专注无 toggle。
-  - 收尾：删除 `components/ui/collapse-strip.tsx`（确认无消费者后）。
-- **边界**：不改 `docs/`；不改大纲页；宽度 / 拖拽区间 / `ai-editor:writing-rail` 持久化语义不变。
-- **验收**：`pnpm typecheck`、`pnpm lint`、`pnpm --filter @whispering233/ai-editor-client test`；浏览器 1440 / 1024 看 rail 展开/收起、0px、页头 toggle 位置、窄屏 / 专注无 toggle、展开恢复原宽。
-- **硬完成判据**：`git log -1` 必须是本卡新 commit；`git status --short` 为空；汇报附 commit hash、命令输出与证据路径。无 commit 不许报 PASS。
-
 ### R1 大纲层级徽标双色（卷红褐 / 章·场软灰）
 
 - **目标**：卷 = 现有红褐 `type-badge-border`；章 / 场 = 新增 `type-badge-border-soft`；同一枚「章」全站一色。
