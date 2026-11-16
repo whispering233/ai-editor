@@ -52,14 +52,15 @@ export const BACKUP_KIND_LABELS: Record<BackupKind, string> = {
 };
 
 /**
- * 备份行的元信息行（来源设备与内容规模）：`苹果本 · 人物32 · 设定58 · 章120`。
- * 字段均来自 API（`device` / `stats`）——**UI 不自行解析文件名**；
- * 唯一命名格式保证两项恒存在（旧命名不再被解析/列出），故恒返回非空文案。
+ * 备份行的元信息行（来源设备与内容规模）：小说 `苹果本 · 人物32 · 设定58 · 章120`；
+ * 练习区只有 `苹果本`（没有人物/设定/章）。字段均来自 API（`device` / `stats?`）——
+ * **UI 不自行解析文件名**；统计段缺失即只拼设备。
  */
 export function formatBackupMeta(entry: {
   device: string;
-  stats: { characters: number; settings: number; chapters: number };
+  stats?: { characters: number; settings: number; chapters: number };
 }): string {
+  if (entry.stats === undefined) return entry.device;
   return [entry.device, `人物${entry.stats.characters}`, `设定${entry.stats.settings}`, `章${entry.stats.chapters}`].join(
     " · ",
   );
@@ -93,20 +94,24 @@ export const BACKUP_FRESHNESS_LABELS: Record<BackupFreshness, string> = {
 
 /**
  * 同步状态区一行备份的**统一文案**（三行同字段同顺序）：
- * `<时间> · <类型>[ · <标签>] · <设备> · 人物N · 设定N · 章N · <大小>`。
- * 缺项**不省略**（除可选标签）——用户要能把两行逐项对齐着看。
+ * `<时间> · <类型>[ · <标签>] · <设备>[ · 人物N · 设定N · 章N] · <大小>`。
+ * 统计段仅小说工作区（练习区到设备为止）；同一工作区内缺项**不省略**（除可选标签）——
+ * 用户要能把两行逐项对齐着看。
  */
 export function formatSyncRow(entry: {
   createdAt: string;
   kind: BackupKind;
   name?: string;
   device: string;
-  stats: { characters: number; settings: number; chapters: number };
+  stats?: { characters: number; settings: number; chapters: number };
   size: number;
 }): string {
   const parts = [formatBackupTime(entry.createdAt), BACKUP_KIND_LABELS[entry.kind]];
   if (entry.name !== undefined && entry.name !== "") parts.push(entry.name);
-  parts.push(entry.device, `人物${entry.stats.characters}`, `设定${entry.stats.settings}`, `章${entry.stats.chapters}`);
+  parts.push(entry.device);
+  if (entry.stats !== undefined) {
+    parts.push(`人物${entry.stats.characters}`, `设定${entry.stats.settings}`, `章${entry.stats.chapters}`);
+  }
   parts.push(formatBytes(entry.size));
   return parts.join(" · ");
 }

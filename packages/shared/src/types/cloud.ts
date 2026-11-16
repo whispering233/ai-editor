@@ -94,10 +94,10 @@ export interface CloudBackupEntry {
   kind: "auto" | "manual";
   /** 用户标签（带标签的份**永不参与云端清理**） */
   name?: string;
-  /** 来源设备（必填：唯一命名格式恒有此段） */
+  /** 来源设备（必填：两种形态恒有此段） */
   device: string;
-  /** 尾部三段统计（必填：唯一命名格式恒有此段） */
-  stats: { characters: number; settings: number; chapters: number };
+  /** 尾部三段统计（仅小说工作区；练习区无此字段） */
+  stats?: { characters: number; settings: number; chapters: number };
   size: number;
 }
 

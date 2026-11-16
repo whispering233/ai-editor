@@ -96,7 +96,7 @@ export function toCloudBackups(entries: readonly DavEntry[]): CloudBackupEntry[]
       kind: parsed.kind,
       ...(parsed.name !== undefined ? { name: parsed.name } : {}),
       device: parsed.device,
-      stats: parsed.stats,
+      ...(parsed.stats !== undefined ? { stats: parsed.stats } : {}),
       size: entry.size ?? 0,
     });
   }
@@ -502,7 +502,7 @@ export async function pushBackup(project: ProjectContext, options: PushOptions =
     kind: parsedLocal.kind,
     ...(parsedLocal.name !== undefined ? { name: parsedLocal.name } : {}),
     device: parsedLocal.device,
-    stats: parsedLocal.stats,
+    ...(parsedLocal.stats !== undefined ? { stats: parsedLocal.stats } : {}),
     size: local.size,
   };
   return {

@@ -1,8 +1,9 @@
 // 备份文件名纯函数测试（B2.1 + B2.5 + B2.6 + 云端存档批次 1）
 //
 // 覆盖：
-// - 唯一格式 `<YYYYMMDD-HHmmssSSS>-<自动|手动>-<设备>[-<标签>]-人物N-设定N-章N.zip` 的生成/解析
-//   与「尾部三段固定倒切」的消歧能力
+// - 两种形态（按工作区 kind）：小说 `<YYYYMMDD-HHmmssSSS>-<自动|手动>-<设备>[-<标签>]-人物N-设定N-章N.zip`
+//   与练习区 `<YYYYMMDD-HHmmssSSS>-<自动|手动>-<设备>[-<标签>].zip` 的生成/解析；
+//   小说形态「尾部三段固定倒切」的消歧能力；练习区无统计段（stats 缺省）
 // - 旧命名（秒级 / 带名称无类型段 / 单字母 `-m`/`-a` 段）一律不解析（→ null，文件留盘不识别）
 // - 设备名规则（sanitizeDeviceName）与 hostname 派生（deviceNameFromHostname）
 // - sanitizeBackupName 规则（标签）
@@ -21,7 +22,7 @@ const STATS = { characters: 32, settings: 58, chapters: 120 };
 /** 标准时间戳（2026-08-13 10:15:30.123 本地时间） */
 const AT = new Date(2026, 7, 13, 10, 15, 30, 123);
 
-describe("formatBackupFileName：唯一格式（时间戳 + 类型 + 设备 + 标签 + 统计）", () => {
+describe("formatBackupFileName：小说形态（时间戳 + 类型 + 设备 + 标签 + 统计）", () => {
   it("自动备份（无标签）：<时间戳>-自动-<设备>-人物N-设定N-章N.zip", () => {
     expect(formatBackupFileName(AT, { device: "苹果本", stats: STATS })).toBe(
       "20260813-101530123-自动-苹果本-人物32-设定58-章120.zip",
@@ -60,10 +61,21 @@ describe("formatBackupFileName：唯一格式（时间戳 + 类型 + 设备 + �
       }),
     ).toBe("20260103-050709005-自动-d-人物0-设定0-章0.zip");
   });
+
+  it("练习区形态：无统计段（自动/手动 + 标签）", () => {
+    expect(formatBackupFileName(AT, { device: "苹果本" })).toBe("20260813-101530123-自动-苹果本.zip");
+    expect(formatBackupFileName(AT, { kind: "manual", name: "定稿", device: "苹果本" })).toBe(
+      "20260813-101530123-手动-苹果本-定稿.zip",
+    );
+    expect(formatBackupFileName(AT, { name: "大改前-第一版", device: "MacBook_Pro" })).toBe(
+      "20260813-101530123-自动-MacBook_Pro-大改前-第一版.zip",
+    );
+    expect(formatBackupFileName(AT, { name: "", device: "苹果本" })).toBe("20260813-101530123-自动-苹果本.zip");
+  });
 });
 
-describe("parseBackupFileName（→ { time, kind, name?, device, stats } | null）", () => {
-  it("唯一格式：与 format 往返一致（自动/手动 + 标签 + 设备 + 统计）", () => {
+describe("parseBackupFileName（→ { time, kind, name?, device, stats? } | null）", () => {
+  it("小说形态：与 format 往返一致（自动/手动 + 标签 + 设备 + 统计）", () => {
     const auto = formatBackupFileName(AT, { device: "苹果本", stats: STATS });
     expect(parseBackupFileName(auto)).toEqual({ time: AT, kind: "auto", device: "苹果本", stats: STATS });
     const manual = formatBackupFileName(AT, { kind: "manual", name: "定稿", device: "苹果本", stats: STATS });
@@ -96,6 +108,34 @@ describe("parseBackupFileName（→ { time, kind, name?, device, stats } | null�
     });
   });
 
+  it("练习区形态：无统计段 → stats 缺省（与 format 往返一致）", () => {
+    const auto = formatBackupFileName(AT, { device: "苹果本" });
+    expect(parseBackupFileName(auto)).toEqual({ time: AT, kind: "auto", device: "苹果本" });
+    const manual = formatBackupFileName(AT, { kind: "manual", name: "定稿", device: "苹果本" });
+    expect(parseBackupFileName(manual)).toEqual({ time: AT, kind: "manual", name: "定稿", device: "苹果本" });
+    expect(parseBackupFileName(manual)?.stats).toBeUndefined();
+  });
+
+  it("已知歧义：练习区标签以 -人物N-设定N-章N 收尾 → 按小说形态解析（无工作区上下文时无法消歧）", () => {
+    expect(parseBackupFileName("20260813-101530123-自动-苹果本-人物1-设定2-章3.zip")).toEqual({
+      time: AT,
+      kind: "auto",
+      device: "苹果本",
+      stats: { characters: 1, settings: 2, chapters: 3 },
+    });
+  });
+
+  it("练习区形态接受无统计段；缺设备段仍 null", () => {
+    expect(parseBackupFileName("20260813-101530123-自动-苹果本.zip")).toMatchObject({ device: "苹果本" });
+    expect(parseBackupFileName("20260813-101530123-自动-苹果本.zip")?.stats).toBeUndefined();
+ // 少 `-章N` 的小说残缺名会落进练习区形态（标签 = 定稿-人物32-设定58）——无上下文时无法消歧
+    expect(parseBackupFileName("20260813-101530123-手动-苹果本-定稿-人物32-设定58.zip")).toMatchObject({
+      device: "苹果本",
+      name: "定稿-人物32-设定58",
+    });
+    expect(parseBackupFileName("20260813-101530123-自动-.zip")).toBeNull();
+  });
+
   it("多位统计数字 + 中文类型段（自动/手动）解析", () => {
     const parsed = parseBackupFileName("20260813-101530123-手动-设备甲-人物1234-设定5678-章9999.zip");
     expect(parsed?.stats).toEqual({ characters: 1234, settings: 5678, chapters: 9999 });
@@ -104,9 +144,8 @@ describe("parseBackupFileName（→ { time, kind, name?, device, stats } | null�
     expect(parseBackupFileName("20260813-101530123-自动-设备甲-人物0-设定0-章0.zip")?.kind).toBe("auto");
   });
 
-  it("缺统计段/缺设备段的文件名不被唯一格式吞掉：一律 null（格式完整是硬要求）", () => {
-    expect(parseBackupFileName("20260813-101530123-自动-苹果本.zip")).toBeNull();
-    expect(parseBackupFileName("20260813-101530123-手动-苹果本-定稿-人物32-设定58.zip")).toBeNull();
+  it("缺设备段的文件名不被两种形态吞掉：null", () => {
+    expect(parseBackupFileName("20260813-101530123-自动-.zip")).toBeNull();
   });
 
   it("三类旧命名一律 null（秒级 / 带名称无类型段 / 单字母 -m/-a 段）", () => {

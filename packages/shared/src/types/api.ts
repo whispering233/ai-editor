@@ -1425,7 +1425,7 @@ export const cloudBackupEntrySchema: z.ZodType<CloudBackupEntry> = z.object({
   kind: z.enum(["auto", "manual"]),
   name: z.string().optional(),
   device: z.string(),
-  stats: z.object({ characters: z.number(), settings: z.number(), chapters: z.number() }),
+  stats: z.object({ characters: z.number(), settings: z.number(), chapters: z.number() }).optional(),
   size: z.number(),
 });
 

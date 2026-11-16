@@ -107,10 +107,10 @@ export interface BackupFileInfo {
   kind: BackupKind;
  /** 用户自定义标签（由文件名解析，自动备份/快照无此字段） */
   name?: string;
- /** 来源设备（必填：唯一命名格式恒有此段） */
+ /** 来源设备（必填：两种形态恒有此段） */
   device: string;
- /** 备份内容的未软删规模快照（必填：唯一命名格式恒有此段） */
-  stats: BackupStats;
+ /** 备份内容的未软删规模快照（仅小说工作区；练习区无此字段） */
+  stats?: BackupStats;
 }
 
 /**
@@ -127,7 +127,7 @@ function assertBackupFileNameFormat(fileName: string): NonNullable<ReturnType<ty
     throw new HttpError(
       400,
       "VALIDATION_ERROR",
-      `备份文件名格式非法（仅接受 <YYYYMMDD-HHmmssSSS>-<自动|手动>-<设备>[-<标签>]-人物N-设定N-章N.zip）: ${fileName}`,
+      `备份文件名格式非法（仅接受 <YYYYMMDD-HHmmssSSS>-<自动|手动>-<设备>[-<标签>][-人物N-设定N-章N].zip：小说含尾部统计段、练习区到标签为止）: ${fileName}`,
     );
   }
   return parsed;
@@ -171,7 +171,7 @@ export function createBackupZip(project: ProjectContext): Uint8Array<ArrayBuffer
 function uniqueBackupFileName(
   backupsDir: string,
   date: Date,
-  opts: { kind?: BackupKind; name?: string; device: string; stats: BackupStats },
+  opts: { kind?: BackupKind; name?: string; device: string; stats?: BackupStats },
 ): { fileName: string; date: Date } {
   const { kind = "auto", name, device, stats } = opts;
   let fileName = formatBackupFileName(date, { kind, name, device, stats });
@@ -352,7 +352,7 @@ export function renameBackup(project: ProjectContext, fileName: string, name?: s
         kind: parsed.kind,
         ...(nextName !== undefined ? { name: nextName } : {}),
         device: parsed.device,
-        stats: parsed.stats,
+        ...(parsed.stats !== undefined ? { stats: parsed.stats } : {}),
       };
     } catch {
       throw new HttpError(404, "VALIDATION_ERROR", `备份不存在: ${fileName}`);
@@ -383,7 +383,7 @@ export function renameBackup(project: ProjectContext, fileName: string, name?: s
     kind: parsed.kind,
     ...(nextName !== undefined ? { name: nextName } : {}),
     device: parsed.device,
-    stats: parsed.stats,
+    ...(parsed.stats !== undefined ? { stats: parsed.stats } : {}),
   };
 }
 
@@ -436,7 +436,7 @@ export function listBackups(project: ProjectContext): BackupFileInfo[] {
           kind: parsed.kind,
           ...(parsed.name !== undefined ? { name: parsed.name } : {}),
           device: parsed.device,
-          stats: parsed.stats,
+          ...(parsed.stats !== undefined ? { stats: parsed.stats } : {}),
         };
       } catch {
         return null; // 列表读取瞬间被删（竞态）→ 跳过

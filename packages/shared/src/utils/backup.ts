@@ -1,11 +1,15 @@
-// 备份文件名工具（.backups/ 时间戳命名 + 类型/设备标签 + 尾部统计段 + 重命名）
+// 备份文件名工具（.backups/ 时间戳命名 + 类型/设备标签 + 小说尾部统计段 + 重命名）
 // 纯函数，零 Node 依赖（client 浏览器打包安全）
 // 时区约定：文件名时间戳为本地时区（无时区后缀），format/parse 对称使用本地时间
 //
-// **唯一格式（写入 = 解析）**——<YYYYMMDD-HHmmssSSS>-<自动|手动>-<设备>[-<标签>]-人物N-设定N-章N.zip：
-// - 自动备份/覆盖前快照：<时间戳>-自动-苹果本-人物32-设定58-章120.zip
-// - 手动备份（带标签）：<时间戳>-手动-苹果本-定稿-人物32-设定58-章120.zip
-// 段序固定：尾部三段统计可**从尾部倒切**，故设备/标签里出现类似字样也不歧义；
+// **两种形态（写入 = 解析，按工作区 kind 选择）**：
+// - 小说：<YYYYMMDD-HHmmssSSS>-<自动|手动>-<设备>[-<标签>]-人物N-设定N-章N.zip
+//   自动备份/覆盖前快照：<时间戳>-自动-苹果本-人物32-设定58-章120.zip
+//   手动备份（带标签）：<时间戳>-手动-苹果本-定稿-人物32-设定58-章120.zip
+// - 练习区：<YYYYMMDD-HHmmssSSS>-<自动|手动>-<设备>[-<标签>].zip（没有人物/设定/章，不写统计段）
+//   手动备份（带标签）：<时间戳>-手动-苹果本-定稿.zip
+// 段序固定：小说形态的尾部三段统计可**从尾部倒切**，故设备/标签里出现类似字样也不歧义；
+// 练习区形态以 `.zip` 收尾，设备段禁 `-`，故设备之后到 `.zip` 为止整段即标签。
 // 设备段禁 `-`（见 sanitizeDeviceName），标签为自由文本（1-30 字符）。
 //
 // 早期开发期的三类旧命名（秒级 <YYYYMMDD-HHmmss>.zip、带名称无类型段 <YYYYMMDD-HHmmssSSS>-<名称>.zip、
@@ -16,15 +20,22 @@
 import { MAX_BACKUP_NAME_LENGTH, MAX_DEVICE_NAME_LENGTH, type BackupKind, type BackupStats } from "../constants/backup.js";
 
 /**
- * 唯一格式（设备段 + 尾部三段统计）：<时间戳>-<自动|手动>-<设备>[-<标签>]-人物N-设定N-章N.zip。
+ * 小说形态（设备段 + 尾部三段统计）：<时间戳>-<自动|手动>-<设备>[-<标签>]-人物N-设定N-章N.zip。
  * 设备与标签两组均排除路径分隔符（`/` 与 `\\`）——解析结果是 restore/rename 的文件名白名单，
  * 含分隔符即路径穿越。设备段另禁 `-`（与写入侧 sanitizeDeviceName 同口径）；标签自由文本
  * （可含 `-`，故统计段从尾部固定倒切）。
  */
-const BACKUP_FILE_NAME_PATTERN =
+const NOVEL_BACKUP_FILE_NAME_PATTERN =
   /^(\d{4})(\d{2})(\d{2})-(\d{2})(\d{2})(\d{2})(\d{3})-(手动|自动)-([^-/\\]+?)(?:-([^/\\]+?))?-人物(\d+)-设定(\d+)-章(\d+)\.zip$/;
 
-/** 备份文件名解析结果（time + 类型 + 可选标签 + 设备 + 统计） */
+/**
+ * 练习区形态（无统计段）：<时间戳>-<自动|手动>-<设备>[-<标签>].zip。
+ * 设备段禁 `-`，故设备之后到 `.zip` 为止整段即标签（标签可含 `-`）。
+ */
+const PRACTICE_BACKUP_FILE_NAME_PATTERN =
+  /^(\d{4})(\d{2})(\d{2})-(\d{2})(\d{2})(\d{2})(\d{3})-(手动|自动)-([^-/\\]+?)(?:-([^/\\]+?))?\.zip$/;
+
+/** 备份文件名解析结果（time + 类型 + 可选标签 + 设备 + 小说统计） */
 export interface ParsedBackupFileName {
  /** 本地时区时间（文件名时间戳，毫秒精度） */
   time: Date;
@@ -32,36 +43,25 @@ export interface ParsedBackupFileName {
   kind: BackupKind;
  /** 用户自定义标签（自动备份/覆盖前快照无此字段） */
   name?: string;
- /** 来源设备（唯一格式恒有此段） */
+ /** 来源设备（两种形态恒有此段） */
   device: string;
- /** 尾部三段统计（唯一格式恒有此段） */
-  stats: BackupStats;
+ /** 小说形态的尾部三段统计（练习区形态无此字段） */
+  stats?: BackupStats;
 }
 
 /**
- * 解析备份文件名 → { time, kind, name?, device, stats }；不符唯一格式一律 null。
- *
- * 格式不符返回 null：非时间戳形状（含路径分隔符、`..`、空串、非数字、多后缀等）一律
- * 拒绝——白名单校验语义（restore 流程第 1 步）。**只认唯一格式**：三类旧命名（秒级 /
- * 带名称无类型段 / 单字母 `-m`/`-a` 段）同样返回 null——文件留盘但不识别。
- * 数字合法但日期不存在（如 20261301、2 月 30 日）同样返回 null：Date 构造会对
- * 越界值滚动进位（20261301 → 2027-01-01），回读比对不一致即拒绝。
- *
- * @param fileName 备份文件名（如 "20260813-101530123-自动-苹果本-人物32-设定58-章120.zip"）
- * @returns 本地时区时间 + 类型 + 可选标签 + 设备 + 统计；格式不符返回 null
+ * 时间戳 1-7 组（两种形态同序）→ 本地时间；越界日期回读不一致 → null。
+ * Date 构造会对越界值滚动进位（20261301 → 2027-01-01），回读比对即拒绝。
  */
-export function parseBackupFileName(fileName: string): ParsedBackupFileName | null {
-  const m = BACKUP_FILE_NAME_PATTERN.exec(fileName);
-  if (m === null) return null;
+function parseBackupTimestamp(m: RegExpExecArray): Date | null {
   const y = Number(m[1]);
   const mo = Number(m[2]);
   const d = Number(m[3]);
   const h = Number(m[4]);
   const mi = Number(m[5]);
   const s = Number(m[6]);
-  const milli = Number(m[7]); // 唯一格式恒捕获毫秒段
+  const milli = Number(m[7]);
   const date = new Date(y, mo - 1, d, h, mi, s, milli);
- // 越界日期回读比对（Date 滚动进位后各分量必然变化，一致性校验即拒绝）
   if (
     date.getFullYear() !== y ||
     date.getMonth() !== mo - 1 ||
@@ -73,40 +73,82 @@ export function parseBackupFileName(fileName: string): ParsedBackupFileName | nu
   ) {
     return null;
   }
+  return date;
+}
+
+/**
+ * 解析备份文件名 → { time, kind, name?, device, stats? }；两种形态都不符一律 null。
+ *
+ * 先匹配小说形态（尾部 `-人物N-设定N-章N`），再匹配练习区形态（到 `.zip` 为止）。
+ * **已知歧义**：练习区标签若恰好以 `-人物N-设定N-章N` 收尾，会按小说形态解析——
+ * 标签是自由文本，无法在无工作区上下文时消歧；写入侧按 kind 选形态，只有手工改坏的
+ * 文件会落进这条缝。
+ *
+ * 格式不符返回 null：非时间戳形状（含路径分隔符、`..`、空串、非数字、多后缀等）一律
+ * 拒绝——白名单校验语义（restore 流程第 1 步）。三类旧命名（秒级 / 带名称无类型段 /
+ * 单字母 `-m`/`-a` 段）同样返回 null——文件留盘但不识别。
+ *
+ * @param fileName 备份文件名（如 "20260813-101530123-自动-苹果本-人物32-设定58-章120.zip"
+ *                 或 "20260813-101530123-自动-苹果本.zip"）
+ * @returns 本地时区时间 + 类型 + 可选标签 + 设备（+ 小说统计）；格式不符返回 null
+ */
+export function parseBackupFileName(fileName: string): ParsedBackupFileName | null {
+  const novel = NOVEL_BACKUP_FILE_NAME_PATTERN.exec(fileName);
+  if (novel !== null) {
+    const time = parseBackupTimestamp(novel);
+    if (time === null) return null;
  // 组序：8 = 类型段（手动/自动）、9 = 设备、10 = 标签（可选）、11-13 = 尾部三段统计
+    const result: ParsedBackupFileName = {
+      time,
+      kind: novel[8] === "手动" ? "manual" : "auto",
+      device: novel[9],
+      stats: { characters: Number(novel[11]), settings: Number(novel[12]), chapters: Number(novel[13]) },
+    };
+    if (novel[10] !== undefined) result.name = novel[10];
+    return result;
+  }
+  const practice = PRACTICE_BACKUP_FILE_NAME_PATTERN.exec(fileName);
+  if (practice === null) return null;
+  const time = parseBackupTimestamp(practice);
+  if (time === null) return null;
   const result: ParsedBackupFileName = {
-    time: date,
-    kind: m[8] === "手动" ? "manual" : "auto",
-    device: m[9],
-    stats: { characters: Number(m[11]), settings: Number(m[12]), chapters: Number(m[13]) },
+    time,
+    kind: practice[8] === "手动" ? "manual" : "auto",
+    device: practice[9],
   };
-  if (m[10] !== undefined) result.name = m[10];
+  if (practice[10] !== undefined) result.name = practice[10];
   return result;
 }
 
 /**
- * 生成备份文件名（**唯一格式**）：`<时间戳>-<自动|手动>-<设备>[-<标签>]-人物N-设定N-章N.zip`。
+ * 生成备份文件名（**两种形态，按 opts.stats 选择**）：
+ * - 小说：`<时间戳>-<自动|手动>-<设备>[-<标签>]-人物N-设定N-章N.zip`
+ * - 练习区：`<时间戳>-<自动|手动>-<设备>[-<标签>].zip`
  *
- * `device` 与 `stats` 必填（写入侧只有这一种形态，调用方保证：device 已 sanitize 且非空、
- * stats 描述该备份的内容）——与 parseBackupFileName 互为逆运算；类型系统即约束，无运行时兜底分支。
+ * `device` 必填（调用方保证已 sanitize 且非空）；`stats` 缺省 = 练习区形态（写入侧按工作区
+ * kind 决定）——与 parseBackupFileName 互为逆运算；类型系统即约束，无运行时兜底分支。
  *
  * 毫秒精度；本地时区；`.backups/` 内按文件名排序即时间序（保留策略依赖）。
  *
  * @param opts.device 来源设备名（已 sanitize；禁 `-`）
- * @param opts.stats 备份内容的未软删存量快照
+ * @param opts.stats 小说工作区：备份内容的未软删存量快照；练习区不传
  * @param opts.kind 备份类型（缺省 "auto"）
  * @param opts.name 用户标签——调用方保证已 sanitize（见 sanitizeBackupName）；本函数纯拼接
  */
 export function formatBackupFileName(
   date: Date,
-  opts: { kind?: BackupKind; name?: string; device: string; stats: BackupStats },
+  opts: { kind?: BackupKind; name?: string; device: string; stats?: BackupStats },
 ): string {
   const pad = (n: number): string => String(n).padStart(2, "0");
   const pad3 = (n: number): string => String(n).padStart(3, "0");
   const base = `${date.getFullYear()}${pad(date.getMonth() + 1)}${pad(date.getDate())}-${pad(date.getHours())}${pad(date.getMinutes())}${pad(date.getSeconds())}${pad3(date.getMilliseconds())}`;
   const typeSegment = (opts.kind ?? "auto") === "auto" ? "自动" : "手动";
   const tag = opts.name !== undefined && opts.name.length > 0 ? `-${opts.name}` : "";
-  return `${base}-${typeSegment}-${opts.device}${tag}-人物${opts.stats.characters}-设定${opts.stats.settings}-章${opts.stats.chapters}.zip`;
+  const stats =
+    opts.stats === undefined
+      ? ""
+      : `-人物${opts.stats.characters}-设定${opts.stats.settings}-章${opts.stats.chapters}`;
+  return `${base}-${typeSegment}-${opts.device}${tag}${stats}.zip`;
 }
 
 /**

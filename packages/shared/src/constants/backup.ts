@@ -23,8 +23,9 @@ export const MAX_DEVICE_NAME_LENGTH = 16;
 export type BackupKind = "auto" | "manual";
 
 /**
- * 备份包内容规模快照（写入文件名的尾部三段统计，`人物N-设定N-章N`）。
+ * 备份包内容规模快照（**仅小说工作区**；写入文件名的尾部三段统计 `人物N-设定N-章N`）。
  * 口径：**未软删**存量（实体表不含回收站；章 = outline.json 中未软删 `chapter` 节点）。
+ * 练习区没有这些概念：备份名不写统计段，解析结果也没有该字段。
  */
 export interface BackupStats {
   characters: number;
