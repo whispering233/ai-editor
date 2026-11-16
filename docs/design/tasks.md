@@ -10,19 +10,6 @@
 
 ## 当前任务卡
 
-### R2 整栏 toggle 迁入 InfoBar + `PanelToggleIcon`
-
-- **目标**：左右栏收起/展开从 `NavRail` / `ChatPanel` 栏内迁到 `info-bar` 两端；收起态 = 0px（无窄条、无占位）；新增自绘静态面板图标。
-- **改动**：
-  - 新增 `packages/client/src/components/ui/panel-toggle-icon.tsx`（`side: "left" | "right"`；inline SVG、`currentColor`、圆角矩形 + 内侧竖线、24 viewBox / 显示 16px、约 1.8 stroke；`aria-hidden`；无尺寸/色值 API）。
-  - `components/main-panel/InfoBar.tsx`：左端 `side="left"` 放项目名前，右端 `side="right"` 放语言后；仅 `isDesktop` 渲染；`icon-button`；动态 `aria-label` / `title` / `aria-expanded`（`收起左栏` / `展开左栏`、`收起右栏` / `展开右栏`）；不加选中面；不新增 antd Tooltip。新增 `panelToggles` 对象 prop。
-  - `components/main-panel/MainPanel.tsx`、`components/AppShell.tsx`：透传 `panelToggles`；桌面收起态不渲染对应栏（0px），拖拽手柄仅展开态渲染；窄屏行为不变。
-  - `components/nav/NavRail.tsx` / `components/chat/ChatPanel.tsx`：删除 `onToggleCollapse` prop 与栏内收起按钮（含 `ChatPanelBody` / `SessionTitleBar` 三层透传）；保留移动端 `onClose`。
-  - `components/main-panel/InfoBar.test.tsx`：补新 prop、左右按钮、窄屏隐藏断言。
-- **边界**：R2 **不要删除** `components/ui/collapse-strip.tsx`（R3 还要移除写作页最后一个 `grip` 用法）；不改 `docs/`；不改写作页。
-- **验收**：`pnpm typecheck`、`pnpm lint`、`pnpm --filter @whispering233/ai-editor-client test`；浏览器 1440 / 1024 两档看左右栏收起/展开、0px、按钮两端位置、tooltip/aria、窄屏无新按钮、无 32px 占位。
-- **硬完成判据**：`git log -1` 必须是本卡新 commit；`git status --short` 为空；汇报附 commit hash、命令输出与证据路径。无 commit 不许报 PASS。
-
 ### R3 写作页卷章栏 0 宽 + 页头 toggle
 
 - **目标**：写作页卷章栏收起 = 0px；收起/展开入口迁到正文列页头标题行最左；删除右边线中缝圆钮。
