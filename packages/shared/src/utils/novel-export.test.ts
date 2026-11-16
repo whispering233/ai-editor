@@ -1,7 +1,8 @@
 // 小说导出纯函数走查（md zip + 整本 TXT）：条目路径拼接（卷内章 / 无可见章的卷空目录 / 直挂 root 章）、
-// 空卷名 / 空章名、书名段 sanitize（含 `/` 与超长）、软删卷与软删章不出现、章正文组装、下载文件名；
-// TXT 的两种排版、CRLF / 末尾换行、标题原始名。契约：`docs/api/10-api-project.md`
-// §`GET /api/v1/project/export-novel` / §`GET /api/v1/project/export-novel-txt`；编号来源 = `numberVisibleOutline`。
+// 条目顺序 = 大纲树序阅读序（直挂 root 章与无章卷目录按树位置交错）、空卷名 / 空章名、书名段 sanitize
+// （含 `/` 与超长）、软删卷与软删章不出现、章正文组装、下载文件名；TXT 的两种排版、CRLF / 末尾换行、
+// 标题原始名。契约：`docs/api/10-api-project.md` §`GET /api/v1/project/export-novel` /
+// §`GET /api/v1/project/export-novel-txt`；编号来源 = `numberVisibleOutline`。
 import { describe, expect, it } from "vitest";
 import type { OutlineTree } from "../types/outline.js";
 import { numberVisibleOutline } from "./outline-numbering.js";
@@ -68,10 +69,13 @@ function tree(): OutlineTree {
   };
 }
 
-const entries = () => buildNovelExportEntries("我的书", numberVisibleOutline(tree()));
+const entries = () => {
+  const outline = tree();
+  return buildNovelExportEntries("我的书", numberVisibleOutline(outline), outline);
+};
 
 describe("buildNovelExportEntries（zip 条目：路径 + 顺序）", () => {
-  it("顺序 = 卷序 → 卷内章序 → 直挂 root 章；无可见章的卷产空目录条目；软删卷/软删章不出现", () => {
+  it("顺序 = 大纲树序：卷内章按章序落在卷位置；无可见章的卷产空目录条目；直挂 root 章按树位置；软删卷/软删章不出现", () => {
     expect(entries()).toEqual([
       {
         kind: "chapter",
@@ -105,6 +109,35 @@ describe("buildNovelExportEntries（zip 条目：路径 + 顺序）", () => {
     ]);
   });
 
+  it("直挂 root 的章在卷前 → 按树位置产出（章号与条目顺序一致）", () => {
+    const rootFirst: OutlineTree = {
+      id: "root",
+      type: "root",
+      schemaVersion: 1,
+      children: [
+        { id: "ch-9", type: "chapter", title: "直挂章", updatedAt: T },
+        {
+          id: "vol-1",
+          type: "volume",
+          title: "第一卷",
+          updatedAt: T,
+          children: [{ id: "ch-1", type: "chapter", title: "卷内章", updatedAt: T }],
+        },
+        { id: "vol-empty", type: "volume", title: "空卷", updatedAt: T },
+        { id: "ch-8", type: "chapter", title: "尾章", updatedAt: T },
+      ],
+    };
+    const numbering = numberVisibleOutline(rootFirst);
+    expect(
+      buildNovelExportEntries("我的书", numbering, rootFirst).map((entry) => entry.path),
+    ).toEqual([
+      "我的书/第1章 直挂章.md",
+      "我的书/第1卷 第一卷/第2章 卷内章.md",
+      "我的书/第2卷 空卷/",
+      "我的书/第3章 尾章.md",
+    ]);
+  });
+
   it("有可见章的卷不产目录条目（目录由条目名隐含）", () => {
     const dirs = entries().filter((entry) => entry.kind === "dir");
     expect(dirs).toHaveLength(1);
@@ -117,11 +150,12 @@ describe("buildNovelExportEntries（zip 条目：路径 + 顺序）", () => {
   });
 
   it("书名段经 sanitize：`/` → 空格、超长截断（每一段都不带路径分隔符）", () => {
-    const numbering = numberVisibleOutline(tree());
-    expect(buildNovelExportEntries("我的/书", numbering)[0].path).toBe(
+    const outline = tree();
+    const numbering = numberVisibleOutline(outline);
+    expect(buildNovelExportEntries("我的/书", numbering, outline)[0].path).toBe(
       "我的 书/第1卷 第一卷/第1章 起点.md",
     );
-    const long = buildNovelExportEntries(`超长${"名".repeat(150)}`, numbering)[0].path;
+    const long = buildNovelExportEntries(`超长${"名".repeat(150)}`, numbering, outline)[0].path;
     expect(long.split("/")[0]).toHaveLength(100);
   });
 
@@ -140,13 +174,13 @@ describe("buildNovelExportEntries（zip 条目：路径 + 顺序）", () => {
         },
       ],
     };
-    expect(buildNovelExportEntries("我的书", numberVisibleOutline(dirty))[0].path).toBe(
+    expect(buildNovelExportEntries("我的书", numberVisibleOutline(dirty), dirty)[0].path).toBe(
       "我的书/第1卷 第一卷 上/第1章 起点 1.md",
     );
   });
 
   it("无卷无章（空树）→ 空条目（服务端据可见章数另行 400）", () => {
-    expect(buildNovelExportEntries("我的书", numberVisibleOutline(null))).toEqual([]);
+    expect(buildNovelExportEntries("我的书", numberVisibleOutline(null), null)).toEqual([]);
   });
 });
 

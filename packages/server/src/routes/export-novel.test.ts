@@ -1,6 +1,7 @@
 // GET /api/v1/project/export-novel 测试（卡 E3）：小说文档 zip（卷/章目录树 + 章正文投影）。
 // 覆盖：① 卷/章齐备（含无可见章的卷 / 软删章 / 存量直挂 root 的章 / 空章）→ 解压条目名与 md 内容；
-// ② 全部章软删 → 400 VALIDATION_ERROR（不产空包）；③ 未打开项目 → 409 NO_PROJECT_OPEN。
+// ② 直挂 root 章在卷前 → 解压条目名的树序阅读序；③ 全部章软删 → 400 VALIDATION_ERROR（不产空包）；
+// ④ 未打开项目 → 409 NO_PROJECT_OPEN。
 // 断言的是**真实解压后的条目与文本**（不 mock zip 管道），编号/命名走 shared 纯函数实现。
 import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -83,6 +84,27 @@ function makeExportOutline(): OutlineFileTree {
       },
       { id: "vol-2", type: "volume", title: "云涌", updated_at: T0, children: [] },
       { id: "ch-4", type: "chapter", title: "直挂", updated_at: T0, children: [] },
+    ],
+  };
+}
+
+/** 存量「直挂 root 的章在卷前」：根章 ch-0 → 卷「风起」（ch-1）→ 无可见章卷「云涌」→ 根章 ch-9 */
+function makeRootFirstOutline(): OutlineFileTree {
+  return {
+    id: "root",
+    type: "root",
+    schema_version: SCHEMA_VERSION,
+    children: [
+      { id: "ch-0", type: "chapter", title: "开篇", updated_at: T0, children: [] },
+      {
+        id: "vol-1",
+        type: "volume",
+        title: "风起",
+        updated_at: T0,
+        children: [{ id: "ch-1", type: "chapter", title: "初见", updated_at: T0, children: [] }],
+      },
+      { id: "vol-2", type: "volume", title: "云涌", updated_at: T0, children: [] },
+      { id: "ch-9", type: "chapter", title: "收尾", updated_at: T0, children: [] },
     ],
   };
 }
@@ -192,7 +214,7 @@ describe("GET /project/export-novel（小说文档 zip）", () => {
     expect(decodeURIComponent(disposition)).toContain("测试书-小说文档.zip");
 
     const unzipped = unzipSync(new Uint8Array(await res.arrayBuffer()));
-    // 条目名与顺序 = 卷序（含无可见章的卷的空目录条目）→ 卷内章序 → 直挂 root 的章
+    // 条目名与顺序 = 大纲树序：卷内章按章序落在卷位置，无可见章卷的空目录条目与直挂 root 章按树位置
     expect(Object.keys(unzipped)).toEqual([
       "测试书/第1卷 风起/第1章 初见.md",
       "测试书/第1卷 风起/第2章 空白.md",
@@ -210,6 +232,34 @@ describe("GET /project/export-novel（小说文档 zip）", () => {
     expect(unzipped["测试书/第2卷 云涌/"].length).toBe(0);
     // 存量直挂 root 的章：不落任何卷目录、章号照常连续
     expect(textOf(unzipped, "测试书/第3章 直挂.md")).toBe("# 第3章 直挂\n\n直挂正文");
+  });
+
+  it("直挂 root 章在卷前：条目顺序按树位置交错（章号与条目顺序一致）", async () => {
+    const dir = makeTmpDir();
+    setProjectRoot(makeTmpDir());
+    const app = await openProject(
+      dir,
+      makeRootFirstOutline(),
+      [
+        ["ch-0", "开篇正文"],
+        ["ch-1", "初见正文"],
+        ["ch-9", "收尾正文"],
+      ],
+    );
+
+    const res = await app.request("/api/v1/project/export-novel", { headers: HOST_HEADERS });
+    expect(res.status).toBe(200);
+    const unzipped = unzipSync(new Uint8Array(await res.arrayBuffer()));
+    expect(Object.keys(unzipped)).toEqual([
+      "测试书/第1章 开篇.md",
+      "测试书/第1卷 风起/第2章 初见.md",
+      "测试书/第2卷 云涌/",
+      "测试书/第3章 收尾.md",
+    ]);
+    // 根章仍是普通章文件（标题行 + 空行 + 投影），只是位置回到树序
+    expect(textOf(unzipped, "测试书/第1章 开篇.md")).toBe("# 第1章 开篇\n\n开篇正文");
+    expect(textOf(unzipped, "测试书/第3章 收尾.md")).toBe("# 第3章 收尾\n\n收尾正文");
+    expect(unzipped["测试书/第2卷 云涌/"].length).toBe(0);
   });
 
   it("全部章软删（无可见章）→ 400 VALIDATION_ERROR，不产空包", async () => {

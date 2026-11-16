@@ -6,8 +6,13 @@
 // **编号不得在本模块重算**：卷号 / 章号 / 章 → 卷归属一律取 `numberVisibleOutline`（`outline-numbering.ts`）
 // 的结果——软删节点、直挂 root 的章都在那里处理过。
 
+import type { DeductionTreeLike } from "./deduction.js";
 import { sanitizeDocumentFileName } from "./file-name.js";
-import type { VisibleOutlineNumbering } from "./outline-numbering.js";
+import type {
+  OutlineChapterNumber,
+  OutlineVolumeNumber,
+  VisibleOutlineNumbering,
+} from "./outline-numbering.js";
 
 /** 纯文本导出排版（`layout` 查询参数取值；唯一来源——schema / 服务端 / 客户端都派生自此） */
 export const NOVEL_TXT_LAYOUTS = ["preserve", "webnovel"] as const;
@@ -36,45 +41,62 @@ function labeledSegment(label: string, name: string): string {
 }
 
 /**
- * 书名 + 展示编号 → zip 条目序列（**顺序 = 卷序 → 卷内章序 → 直挂 root 的章**）：
+ * 书名 + 展示编号 + 大纲树 → zip 条目序列（**顺序 = `outline` 顶层 children 的树序阅读序**）：
  *
  * - 章文件 `path` = `{书名}/{第N卷 卷名}/{第M章 章名}.md`；存量**直挂 root 的章** = `{书名}/{第M章 章名}.md`
- * - 卷目录 = `第N卷 卷名`；**无可见章的卷**产出一条 `{书名}/{第N卷 卷名}/` 空目录条目，有章的卷不产目录条目
- * - 场景不产出文件（正文只能挂章）；软删卷 / 软删章不进条目（编号侧已过滤）
+ * - 卷目录 = `第N卷 卷名`；**无可见章的卷**在该卷的树位置产出一条 `{书名}/{第N卷 卷名}/` 空目录条目，
+ *   有章的卷不产目录条目（其章文件按 `numbering.chapters` 顺序落在该卷位置）
+ * - 直挂 root 的章与卷目录条目按树位置交错（不再统一追加到末尾）
+ * - 场景不产出文件（正文只能挂章）；软删卷 / 软删章不进条目（遍历与编号同口径过滤）
+ * - 编号 / 卷归属 / 标题**一律取 `numbering`**，本函数不重算
  */
 export function buildNovelExportEntries(
   bookName: string,
   numbering: VisibleOutlineNumbering,
+  outline: DeductionTreeLike | null,
 ): NovelExportEntry[] {
   const bookDir = sanitizeDocumentFileName(bookName);
-  const chaptersOf = (volumeId: string) =>
-    numbering.chapters.filter((chapter) => chapter.volumeId === volumeId);
+  const volumes = new Map<string, OutlineVolumeNumber>(
+    numbering.volumes.map((volume) => [volume.volumeId, volume]),
+  );
+  const chapters = new Map<string, OutlineChapterNumber>(
+    numbering.chapters.map((chapter) => [chapter.chapterId, chapter]),
+  );
+  const chaptersOfVolume = new Map<string, OutlineChapterNumber[]>();
+  for (const chapter of numbering.chapters) {
+    const list = chaptersOfVolume.get(chapter.volumeId);
+    if (list === undefined) chaptersOfVolume.set(chapter.volumeId, [chapter]);
+    else list.push(chapter);
+  }
+  const chapterEntry = (chapter: OutlineChapterNumber, dir: string | null): NovelExportEntry => ({
+    kind: "chapter",
+    path: `${dir === null ? bookDir : `${bookDir}/${dir}`}/${labeledSegment(
+      chapter.chapterLabel,
+      chapter.chapterTitle,
+    )}.md`,
+    chapterId: chapter.chapterId,
+    chapterLabel: chapter.chapterLabel,
+    chapterTitle: chapter.chapterTitle,
+  });
   const entries: NovelExportEntry[] = [];
-  for (const volume of numbering.volumes) {
+  for (const node of outline?.children ?? []) {
+    if (node.deleted === true) continue; // 软删节点及其整棵子树跳过
+    if (node.type === "chapter") {
+      // 存量直挂 root 的章：按其在树中的位置产出（章号取编号侧，照常参与连续编号）
+      const chapter = chapters.get(node.id);
+      if (chapter !== undefined) entries.push(chapterEntry(chapter, null));
+      continue;
+    }
+    if (node.type !== "volume") continue; // 场景 / 畸形根节点不产出文件
+    const volume = volumes.get(node.id);
+    if (volume === undefined) continue; // 无编号归属的卷（畸形树）不产出
     const volumeDir = labeledSegment(volume.volumeLabel, volume.volumeTitle);
-    const chapters = chaptersOf(volume.volumeId);
-    if (chapters.length === 0) {
+    const volumeChapters = chaptersOfVolume.get(volume.volumeId) ?? [];
+    if (volumeChapters.length === 0) {
       entries.push({ kind: "dir", path: `${bookDir}/${volumeDir}/` });
       continue;
     }
-    for (const chapter of chapters) {
-      entries.push({
-        kind: "chapter",
-        path: `${bookDir}/${volumeDir}/${labeledSegment(chapter.chapterLabel, chapter.chapterTitle)}.md`,
-        chapterId: chapter.chapterId,
-        chapterLabel: chapter.chapterLabel,
-        chapterTitle: chapter.chapterTitle,
-      });
-    }
-  }
-  for (const chapter of chaptersOf("")) {
-    entries.push({
-      kind: "chapter",
-      path: `${bookDir}/${labeledSegment(chapter.chapterLabel, chapter.chapterTitle)}.md`,
-      chapterId: chapter.chapterId,
-      chapterLabel: chapter.chapterLabel,
-      chapterTitle: chapter.chapterTitle,
-    });
+    for (const chapter of volumeChapters) entries.push(chapterEntry(chapter, volumeDir));
   }
   return entries;
 }

@@ -410,12 +410,14 @@ projectRoutes.get("/export", (c) => {
 // `buildNovelChapterMarkdown` / `novelExportZipFileName`）——服务端不复刻任何规则。
 // 流程：requireCurrentProject（无项目 → 409，与 /config 一致）→ 读 outline.json 派生展示编号 →
 // 无可见章 → 400（不产空包）→ 一次 IN 查询取 `content_text` 投影（不读块 JSON）→ zipSync。
+// 条目顺序 = 大纲树序阅读序（shared 按 `readOutlineFile` 结果遍历，服务端不重排）。
 // 只读 data.db：**不做 wal_checkpoint**、不写项目目录任何文件（投影已在库内，无需合并 WAL）。
 projectRoutes.get("/export-novel", (c) => {
   const project = requireCurrentProject();
  // 仅小说工作区（同组的 /export 对两种 kind 都放行，因此不能整组挂 → handler 内断言）
   assertWorkspaceKind(project, "novel");
-  const numbering = numberVisibleOutline(readOutlineFile(project.root));
+  const outline = readOutlineFile(project.root);
+  const numbering = numberVisibleOutline(outline);
   if (numbering.chapters.length === 0) {
     throw new HttpError(400, "VALIDATION_ERROR", "本书还没有章节");
   }
@@ -425,7 +427,7 @@ projectRoutes.get("/export-novel", (c) => {
     numbering.chapters.map((chapter) => chapter.chapterId),
   );
   const zipEntries: Record<string, Uint8Array> = {};
-  for (const entry of buildNovelExportEntries(project.config.name, numbering)) {
+  for (const entry of buildNovelExportEntries(project.config.name, numbering, outline)) {
     zipEntries[entry.path] =
       entry.kind === "dir"
         ? new Uint8Array(0) // 无可见章的卷：显式空目录条目（条目名隐含目录）
