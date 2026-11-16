@@ -193,7 +193,7 @@
 
 ## 前端 / UI
 
-- **antd 组件上的 `absolute` 定位（2026-11 写作页圆钮实测）** — 现状：antd 会给 `.ant-btn` 等组件注入 `position: relative`，与 Tailwind 的 `.absolute` 同特异性但注入更晚 ⇒ 直接写在 antd 组件的 `className` 上会被压回 `relative`，元素静默贴到错误位置（类型检查与单测全绿，只有像素能发现）。当前靠约定：定位一律挂外层 `div`（写作页卷章栏圆钮即此写法，代码注释已记）。触发条件：同类缺陷再现一次 ⇒ 在 `design-discipline.test.ts` 加源码扫描规则（antd 组件的 `className` 里出现 `absolute` / `fixed` / `sticky`）。
+- **antd 组件上的 `absolute` 定位（2026-11 实测）** — 现状：antd 会给 `.ant-btn` 等组件注入 `position: relative`，与 Tailwind 的 `.absolute` 同特异性但注入更晚 ⇒ 直接写在 antd 组件的 `className` 上会被压回 `relative`，元素静默贴到错误位置（类型检查与单测全绿，只有像素能发现）。当前靠约定：定位一律挂外层 `div`。触发条件：同类缺陷再现一次 ⇒ 在 `design-discipline.test.ts` 加源码扫描规则（antd 组件的 `className` 里出现 `absolute` / `fixed` / `sticky`）。
 
 - **码字悬浮面板的两处观感短板（2026-11 UI 实测登记，P3）**
   - 现状：面板四指标标签复用全局 12px `text-muted-foreground`，浅色主题实测对比度 4.42:1（低于 WCAG AA 4.5）；深色主题的 `shadow-md` 在近黑底几乎不可见，层级只靠 1px `ring`。两处都是全局 caption / 浮层口径，不是面板独有。
@@ -259,7 +259,7 @@
   - 触发条件：用户反馈「在写作页要能新建下一章 / 调整卷内顺序」。
   - 最小修法：新建章 / 卷走大纲 `POST /outline`（章只能挂卷）；改名 = `PUT /outline/:id`；**拖拽需先定义跨卷语义**（rail 是卷组嵌套，跨卷拖动会同时改 parent 与 order）——实现前先扩 `DESIGN.md` 的 rail 行交互契约并补 SSR 测试。
 - **写作页 rail 的扩展旋钮（2026-11 有意不做）**
-  - 现状：无搜索 / 草稿筛选 / 卷章统计，无虚拟滚动与 roving tabindex（章数上千时全量渲染），无「计划剩余字数」（无数据模型）；宽度拖拽 / 收起已落地（6px 手柄 + 32px 窄条，见 `DESIGN.md`）。
+  - 现状：无搜索 / 草稿筛选 / 卷章统计，无虚拟滚动与 roving tabindex（章数上千时全量渲染），无「计划剩余字数」（无数据模型）；宽度拖拽 / 收起已落地（6px 手柄 + 0 宽收起，见 `DESIGN.md`）。
   - 触发条件：真实项目章数 / 卷数导致 rail 卡顿，或出现搜索 / 草稿筛选的真实需求。
   - 最小修法：虚拟滚动先量测再引依赖（仓内无虚拟列表库，**不新增**）；键盘导航按 roving tabindex 实现（`aria-current` 已在选中行）；搜索 / 草稿筛选先定数据来源（客户端过滤 vs 服务端查询）。
 - **编号未扩散到其他位置**（2026-09）
