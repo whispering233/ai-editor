@@ -1,7 +1,8 @@
 // 自动备份与恢复（B2.2 + B2.5 + B2.6）
 //
 // 职责：
-// - 备份管道：三文件 + 可选 AGENTS.md（存在才打包）+ wal_checkpoint → .backups/<YYYYMMDD-HHmmssSSS>-<自动|手动>-<设备>[-<标签>]-人物N-设定N-章N.zip
+// - 备份管道：三文件 + 可选 AGENTS.md（存在才打包）+ wal_checkpoint → .backups/<YYYYMMDD-HHmmssSSS>-<自动|手动>-<设备>[-<标签>][-人物N-设定N-章N].zip
+// （小说带尾部统计段；练习区没有人物/设定/章，到标签为止）
 // （复用导出打包；毫秒精度；类型段：手动备份落「手动」、自动备份/覆盖前快照落「自动」）
 // - 保留策略：每项目保留最近 MAX_BACKUPS_PER_PROJECT 份，超出删除最旧（含覆盖前快照；
 // **只有唯一命名格式的文件参与**——parseBackupFileName 解析，旧命名份留盘但不识别）
@@ -118,7 +119,7 @@ export interface BackupFileInfo {
  * parseBackupFileName 全格式校验（时间戳部分 ^$ 锚定纯数字 + 设备/标签部分拒绝 /\\，
  * 天然防路径分隔符与 `..` 穿越；旧命名不可解析 ⇒ 同样被拒）；非法 → 400 VALIDATION_ERROR（文案统一）。
  *
- * @returns 解析结果（校验通过即返回非 null——调用方直接取 time/kind/name/device/stats，免二次解析）
+ * @returns 解析结果（校验通过即返回非 null——调用方直接取 time/kind/name/device/stats?，免二次解析）
  * @throws HttpError 400 VALIDATION_ERROR（文件名格式非法）
  */
 function assertBackupFileNameFormat(fileName: string): NonNullable<ReturnType<typeof parseBackupFileName>> {
@@ -161,8 +162,8 @@ export function createBackupZip(project: ProjectContext): Uint8Array<ArrayBuffer
 }
 
 /**
- * 生成不冲突的备份文件名：`<时间戳>-<类型>-<设备>[-<标签>]-人物N-设定N-章N.zip`（毫秒精度 +
- * 设备段 + 统计段；shared formatBackupFileName）。同毫秒冲突（如「立即备份 + restore 覆盖前
+ * 生成不冲突的备份文件名：`<时间戳>-<类型>-<设备>[-<标签>][-人物N-设定N-章N].zip`（毫秒精度 +
+ * 设备段；统计段仅小说工作区；shared formatBackupFileName）。同毫秒冲突（如「立即备份 + restore 覆盖前
  * 快照」连续触发，理论罕见）处理：时间戳 +1 毫秒循环去重，**保持格式契约可解析**。
  *
  * @returns { fileName, date }——date 为最终去重后的时间戳（与 fileName 时间戳段一致，
@@ -184,8 +185,8 @@ function uniqueBackupFileName(
 
 /**
  * 立即备份当前项目（手动触发 / 自动定时器 / restore 覆盖前快照共用）：
- * 打包 → 写入 .backups/<时间戳>-<自动|手动>-<设备>[-<标签>]-人物N-设定N-章N.zip
- * （唯一命名格式，毫秒精度；同毫秒 +1ms 去重）→ 触发保留策略清理（失败不阻塞）。
+ * 打包 → 写入 .backups/<时间戳>-<自动|手动>-<设备>[-<标签>][-人物N-设定N-章N].zip
+ * （两种形态，毫秒精度；同毫秒 +1ms 去重）→ 触发保留策略清理（失败不阻塞）。
  * 写盘失败向上抛（errorHandler → 500 INTERNAL_ERROR，POST /backup 语义）。
  *
  * @param opts.kind 备份类型（缺省 "auto"）：手动触发传 "manual"（文件名落「手动」段）；
@@ -211,9 +212,10 @@ export function writeBackup(project: ProjectContext, opts?: { name?: string; kin
     assertNotCredential(sanitized);
     name = sanitized;
   }
- // 统计快照在打包前取（同一连接同一时刻视角）；设备名 = 当前生效值
+ // 统计快照仅小说工作区需要（练习区没有人物/设定/章，文件名不写统计段）；
+ // 在打包前取（同一连接同一时刻视角）；设备名 = 当前生效值
  //（云端配置的 device 优先，缺省 = 本机 hostname 派生，见 cloud/device.ts）
-  const stats = getBackupStats(project.db, project.root);
+  const stats = resolveWorkspaceKind(project.config.kind) === "novel" ? getBackupStats(project.db, project.root) : undefined;
   const device = currentDeviceName();
   const zip = createBackupZip(project);
   const backupsDir = join(project.root, BACKUPS_DIR_NAME);
@@ -228,7 +230,7 @@ export function writeBackup(project: ProjectContext, opts?: { name?: string; kin
     kind,
     ...(name !== undefined ? { name } : {}),
     device,
-    stats,
+    ...(stats !== undefined ? { stats } : {}),
   };
 }
 
@@ -294,9 +296,10 @@ export function ensureParseableBackup(project: ProjectContext): boolean {
  * 2. 文件不存在 → 404 VALIDATION_ERROR
  * 3. 新名称解析：请求未传 name → 清除名称段；传空串/纯空白 → 清除名称段；
  * 非空 → sanitizeBackupName 规范化（非法 → 400 VALIDATION_ERROR，文案同 writeBackup）
- * 4. 新文件名 = formatBackupFileName(parsed.time, { kind, name: 新名称, device, stats })——
- * kind 不随重命名改变（auto 仍是「自动」段、manual 仍是「手动」段）；**设备与统计段保持原份的值**
- * （它们描述该备份的来源与内容，不拿当前项目状态凑）
+ * 4. 新文件名 = formatBackupFileName(parsed.time, { kind, name: 新名称, device, stats: nextStats })——
+ * kind 不随重命名改变（auto 仍是「自动」段、manual 仍是「手动」段）；**设备保持原份**；
+ * 统计段仅小说工作区保留（描述该备份的内容），练习区一律写成无统计段形态
+ * （存量旧名的 `-人物0-设定0-章0` 就此收敛）
  * 5. 幂等：新文件名 === 原文件名（如重命名为相同名称）→ 不移动文件，直接返回当前条目
  * （重新 stat 取 size；stat 失败 → 404「备份不存在」）
  * 6. **目标冲突防御（oracle P1-1）**：新文件名已存在（≠ 原文件）→ 409
@@ -334,12 +337,14 @@ export function renameBackup(project: ProjectContext, fileName: string, name?: s
     }
   }
 
- // 3. 新文件名（时间戳/类型/设备/统计段保持原备份——重命名只改标签段）
+ // 3. 新文件名（时间戳/类型/设备保持原备份；统计段仅小说工作区保留，
+ // 练习区（含存量旧名的 `-人物0-设定0-章0`）一律收敛为无统计段形态）
+  const nextStats = resolveWorkspaceKind(project.config.kind) === "novel" ? parsed.stats : undefined;
   const newFileName = formatBackupFileName(parsed.time, {
     kind: parsed.kind,
     name: nextName,
     device: parsed.device,
-    stats: parsed.stats,
+    stats: nextStats,
   });
 
  // 4. 幂等：名称未变 → 不移动文件，返回当前条目（重新 stat 取 size；读不到 → 404）
@@ -352,7 +357,7 @@ export function renameBackup(project: ProjectContext, fileName: string, name?: s
         kind: parsed.kind,
         ...(nextName !== undefined ? { name: nextName } : {}),
         device: parsed.device,
-        ...(parsed.stats !== undefined ? { stats: parsed.stats } : {}),
+        ...(nextStats !== undefined ? { stats: nextStats } : {}),
       };
     } catch {
       throw new HttpError(404, "VALIDATION_ERROR", `备份不存在: ${fileName}`);
@@ -383,7 +388,7 @@ export function renameBackup(project: ProjectContext, fileName: string, name?: s
     kind: parsed.kind,
     ...(nextName !== undefined ? { name: nextName } : {}),
     device: parsed.device,
-    ...(parsed.stats !== undefined ? { stats: parsed.stats } : {}),
+    ...(nextStats !== undefined ? { stats: nextStats } : {}),
   };
 }
 

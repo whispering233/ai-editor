@@ -549,7 +549,7 @@ describe("GET /project/backups 与 POST /project/backup", () => {
     expect(existsSync(join(dir, BACKUPS_DIR_NAME, backup.fileName))).toBe(true);
   });
 
-  it("练习工作区：备份文件名统计段自然为 人物0-设定0-章0（空大纲 + 无实体，不加特殊分支）", async () => {
+  it("练习工作区：备份文件名不带人物/设定/章统计段（写入侧按 kind 分支）", async () => {
     const dir = join(makeTmpDir(), "practice", "仿写练习"); // 目录映射 = practice/（open 直接给路径，目录语义同其他用例）
     initProjectDir(
       dir,
@@ -558,19 +558,21 @@ describe("GET /project/backups 与 POST /project/backup", () => {
     );
     const app = await openProject(dir);
 
- // 手动备份（端点）：统计段恒有，且为全零——练习数据在专属表（不参与人物/设定/章计数）
+ // 手动备份（端点）：无统计段（练习数据在专属表，不参与人物/设定/章计数）
     const res = await app.request("/api/v1/project/backup", { method: "POST", headers: HOST_HEADERS });
     expect(res.status).toBe(200);
     const manual = (await res.json()).data.backup;
-    expect(manual.stats).toEqual({ characters: 0, settings: 0, chapters: 0 });
-    expect(manual.fileName).toMatch(/^\d{8}-\d{9}-手动-.+-人物0-设定0-章0\.zip$/);
-    expect(parseBackupFileName(manual.fileName)).not.toBeNull(); // 可被解析（格式未变）
+    expect(manual).not.toHaveProperty("stats");
+    expect(manual.fileName).toMatch(/^\d{8}-\d{9}-手动-.+\.zip$/);
+    expect(manual.fileName).not.toMatch(/-人物\d+-设定\d+-章\d+\.zip$/);
+    expect(parseBackupFileName(manual.fileName)?.stats).toBeUndefined();
     expect(existsSync(join(dir, BACKUPS_DIR_NAME, manual.fileName))).toBe(true);
 
- // 自动备份（同一管道）：类型段换「自动」，统计段同样全零
+ // 自动备份（同一管道）：类型段换「自动」，同样无统计段
     const auto = writeBackup(getCurrentProject()!, { kind: "auto" });
-    expect(auto.fileName).toMatch(/^\d{8}-\d{9}-自动-.+-人物0-设定0-章0\.zip$/);
-    expect(parseBackupFileName(auto.fileName)?.stats).toEqual({ characters: 0, settings: 0, chapters: 0 });
+    expect(auto).not.toHaveProperty("stats");
+    expect(auto.fileName).toMatch(/^\d{8}-\d{9}-自动-.+\.zip$/);
+    expect(auto.fileName).not.toMatch(/-人物\d+-设定\d+-章\d+\.zip$/);
     expect(readProjectFile(dir)?.kind).toBe("practice"); // 备份不改 project.json
   });
 
@@ -737,6 +739,27 @@ describe("renameBackup", () => {
  // 文件确实改名：旧名消失、新名存在
     expect(existsSync(join(dir, BACKUPS_DIR_NAME, a.fileName))).toBe(false);
     expect(existsSync(join(dir, BACKUPS_DIR_NAME, res.fileName))).toBe(true);
+  });
+
+  it("练习区：重命名收敛为无统计段形态（存量旧名的 -人物0-设定0-章0 被去掉）", async () => {
+    const dir = join(makeTmpDir(), "practice", "仿写练习");
+    initProjectDir(
+      dir,
+      { ...makeConfig("proj-rn-practice", "仿写练习"), kind: "practice" },
+      { id: "root", type: "root", schema_version: SCHEMA_VERSION, children: [] },
+    );
+    const project = await openProjectCtx(dir);
+    const backupsDir = join(dir, BACKUPS_DIR_NAME);
+    mkdirSync(backupsDir, { recursive: true });
+    const legacy = "20260813-101500000-手动-设备-旧名-人物0-设定0-章0.zip";
+    writeFileSync(join(backupsDir, legacy), "legacy");
+
+    const res = renameBackup(project, legacy, "新名");
+    expect(res.fileName).toBe("20260813-101500000-手动-设备-新名.zip");
+    expect(res).not.toHaveProperty("stats");
+    expect(parseBackupFileName(res.fileName)?.stats).toBeUndefined();
+    expect(existsSync(join(backupsDir, legacy))).toBe(false);
+    expect(existsSync(join(backupsDir, res.fileName))).toBe(true);
   });
 
   it("幂等：重命名为相同名称 → 不报错、文件不动、返回当前条目（重新 stat 的 size）", async () => {
