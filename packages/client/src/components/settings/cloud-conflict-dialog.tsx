@@ -10,8 +10,10 @@
 //   ——点击可**再次强推**（不是一次性动作）。
 // - 本机没有可推送的备份时该按钮禁用并给出「先立即备份」提示（服务端会 404 拒绝）。
 import { Button } from "antd";
+import { resolveWorkspaceKind } from "@whispering233/ai-editor-shared";
 import { useCloudStore } from "../../stores/cloud";
-import { BACKUP_KIND_LABELS, formatBackupMeta, formatBackupTime, formatBytes } from "../../lib/backup";
+import { useProjectStore } from "../../stores/project";
+import { BACKUP_KIND_LABELS, formatBackupStats, formatBackupTime, formatBytes } from "../../lib/backup";
 import {
   Dialog,
   DialogContent,
@@ -53,12 +55,13 @@ export function CloudConflictDialog() {
   const lastError = useCloudStore((s) => s.lastError);
   const closeConflict = useCloudStore((s) => s.closeConflict);
   const push = useCloudStore((s) => s.push);
+  const configKind = useProjectStore((s) => s.config?.kind);
+  const workspaceKind = resolveWorkspaceKind(configKind);
 
   if (!open) return null;
 
   const remote = status?.remote?.backups[0] ?? null;
-  const remoteMeta = remote !== null ? formatBackupMeta(remote) : "";
-  const localMeta = localLatest !== null ? formatBackupMeta(localLatest) : "";
+  const showStats = workspaceKind === "novel";
 
   return (
     <Dialog open onOpenChange={(v) => !v && busy === null && closeConflict()}>
@@ -82,8 +85,10 @@ export function CloudConflictDialog() {
                     { label: "类型", value: BACKUP_KIND_LABELS[remote.kind] },
                     ...(remote.name !== undefined ? [{ label: "标签", value: remote.name }] : []),
                     { label: "设备", value: remote.device },
-                    { label: "统计", value: remoteMeta },
-                    { label: "大小", value: formatBytes(remote.size) },
+                ...(showStats && remote.stats !== undefined
+                  ? [{ label: "统计", value: formatBackupStats(remote.stats) }]
+                  : []),
+                { label: "大小", value: formatBytes(remote.size) },
                   ]
             }
           />
@@ -97,8 +102,10 @@ export function CloudConflictDialog() {
                     { label: "类型", value: BACKUP_KIND_LABELS[localLatest.kind] },
                     ...(localLatest.name !== undefined ? [{ label: "标签", value: localLatest.name }] : []),
                     { label: "设备", value: localLatest.device },
-                    { label: "统计", value: localMeta },
-                    { label: "大小", value: formatBytes(localLatest.size) },
+                ...(showStats && localLatest.stats !== undefined
+                  ? [{ label: "统计", value: formatBackupStats(localLatest.stats) }]
+                  : []),
+                { label: "大小", value: formatBytes(localLatest.size) },
                   ]
             }
           />

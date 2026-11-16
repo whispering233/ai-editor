@@ -1,6 +1,6 @@
 // 备份展示纯函数与频率选项常量（B2.4）
 // 零副作用纯函数 + 常量，可单测；client 只消费 shared 常量/类型（BACKUP_FREQUENCIES、BackupKind），不引 zod 运行时
-import { BACKUP_FREQUENCIES, type BackupKind } from "@whispering233/ai-editor-shared";
+import { BACKUP_FREQUENCIES, type BackupKind, type WorkspaceKind } from "@whispering233/ai-editor-shared";
 
 /**
  * 备份时间展示（线框「08-13 10:15:30」；补秒——同分钟内多次备份
@@ -51,19 +51,25 @@ export const BACKUP_KIND_LABELS: Record<BackupKind, string> = {
   manual: "手动",
 };
 
+/** 统计段文案（小说；调用方已确认 stats 存在）——单一定义，元信息行与对比列共用 */
+export function formatBackupStats(stats: { characters: number; settings: number; chapters: number }): string {
+  return `人物${stats.characters} · 设定${stats.settings} · 章${stats.chapters}`;
+}
+
 /**
  * 备份行的元信息行（来源设备与内容规模）：小说 `苹果本 · 人物32 · 设定58 · 章120`；
  * 练习区只有 `苹果本`（没有人物/设定/章）。字段均来自 API（`device` / `stats?`）——
- * **UI 不自行解析文件名**；统计段缺失即只拼设备。
+ * **UI 不自行解析文件名**；练习区即使存量旧名带统计段也不展示（按工作区 kind 门控）。
  */
-export function formatBackupMeta(entry: {
-  device: string;
-  stats?: { characters: number; settings: number; chapters: number };
-}): string {
-  if (entry.stats === undefined) return entry.device;
-  return [entry.device, `人物${entry.stats.characters}`, `设定${entry.stats.settings}`, `章${entry.stats.chapters}`].join(
-    " · ",
-  );
+export function formatBackupMeta(
+  entry: {
+    device: string;
+    stats?: { characters: number; settings: number; chapters: number };
+  },
+  workspaceKind: WorkspaceKind,
+): string {
+  if (workspaceKind !== "novel" || entry.stats === undefined) return entry.device;
+  return `${entry.device} · ${formatBackupStats(entry.stats)}`;
 }
 
 /** 云端那份 / 本机那份的**新旧判定**（同步状态区用；按 `createdAt` 比，不看文件名时间戳） */
@@ -98,19 +104,22 @@ export const BACKUP_FRESHNESS_LABELS: Record<BackupFreshness, string> = {
  * 统计段仅小说工作区（练习区到设备为止）；同一工作区内缺项**不省略**（除可选标签）——
  * 用户要能把两行逐项对齐着看。
  */
-export function formatSyncRow(entry: {
-  createdAt: string;
-  kind: BackupKind;
-  name?: string;
-  device: string;
-  stats?: { characters: number; settings: number; chapters: number };
-  size: number;
-}): string {
+export function formatSyncRow(
+  entry: {
+    createdAt: string;
+    kind: BackupKind;
+    name?: string;
+    device: string;
+    stats?: { characters: number; settings: number; chapters: number };
+    size: number;
+  },
+  workspaceKind: WorkspaceKind,
+): string {
   const parts = [formatBackupTime(entry.createdAt), BACKUP_KIND_LABELS[entry.kind]];
   if (entry.name !== undefined && entry.name !== "") parts.push(entry.name);
   parts.push(entry.device);
-  if (entry.stats !== undefined) {
-    parts.push(`人物${entry.stats.characters}`, `设定${entry.stats.settings}`, `章${entry.stats.chapters}`);
+  if (workspaceKind === "novel" && entry.stats !== undefined) {
+    parts.push(formatBackupStats(entry.stats));
   }
   parts.push(formatBytes(entry.size));
   return parts.join(" · ");

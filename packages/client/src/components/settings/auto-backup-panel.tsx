@@ -10,8 +10,8 @@
 // - 历史备份列表：GET /project/backups → 行 = 时间（当年 MM-DD HH:mm:ss / 跨年 YY-MM-DD
 // HH:mm:ss，补秒）+ 类型标签（自动=中性徽标 / 手动=强调徽标）+ 自定义
 // 名称（如有）+ 大小（KB/MB 人类可读）+ [重命名] [加载]；行下补一行
-// **元信息**（`设备 · 人物N · 设定N · 章N`，恒有一行——唯一命名格式保证两项均在场，
-// 由 API 的 device/stats 送达——UI 不解析文件名）
+// **元信息**（`设备 · 人物N · 设定N · 章N`；小说恒有统计段，练习区只有设备——按工作区 kind 门控，
+// 由 API 的 device/stats? 送达——UI 不解析文件名）
 // - [重命名]（行内编辑，无 Dialog）：铅笔按钮 → 该行切编辑态（行内 input 预填当前
 // 名称 + 确认/取消按钮）；Enter/确认提交 POST /project/backup/rename（空输入 = 清除名称段）、
 // Esc/失焦取消、输入未变更不发请求（幂等保护）；400/404 行内错误提示并保持编辑态，成功
@@ -41,7 +41,7 @@ import {
   formatBackupTime,
   formatBytes,
 } from "../../lib/backup";
-import { MAX_BACKUP_NAME_LENGTH } from "@whispering233/ai-editor-shared";
+import { MAX_BACKUP_NAME_LENGTH, resolveWorkspaceKind, type WorkspaceKind } from "@whispering233/ai-editor-shared";
 import { useProjectStore } from "../../stores/project";
 import { useUiStore } from "../../stores/ui";
 import { useChatStore } from "../../stores/chat";
@@ -54,9 +54,9 @@ import { ConfirmDialog } from "../outline/dialogs";
  */
 let backupListSeq = 0;
 
-/** 加载确认框描述：时间 · 类型 · 标签 · 设备/规模 · 大小 + 后果声明 */
-function restoreDescription(entry: BackupEntry): string {
-  const meta = formatBackupMeta(entry);
+/** 加载确认框描述：时间 · 类型 · 标签 · 设备/规模 · 大小 + 后果声明（规模按工作区 kind 门控） */
+function restoreDescription(entry: BackupEntry, workspaceKind: WorkspaceKind): string {
+  const meta = formatBackupMeta(entry, workspaceKind);
   const parts = [
     formatBackupTime(entry.createdAt),
     BACKUP_KIND_LABELS[entry.kind],
@@ -76,6 +76,7 @@ export function AutoBackupPanel() {
   const updateConfig = useProjectStore((s) => s.updateConfig);
   const loadConfig = useProjectStore((s) => s.loadConfig);
   const loadOutline = useProjectStore((s) => s.loadOutline);
+  const workspaceKind = resolveWorkspaceKind(config?.kind);
 
   /** 频率保存中（选择即保存；保存中禁用下拉防连点） */
   const [frequencySaving, setFrequencySaving] = useState(false);
@@ -260,7 +261,7 @@ export function AutoBackupPanel() {
     <div>
       <Typography.Title level={5}>自动备份</Typography.Title>
       <p className="mt-1 mb-2 text-xs text-muted-foreground">
-        跟随书籍：备份与频率均为本项目独立；服务运行期间按频率自动备份，有变更才生成新备份；每项目保留最近
+        跟随当前工作区：备份与频率均为当前工作区独立；服务运行期间按频率自动备份，有变更才生成新备份；每个工作区保留最近
         20 份
       </p>
       <div className="flex flex-wrap items-center gap-2">
@@ -328,8 +329,8 @@ export function AutoBackupPanel() {
               <ul className="divide-y divide-border">
                 {backups.map((b) => {
                   const editing = renaming !== null && renaming.fileName === b.fileName;
-                  // 元信息行（设备 + 规模）：唯一命名格式恒有，直接渲染
-                  const meta = formatBackupMeta(b);
+                  // 元信息行（设备 + 规模）：小说带统计段、练习区只有设备
+                  const meta = formatBackupMeta(b, workspaceKind);
                   return (
                     <li key={b.fileName} className="px-2 py-1.5">
                       <div className="flex items-center gap-2">
@@ -445,7 +446,7 @@ export function AutoBackupPanel() {
       {restoreTarget !== null && (
         <ConfirmDialog
           title="加载备份"
-          description={restoreDescription(restoreTarget)}
+          description={restoreDescription(restoreTarget, workspaceKind)}
           confirmLabel="确认加载"
           danger
           onConfirm={handleRestore}

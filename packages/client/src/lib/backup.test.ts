@@ -79,17 +79,25 @@ describe("BACKUP_FREQUENCY_OPTIONS（修订：关闭 + 1/5/10/15/30/60，与 sha
   });
 });
 
-describe("formatBackupMeta（行元信息：设备 · 规模）", () => {
+describe("formatBackupMeta（行元信息：设备 · 规模；练习区只有设备）", () => {
   const stats = { characters: 32, settings: 58, chapters: 120 };
 
-  it("设备 + 三项统计 → 中间点分隔（唯一命名格式保证两项恒存在）", () => {
-    expect(formatBackupMeta({ device: "苹果本", stats })).toBe("苹果本 · 人物32 · 设定58 · 章120");
+  it("小说：设备 + 三项统计 → 中间点分隔", () => {
+    expect(formatBackupMeta({ device: "苹果本", stats }, "novel")).toBe("苹果本 · 人物32 · 设定58 · 章120");
   });
 
-  it("统计为 0 照常显示（不当作缺失）", () => {
-    expect(formatBackupMeta({ device: "d", stats: { characters: 0, settings: 0, chapters: 0 } })).toBe(
+  it("小说：统计为 0 照常显示（不当作缺失）", () => {
+    expect(formatBackupMeta({ device: "d", stats: { characters: 0, settings: 0, chapters: 0 } }, "novel")).toBe(
       "d · 人物0 · 设定0 · 章0",
     );
+  });
+
+  it("练习区：即使存量旧名带全零统计段，也只显示设备", () => {
+    expect(formatBackupMeta({ device: "d", stats: { characters: 0, settings: 0, chapters: 0 } }, "practice")).toBe("d");
+  });
+
+  it("小说但 stats 缺失（旧包/异常文件）→ 只显示设备，不拼空统计", () => {
+    expect(formatBackupMeta({ device: "d" }, "novel")).toBe("d");
   });
 });
 
@@ -110,7 +118,7 @@ describe("同步状态区：新旧判定与统一行文案（C 项）", () => {
       device: "主机电脑",
       stats: { characters: 2, settings: 36, chapters: 8 },
       size: 55296,
-    });
+    }, "novel");
     expect(row).toMatch(/^09-15 \d{2}:\d{2}:\d{2} · 自动 · 主机电脑 · 人物2 · 设定36 · 章8 · /);
     const withName = formatSyncRow({
       createdAt: "2026-09-15T02:02:20.573Z",
@@ -119,7 +127,22 @@ describe("同步状态区：新旧判定与统一行文案（C 项）", () => {
       device: "主机电脑",
       stats: { characters: 2, settings: 36, chapters: 8 },
       size: 1024,
-    });
+    }, "novel");
     expect(withName).toContain("· 手动 · 定稿 · 主机电脑 · 人物2 · 设定36 · 章8 · ");
+  });
+
+  it("formatSyncRow：练习区即使存量旧名带全零统计段，也到设备为止", () => {
+    const row = formatSyncRow(
+      {
+        createdAt: "2026-09-15T02:02:20.573Z",
+        kind: "manual",
+        device: "主机电脑",
+        stats: { characters: 0, settings: 0, chapters: 0 },
+        size: 1024,
+      },
+      "practice",
+    );
+    expect(row).toMatch(/^09-15 \d{2}:\d{2}:\d{2} · 手动 · 主机电脑 · 1 KB$/);
+    expect(row).not.toContain("人物");
   });
 });

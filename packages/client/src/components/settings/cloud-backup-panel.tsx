@@ -13,7 +13,7 @@
 import { useEffect, useState } from "react";
 import { Button, Input, Switch, Tag, Typography } from "antd";
 import { putCloudConfig, testCloudConnection } from "../../lib/api";
-import type { CloudSyncState } from "@whispering233/ai-editor-shared";
+import { resolveWorkspaceKind, type CloudSyncState } from "@whispering233/ai-editor-shared";
 import { cloudErrorText, cloudToastText, useCloudStore } from "../../stores/cloud";
 import {
   BACKUP_FRESHNESS_LABELS,
@@ -85,6 +85,8 @@ export function CloudBackupPanel() {
   const autoPush = status?.autoPush === true;
   /** 自动推送随备份频率触发（DESIGN.md）：频率为「关闭」时开关开着也不会推 → 开关下给一行提示 */
   const backupFrequencyOff = useProjectStore((s) => s.config?.backupFrequencyMinutes === null);
+  const configKind = useProjectStore((s) => s.config?.kind);
+  const workspaceKind = resolveWorkspaceKind(configKind);
   /** 云端那份 vs 本机那份的新旧（行尾徽标；任一侧缺失 → null 不显示） */
   const freshness = compareBackupTime(remoteHead, localLatest);
   /** 自动推送最近一次失败（`status.local.lastAutoPushError`；成功即消失，只显示一行不弹窗） */
@@ -268,7 +270,7 @@ export function CloudBackupPanel() {
                 ? configured
                   ? "（云端还没有备份）"
                   : "（未配置）"
-                : formatSyncRow(remoteHead)}
+                : formatSyncRow(remoteHead, workspaceKind)}
             </span>
             {freshness !== null && <Tag className="ml-auto shrink-0">{BACKUP_FRESHNESS_LABELS[freshness]}</Tag>}
           </span>
@@ -279,7 +281,7 @@ export function CloudBackupPanel() {
                 ? "（读取失败——见下方提示）"
                 : localLatest === null
                   ? "（无可用备份，先「立即备份」）"
-                  : formatSyncRow(localLatest)}
+                  : formatSyncRow(localLatest, workspaceKind)}
             </span>
           </span>
           <span className="flex flex-wrap items-baseline gap-x-1.5">
@@ -327,7 +329,7 @@ export function CloudBackupPanel() {
                   {index === 0 ? <Tag className="ml-1.5">云端最新</Tag> : null}
                 </span>
                 <span className="shrink-0 text-xs text-muted-foreground">
-                  {formatBackupMeta(entry)} · {formatBytes(entry.size)}
+                  {formatBackupMeta(entry, workspaceKind)} · {formatBytes(entry.size)}
                 </span>
                 <Button size="small" disabled={pulling} onClick={() => openPullConfirm(entry)}>
                   拉取
