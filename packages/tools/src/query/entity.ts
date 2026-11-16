@@ -5,7 +5,8 @@
 // - get_entity：db getEntity 已过滤软删——工具层直接复用；
 // type 一致性校验（id 前缀体系全局唯一，type 传错 = 参数错误，返回 null 让 LLM 自纠）
 // - search_entities：db listEntities 已扩展 filters（tags/status data 字段 JS 过滤，
-// S6.3 下沉）+ 软删过滤 + 摘要提取单一化（db toSummary）——工具层参数映射透传
+// S6.3 下沉）+ offset 分页 + 软删过滤 + 摘要提取单一化（db toSummary）——工具层参数映射透传；
+// 命中未取完时附 truncated / next_offset（续读契约见 docs/api/tool-calling.md）
 // - get_entity_summary：db getEntitySummaryStats（S6.3 下沉：总数 + 类型专属分布，
 // 稀疏字段知识归拢 db 单一位置）——工具层透传
 

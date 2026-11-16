@@ -100,7 +100,7 @@ const queryToolDefs: ToolDefinition[] = [
       " 条；total 为命中总数，未取完时返回 truncated=true 与 next_offset，用 offset 续读）。" +
       "可附 filters：status 精确匹配 data.status——" +
       "**仅伏笔（hook）生命周期有意义**（character 已无该字段）；" +
-      "tags 要求 data.tags 数组包含全部指定标签）。返回匹配实体列表（名称 + 类型 + 关键字段摘要）。",
+      "tags 要求 data.tags 数组包含全部指定标签。返回匹配实体列表（名称 + 类型 + 关键字段摘要）。",
     parameters: searchEntitiesArgsSchema,
     permission: TOOL_PERMISSION.AUTO,
     scope: "novel",
