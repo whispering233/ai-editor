@@ -293,6 +293,15 @@ describe("大纲页 · 桌面分栏壳", () => {
     expect(html).toContain("第1卷");
   });
 
+  it("rail 行保留结构编辑能力（拖拽 / 折叠箭头 / 行内新建子级 / 行尾删除）", () => {
+    // 分栏改造只搬外层：树的编辑能力必须随树一起进左列，不能退化成只读列表
+    const row = rowHtml(render(), "vol-1");
+    expect(row).toContain('draggable="true"');
+    expect(row).toContain('aria-label="折叠"');
+    expect(row).toContain('aria-label="在《第一卷》下新建章"');
+    expect(row).toContain('aria-label="移入回收站"');
+  });
+
   it("无 id（#/outline）：详情列页头「详情」+ 引导文案 + 页头最左的收起按钮", () => {
     const html = render();
     expect(html).toContain(">详情<");
