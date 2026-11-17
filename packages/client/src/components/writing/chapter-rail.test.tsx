@@ -64,13 +64,18 @@ function chapterTag(html: string, id: string): string {
 }
 
 describe("ChapterRail · 几何与行内容", () => {
-  it("宽度由 width prop 决定（仅传入时内联）+ 自带右边线 + header「卷章」；行区独立滚动", () => {
+  it("宽度由 width prop 决定（仅传入时内联）+ 自带右边线 + PanelHeader「卷章」；行区独立滚动", () => {
     const html = render({ width: 240 });
     expect(html).toContain("width:240px");
     // 桌面展开态分栏线归本栏（DESIGN.md §Layout「分栏边线单所有权」）；手柄不画线
     expect(html).toContain("border-r border-border");
+    // 子栏页头 = PanelHeader（标题行 40 + 元信息行 24 + 1px 分割线），不再自绘 40px 行 + border-b
     expect(html).toContain(">卷章<");
-    expect(html).toContain("h-10");
+    expect(html).toContain("truncate text-base font-semibold");
+    expect(html).toContain("flex h-10 min-w-0 items-center gap-2");
+    expect(html).toContain("flex h-6 min-w-0 items-center gap-2");
+    expect(html).toContain("h-px w-full shrink-0 bg-border");
+    expect(html).toContain("mb-0 px-3"); // 行区紧随分割线
     expect(html).toContain("overflow-y-auto");
     // 不传 width：不写内联宽（窄屏全宽走 className，同属性后者胜）
     expect(render()).not.toContain("width:240px");

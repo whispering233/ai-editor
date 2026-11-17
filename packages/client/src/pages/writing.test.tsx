@@ -131,7 +131,8 @@ describe("写作页 · 桌面（rail + 正文列）", () => {
   it("全高分栏外壳（抵消中栏 p-6）+ rail 240px + 右边界手柄与收起按钮 + 正文列吸收剩余宽度", () => {
     const html = render();
     expect(html).toContain("-m-6 flex h-[calc(100%+3rem)] min-h-0 overflow-hidden");
-    expect(html).toContain("flex min-h-0 min-w-0 flex-1 flex-col p-6");
+    // 桌面端正文列 pt-0：页头 `-mx-6` 穿透后分割线全幅（DESIGN.md §Layout「工作台子栏页头」）
+    expect(html).toContain("flex min-h-0 min-w-0 flex-1 flex-col p-6 pt-0");
     expect(html).toContain("width:240px");
     // 分栏线归 rail 自己的 border-r（手柄不再画线，DESIGN.md §Layout「分栏边线单所有权」）
     expect(html).toContain("border-r border-border");
@@ -154,9 +155,12 @@ describe("写作页 · 桌面（rail + 正文列）", () => {
     );
   });
 
-  it("无 id：page-title「写作」+「从左侧选择一章开始写作」（不落空态）", () => {
+  it("无 id：子栏页头「写作」（16px / 400+24+分割线）+「从左侧选择一章开始写作」（不落空态）", () => {
     const html = render();
     expect(html).toContain(">写作<");
+    expect(html).toContain("truncate text-base font-semibold");
+    expect(html).toContain("flex h-10 min-w-0 items-center gap-2");
+    expect(html).toContain("flex h-6 min-w-0 items-center gap-2");
     expect(html).toContain("从左侧选择一章开始写作");
     expect(html).not.toContain("还没有章节");
     expect(html).not.toContain("章节目录");
@@ -191,8 +195,11 @@ describe("写作页 · 桌面（rail + 正文列）", () => {
     expect(html).toContain('aria-current="page"');
     expect(html).toContain("1.2 千字"); // rail 字数取 metadata.textLength
     expect(html).toContain(">旧盟友</");
-    expect(html).toContain("上一章");
-    expect(html).toContain("下一章");
+    expect(html).toContain('aria-label="上一章"');
+    expect(html).toContain('aria-label="下一章"');
+    expect(html).toContain('aria-label="导入"');
+    expect(html).toContain('aria-label="导出"');
+    expect(html).not.toContain("anticon-down"); // 导出改为纯图标触发（去掉下拉箭头）
     expect(html).toContain("h-5"); // 正文加载骨架（SSR 不跑 effect，拿不到正文）
     expect(html).not.toContain("从左侧选择一章开始写作");
   });
@@ -261,6 +268,9 @@ describe("写作页 · 窄屏两级互斥（<1024px）", () => {
     expect(html).toContain("章节目录");
     expect(html).toContain('href="#/writing"');
     expect(html).toContain(">雪夜出走</");
+    // 窄屏保留列内边距（只有桌面端 pt-0）
+    expect(html).toContain("flex min-h-0 min-w-0 flex-1 flex-col p-6");
+    expect(html).not.toContain("pt-0");
   });
 });
 
@@ -304,7 +314,7 @@ describe("写作页 · 卷章导航栏宽度与收起（2b）", () => {
     expect(html).not.toContain('aria-label="调整卷章导航栏宽度"');
     expect(html).not.toContain('aria-label="收起卷章导航栏"');
     // 正文列照常渲染（宽度保留在存储里，展开恢复原宽）
-    expect(html).toContain("上一章");
+    expect(html).toContain('aria-label="上一章"');
   });
 
   it("收起且无章：提示从页头展开导航栏，不再指向已消失的左栏", () => {
@@ -352,8 +362,8 @@ describe("写作页 · 错误态", () => {
     expect(html).toContain('aria-label="收起卷章导航栏"');
     expect(html).toContain('href="#/writing"');
     expect(html).toContain("返回章节目录");
-    expect(html).not.toContain("上一章");
-    expect(html).not.toContain("下一章");
+    expect(html).not.toContain('aria-label="上一章"');
+    expect(html).not.toContain('aria-label="下一章"');
   });
 
   it("有 id 但大纲未就绪：正文只给骨架，不先挂编辑器（坏 chapterId 不先发 404）；页头 toggle 仍在", () => {
@@ -361,8 +371,8 @@ describe("写作页 · 错误态", () => {
     expect(html).toContain("animate-pulse");
     expect(html).toContain('aria-label="收起卷章导航栏"');
     expect(html).not.toContain("章节不存在或已删除");
-    expect(html).not.toContain("上一章");
-    expect(html).not.toContain("下一章");
+    expect(html).not.toContain('aria-label="上一章"');
+    expect(html).not.toContain('aria-label="下一章"');
   });
 
   it("大纲失败且有 id：正文只给错误条 + 重试，不挂编辑器", () => {
@@ -373,8 +383,8 @@ describe("写作页 · 错误态", () => {
     });
     expect(html).toContain("大纲加载失败");
     expect(html).toMatch(/重\s*试/);
-    expect(html).not.toContain("上一章");
-    expect(html).not.toContain("下一章");
+    expect(html).not.toContain('aria-label="上一章"');
+    expect(html).not.toContain('aria-label="下一章"');
   });
 
   it("大纲加载中：rail 骨架、正文列不出错误；首帧（error 为 null）同样不误报", () => {

@@ -15,7 +15,7 @@ import { ArrowLeftOutlined, LeftOutlined, RightOutlined } from "@ant-design/icon
 import { ChapterEditor } from "../components/manuscript/chapter-editor";
 import { ChapterRail } from "../components/writing/chapter-rail";
 import { EmptyState } from "../components/ui/empty-state";
-import { PageHeader } from "../components/ui/page-header";
+import { PanelHeader } from "../components/ui/panel-header";
 import { ResizeHandle } from "../components/ui/resize-handle";
 import { useMediaQuery } from "../hooks/use-media-query";
 import { useOutlineLoader } from "../hooks/use-outline-loader";
@@ -117,7 +117,7 @@ export default function Writing({ chapterId }: { chapterId?: string }) {
       />
     ) : null;
 
-  // 卷章导航栏收起 / 展开入口：正文列页头标题行最左（`PageHeader` `leading`；DESIGN.md `writing-page`
+  // 卷章导航栏收起 / 展开入口：正文列页头标题行最左（`PanelHeader` `leading`；DESIGN.md `writing-page`
   // 「宽度与收起」）。同一枚按钮进四种正文形态；窄屏（无子栏）与专注模式（页头不渲染）都不渲染。
   // 图标 = 当前点击动作（展开态收起 / 收起态展开）；状态由动态 `aria-label` / `title` / `aria-expanded` 表达。
   const railToggle =
@@ -167,7 +167,7 @@ export default function Writing({ chapterId }: { chapterId?: string }) {
       // GET /manuscript/:id（404 落 console），等大纲到达才发现章不存在。
       bodyContent = (
         <section className="flex min-h-0 flex-1 flex-col">
-          <PageHeader title="写作" leading={railToggle} />
+          <PanelHeader title="写作" leading={railToggle} className="mb-4 -mx-6 px-6" />
           <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">
             {outlineFailed ? (
               outlineFailureBanner
@@ -181,7 +181,7 @@ export default function Writing({ chapterId }: { chapterId?: string }) {
       // 显式坏 chapterId：不自动回退（最近导航失效由 writing-3 的解析阶段处理）
       bodyContent = (
         <section className="flex min-h-0 flex-1 flex-col">
-          <PageHeader title="写作" leading={railToggle} />
+          <PanelHeader title="写作" leading={railToggle} className="mb-4 -mx-6 px-6" />
           <div className={cn(errorBannerClass, "flex items-center gap-3")}>
             <span className="min-w-0 flex-1">章节不存在或已删除</span>
             <Button href="#/writing">返回章节目录</Button>
@@ -207,7 +207,7 @@ export default function Writing({ chapterId }: { chapterId?: string }) {
   } else if (isDesktop) {
     bodyContent = (
       <section className="flex min-h-0 flex-1 flex-col">
-        <PageHeader title="写作" leading={railToggle} />
+        <PanelHeader title="写作" leading={railToggle} className="mb-4 -mx-6 px-6" />
         <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">
           {outline === null ? (
             outlineFailed ? outlineFailureBanner : bodySkeleton
@@ -250,8 +250,10 @@ export default function Writing({ chapterId }: { chapterId?: string }) {
           onEnd={endResize}
         />
       )}
+      {/* 桌面端 `pt-0`：页头 `-mx-6` 穿透列内边距后分割线全幅（DESIGN.md §Layout「工作台子栏页头」）；
+          窄屏保留 p-6（返回条与内边距不变） */}
       {bodyContent !== null && (
-        <div className="flex min-h-0 min-w-0 flex-1 flex-col p-6">
+        <div className={cn("flex min-h-0 min-w-0 flex-1 flex-col p-6", isDesktop && "pt-0")}>
           {/* 窄屏「章节目录」返回条（32px，滚动区之外；专注模式不渲染） */}
           {!isDesktop && chapterId !== undefined && !focusMode && (
             <a

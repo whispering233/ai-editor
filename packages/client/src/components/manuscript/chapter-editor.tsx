@@ -1,5 +1,5 @@
 // 章正文编辑面板（无路由）：由写作页 `pages/Writing.tsx` 挂载。契约：docs/api/110-api-manuscript.md
-// （GET/PUT 端点）、docs/ui/DESIGN.md §Colors「块编辑器（--bn-*）」、§Layout「中栏页头结构 → 页头常驻」。
+// （GET/PUT 端点）、docs/ui/DESIGN.md §Colors「块编辑器（--bn-*）」、§Layout「中栏页头结构 → 页头常驻」「工作台子栏页头」。
 // 设计语义见 design/10-data-model.md §13。
 //
 // 面板只接 props（大纲树 / 章 id / 上一/下一章的目标路径前缀），不读路由参数——换章重挂由调用方负责
@@ -24,8 +24,13 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import type { NovelTxtLayout, OutlineTree } from "@whispering233/ai-editor-shared";
 import { Button, Dropdown } from "antd";
-import { DownOutlined, ExportOutlined, ImportOutlined } from "@ant-design/icons";
-import { PageHeader } from "@/components/ui/page-header";
+import {
+  ArrowLeftOutlined,
+  ArrowRightOutlined,
+  ExportOutlined,
+  ImportOutlined,
+} from "@ant-design/icons";
+import { PanelHeader } from "@/components/ui/panel-header";
 import {
   DocumentEditor,
   type DocumentEditorApi,
@@ -93,7 +98,7 @@ export interface ChapterEditorProps {
   basePath: "/writing";
   /** 保存成功（自动 / 手动 / 409 覆盖）后回调：写作页据此不可变补丁 store 的章统计（不重拉大纲） */
   onSaved?: (info: { charCount: number; updatedAt: string }) => void;
-  /** 页头标题行最左的前置元素（写作页卷章栏的收起 / 展开按钮），透传给 `PageHeader` 的 `leading` */
+  /** 页头标题行最左的前置元素（写作页卷章栏的收起 / 展开按钮），透传给 `PanelHeader` 的 `leading` */
   headerLeading?: ReactNode;
 }
 
@@ -395,15 +400,15 @@ export function ChapterEditor({ outline, chapterId, basePath, onSaved, headerLea
        （blocknote.css）据此吸收剩余高度 ⇒ 写作面仍铺满；工具条 `sticky` 贴的是内层容器顶（页头之下）。
        内层容器**不得**写 `items-start`/`self-start`（交叉轴截断会让 `flex:1` 失效，见卡 16.1）。 */
     <section className="flex h-full min-h-0 flex-col">
-      {/* 页头：章标题 + 字数/保存态（说明行）+ 上/下一章（阅读序相邻章，无则禁用）+ 导入/导出。
+      {/* 子栏页头：章标题 + 上/下一章 / 导入 / 导出（24px 图标按钮，窄列不折行）+ 元信息行（字数/保存态）。
           专注模式下整没（契约 DESIGN.md §Layout「专注模式」）——字号/保存态改由工具条右端承载；
           下面是**保存失败错误条**，不受专注模式影响（失败必须可见，不静默） */}
       {!focusMode && (
-        <PageHeader
+        <PanelHeader
           title={chapterTitle ?? "正文"}
-          truncateTitle
           leading={headerLeading}
-          action={
+          className="mb-4 -mx-6 px-6"
+          actions={
             <>
               {/* 导入入口：隐藏文件框（浏览器与桌面同一套；按钮触发，选完清空 value 以便重复选同一文件） */}
               <input
@@ -419,30 +424,39 @@ export function ChapterEditor({ outline, chapterId, basePath, onSaved, headerLea
                 }}
               />
               <Button
+                color="default"
+                variant="text"
+                size="small"
                 disabled={neighbors.prev === null}
-                title={neighbors.prev?.chapter.title}
+                icon={<ArrowLeftOutlined className="text-sm" />}
+                title={neighbors.prev?.chapter.title ?? "上一章"}
+                aria-label="上一章"
                 onClick={() =>
                   neighbors.prev !== null && navigate(`${basePath}/${neighbors.prev.chapter.id}`)
                 }
-              >
-                上一章
-              </Button>
+              />
               <Button
+                color="default"
+                variant="text"
+                size="small"
                 disabled={neighbors.next === null}
-                title={neighbors.next?.chapter.title}
+                icon={<ArrowRightOutlined className="text-sm" />}
+                title={neighbors.next?.chapter.title ?? "下一章"}
+                aria-label="下一章"
                 onClick={() =>
                   neighbors.next !== null && navigate(`${basePath}/${neighbors.next.chapter.id}`)
                 }
-              >
-                下一章
-              </Button>
+              />
               <Button
+                color="default"
+                variant="text"
+                size="small"
                 disabled={editorApi === null}
+                icon={<ImportOutlined className="text-sm" />}
+                title="导入"
+                aria-label="导入"
                 onClick={() => fileInputRef.current?.click()}
-              >
-                <ImportOutlined className="text-sm" />
-                导入
-              </Button>
+              />
               <Dropdown
                 disabled={editorApi === null}
                 trigger={["click"]}
@@ -461,15 +475,19 @@ export function ChapterEditor({ outline, chapterId, basePath, onSaved, headerLea
                   },
                 }}
               >
-                <Button disabled={editorApi === null}>
-                  <ExportOutlined className="text-sm" />
-                  导出
-                  <DownOutlined className="text-xs" />
-                </Button>
+                <Button
+                  color="default"
+                  variant="text"
+                  size="small"
+                  disabled={editorApi === null}
+                  icon={<ExportOutlined className="text-sm" />}
+                  title="导出"
+                  aria-label="导出"
+                />
               </Dropdown>
             </>
           }
-          description={statusText}
+          meta={statusText}
         />
       )}
 
