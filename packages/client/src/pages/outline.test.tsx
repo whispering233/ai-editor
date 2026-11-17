@@ -37,18 +37,20 @@ vi.mock("../hooks/use-outline-loader", () => ({
   },
 }));
 
+/** 节点更新时间（真实 ISO：元信息行只显示 `MM-DD`，完整时间进 `title`，两者都可断言） */
+const UPDATED_AT = "2026-01-05T08:05:00";
 const chapter = (id: string, title: string, children?: OutlineScene[]): OutlineChapter => ({
   id,
   type: "chapter",
   title,
-  updatedAt: "t",
+  updatedAt: UPDATED_AT,
   children,
 });
 const volume = (id: string, title: string, children: OutlineChapter[]): OutlineVolume => ({
   id,
   type: "volume",
   title,
-  updatedAt: "t",
+  updatedAt: UPDATED_AT,
   children,
 });
 
@@ -59,7 +61,7 @@ const OUTLINE: OutlineTree = {
   schemaVersion: 1,
   children: [
     volume("vol-1", "第一卷", [
-      chapter("ch-1", "雪夜出走", [{ id: "sc-1", type: "scene", title: "城外", updatedAt: "t" }]),
+      chapter("ch-1", "雪夜出走", [{ id: "sc-1", type: "scene", title: "城外", updatedAt: UPDATED_AT }]),
       chapter("ch-2", "旧盟友"),
     ]),
     volume("vol-2", "第二卷", [chapter("ch-3", "入城")]),
@@ -271,7 +273,8 @@ describe("大纲页：rail header 图标组", () => {
     expect(html).not.toContain("章视图");
     expect(html).toContain('aria-label="全部折叠"');
     expect(html).toContain('aria-label="新建卷"');
-    // header 是自定义 40px 行（不是 PageHeader），不放收起钮（收起入口在详情列页头）
+    // header = PanelHeader（标题行 40 + 预留元信息行 24 + 分割线），不放收起钮（收起入口在详情列页头）
+    expect(html).toContain("flex h-10 min-w-0 items-center gap-2");
     expect(html).toContain('aria-label="大纲树"');
     expect(html).not.toContain('aria-label="收起大纲树"></button>');
   });
@@ -282,6 +285,7 @@ describe("大纲页 · 桌面分栏壳", () => {
     const html = render();
     expect(html).toContain("-m-6 flex h-[calc(100%+3rem)] min-h-0 overflow-hidden");
     expect(html).toContain("flex min-h-0 min-w-0 flex-1 flex-col p-6");
+    expect(html).toContain("pt-0"); // 桌面端详情列顶内边距归零（页头 `-mx-6` 穿透、分割线全幅）
     // 默认宽度 = max(320px, 中栏 1/3)：未拖拽过时由 CSS 算，不写死像素
     expect(html).toContain("width:max(320px, calc(100% / 3))");
     // 分栏线归 rail 自己的 border-r（手柄不画线，DESIGN.md §Layout「分栏边线单所有权」）
@@ -318,7 +322,7 @@ describe("大纲页 · 桌面分栏壳", () => {
     expect(html).toContain('aria-label="大纲树"');
     expect(html).toContain(">雪夜出走<");
     expect(html).toContain('href="#/writing/ch-1"');
-    expect(html).toContain("ant-btn-primary"); // antd 在两字中文按钮里插空格（`保 存`），只验主按钮存在
+    expect(html).toContain("ant-btn-primary"); // 保存 = 唯一主操作（图标按钮）
     expect(html).not.toContain("从左侧选择一个卷、章或场查看详情");
     // 详情页头也带收起按钮（四种详情形态同款）
     expect(html).toContain('aria-label="收起大纲树"');
@@ -485,6 +489,14 @@ describe("大纲节点详情页：写正文入口指向写作页", () => {
     expect(html).toContain("写正文");
   });
 
+  it("元信息行单行：类型徽标 + `更新于 MM-DD`（完整时间进 title）+ 字数 / 状态徽标", () => {
+    const html = renderDetailFor("ch-1");
+    expect(html).toContain("overflow-hidden text-xs text-muted-foreground");
+    expect(html).toContain("更新于 01-05<");
+    expect(html).toContain('title="2026-01-05 08:05"');
+    expect(html).toContain("章"); // 类型徽标
+  });
+
   it("卷节点：不渲染「写正文」（正文只挂章，不留必定 400 的入口）", () => {
     expect(renderDetailFor("vol-1")).not.toContain("写正文");
   });
@@ -496,8 +508,10 @@ describe("大纲节点详情页：写正文入口指向写作页", () => {
     expect(html).toContain('aria-label="标记为推演节点"');
     expect(html).toContain("anticon-aim");
     expect(html).toContain("anticon-branches");
-    // 保存保留文字
-    expect(html).toContain("保 存");
+    // 保存 = 主操作图标按钮（`title` / `aria-label` 给文字语义，不再渲染文字）
+    expect(html).toContain("anticon-save");
+    expect(html).toContain('aria-label="保存"');
+    expect(html).not.toContain("保 存");
   });
 });
 

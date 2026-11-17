@@ -49,7 +49,7 @@ import { InlineInput } from "../components/outline/inline-input";
 import { NodeHookMarkBadge } from "../components/outline/node-hook-badge";
 import { TypeChip } from "@/components/ui/tag-chip";
 import { DropIndicator } from "@/components/ui/drop-indicator";
-import { PageHeader } from "@/components/ui/page-header";
+import { PanelHeader } from "@/components/ui/panel-header";
 import { ResizeHandle } from "@/components/ui/resize-handle";
 import { useMediaQuery } from "../hooks/use-media-query";
 import {
@@ -221,7 +221,7 @@ export default function Outline({ nodeId }: { nodeId?: string }) {
   const selectedNode =
     outline !== null && nodeId !== undefined ? findNode(outline.children, nodeId) : null;
 
-  // 收起 / 展开入口：详情列页头标题行最左（`PageHeader` `leading`，同写作页）；窄屏无相邻栏不渲染
+  // 收起 / 展开入口：详情列页头标题行最左（`PanelHeader` `leading`，同写作页）；窄屏无相邻栏不渲染
   const railToggle = isDesktop ? (
     <Button
       color="default"
@@ -255,7 +255,12 @@ export default function Outline({ nodeId }: { nodeId?: string }) {
   if (noProject) {
     detail = (
       <section className="flex min-h-0 flex-1 flex-col">
-        <PageHeader title="详情" leading={railToggle} />
+        <PanelHeader
+          title="详情"
+          leading={railToggle}
+          className="-mx-6"
+          insetClassName="px-6"
+        />
         <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">
           <EmptyState
             padding="sm"
@@ -273,7 +278,12 @@ export default function Outline({ nodeId }: { nodeId?: string }) {
   } else if (outline === null) {
     detail = (
       <section className="flex min-h-0 flex-1 flex-col">
-        <PageHeader title="详情" leading={railToggle} />
+        <PanelHeader
+          title="详情"
+          leading={railToggle}
+          className="-mx-6"
+          insetClassName="px-6"
+        />
         <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">
           {outlineError === null ? (
             detailSkeleton
@@ -291,7 +301,12 @@ export default function Outline({ nodeId }: { nodeId?: string }) {
   } else if (nodeId === undefined) {
     detail = (
       <section className="flex min-h-0 flex-1 flex-col">
-        <PageHeader title="详情" leading={railToggle} />
+        <PanelHeader
+          title="详情"
+          leading={railToggle}
+          className="-mx-6"
+          insetClassName="px-6"
+        />
         <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">
           {outline.children.length === 0 ? (
             <EmptyState padding="sm">还没有大纲，先在左侧新建第一卷</EmptyState>
@@ -310,7 +325,12 @@ export default function Outline({ nodeId }: { nodeId?: string }) {
     // 坏 id / 已删节点：页头 + 引导（不留一个空白的详情列）
     detail = (
       <section className="flex min-h-0 flex-1 flex-col">
-        <PageHeader title="详情" leading={railToggle} />
+        <PanelHeader
+          title="详情"
+          leading={railToggle}
+          className="-mx-6"
+          insetClassName="px-6"
+        />
         <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">
           <EmptyState
             padding="sm"
@@ -387,8 +407,10 @@ export default function Outline({ nodeId }: { nodeId?: string }) {
           onEnd={endResize}
         />
       )}
+      {/* 详情列：桌面端 `pt-0`（页头 `-mx-6` 穿透内边距、分割线全幅），窄屏保留 p-6
+          （DESIGN.md §Layout「工作台子栏页头」） */}
       {(isDesktop || nodeId !== undefined) && (
-        <div className="flex min-h-0 min-w-0 flex-1 flex-col p-6">
+        <div className={cn("flex min-h-0 min-w-0 flex-1 flex-col p-6", isDesktop && "pt-0")}>
           {/* 窄屏「大纲树」返回条（32px，滚动区之外） */}
           {!isDesktop && nodeId !== undefined && (
             <a
@@ -1298,55 +1320,57 @@ function OutlineRail({
       //（DESIGN.md §Layout「分栏边线单所有权」——手柄不画线，只有面板边线能覆盖全部场景）
       className={cn("flex min-h-0 shrink-0 flex-col border-r border-border", className)}
     >
-      {/* rail header（40px，自定义非 PageHeader）：标题 + 原页头右端图标组；**不放收起钮**
-          （收起 / 展开入口在详情列页头 leading，同写作页）。图标按钮均带 title / aria-label。 */}
-      <div className="flex h-10 shrink-0 items-center gap-2 border-b border-border px-3">
-        {/* 字号档 `section-title`（16px / 600）：header 是自定义 40px 行，不用 antd 标题控件
-            （避免 Typography 自带 margin / 文字色，40px 行高下要的是纯字号 + 截断） */}
-        <span className="min-w-0 flex-1 truncate text-base font-semibold">大纲</span>
-        <div className="flex shrink-0 items-center gap-1">
-          {/* 一键清空推演标记（DESIGN.md「`推演节点` 徽标」）：仅**有可见标记**时渲染
-              （无标记时清空无意义，也不给一个点了没反应的按钮）；无二次确认 */}
-          {deduction.marks.length > 0 && (
+      {/* rail header（工作台子栏页头，`px-3`；标题行 40 + 预留元信息行 24 + 1px 分割线）：标题 +
+          原页头右端图标组；**不放 rail 自身的收起钮**（收起 / 展开入口在详情列页头 leading，同写作页）。
+          图标按钮均带 title / aria-label；行区紧随分割线，所以 `mb-0` 抹掉默认下边距。 */}
+      <PanelHeader
+        title="大纲"
+        className="mb-0"
+        actions={
+          <>
+            {/* 一键清空推演标记（DESIGN.md「`推演节点` 徽标」）：仅**有可见标记**时渲染
+                （无标记时清空无意义，也不给一个点了没反应的按钮）；无二次确认 */}
+            {deduction.marks.length > 0 && (
+              <Button
+                color="default"
+                variant="text"
+                size="small"
+                title="清除推演标记"
+                aria-label="清除推演标记"
+                onClick={() => void clearDeductionMarks()}
+                icon={<ClearOutlined className="text-sm" />}
+              />
+            )}
             <Button
               color="default"
               variant="text"
               size="small"
-              title="清除推演标记"
-              aria-label="清除推演标记"
-              onClick={() => void clearDeductionMarks()}
-              icon={<ClearOutlined className="text-sm" />}
+              title={collapsed.size > 0 ? "全部展开" : "全部折叠"}
+              aria-label={collapsed.size > 0 ? "全部展开" : "全部折叠"}
+              disabled={!outline || outline.children.length === 0}
+              onClick={toggleAllCollapse}
+              icon={
+                collapsed.size > 0 ? (
+                  <MenuUnfoldOutlined className="text-sm" />
+                ) : (
+                  <MenuFoldOutlined className="text-sm" />
+                )
+              }
             />
-          )}
-          <Button
-            color="default"
-            variant="text"
-            size="small"
-            title={collapsed.size > 0 ? "全部展开" : "全部折叠"}
-            aria-label={collapsed.size > 0 ? "全部展开" : "全部折叠"}
-            disabled={!outline || outline.children.length === 0}
-            onClick={toggleAllCollapse}
-            icon={
-              collapsed.size > 0 ? (
-                <MenuUnfoldOutlined className="text-sm" />
-              ) : (
-                <MenuFoldOutlined className="text-sm" />
-              )
-            }
-          />
-          <Button
-            color="default"
-            variant="text"
-            size="small"
-            title="新建卷"
-            aria-label="新建卷"
-            // 无项目 / 树未就绪时不给入口（否则开一个必定失败的输入行）；空树已加载仍可建第一卷
-            disabled={noProject || outline === null}
-            onClick={() => startCreate(ROOT_NODE_ID, "volume")}
-            icon={<PlusOutlined className="text-sm" />}
-          />
-        </div>
-      </div>
+            <Button
+              color="default"
+              variant="text"
+              size="small"
+              title="新建卷"
+              aria-label="新建卷"
+              // 无项目 / 树未就绪时不给入口（否则开一个必定失败的输入行）；空树已加载仍可建第一卷
+              disabled={noProject || outline === null}
+              onClick={() => startCreate(ROOT_NODE_ID, "volume")}
+              icon={<PlusOutlined className="text-sm" />}
+            />
+          </>
+        }
+      />
 
       {/* 行区：自身纵向滚动（p-2 = 8px）；错误横幅挂在这里，不撑高 rail */}
       {/* 空白区 = 这个滚动容器（铺满 rail），不是内容高度的内层包裹 ⇒ 清选中挂这里 */}

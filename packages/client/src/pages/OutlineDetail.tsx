@@ -21,10 +21,16 @@ import { useEffect, useMemo, useState } from "react";
 import type { ReactNode } from "react";
 import {
   buildDeductionMarks,
+  formatMonthDay,
   formatTimestamp,
   type OutlineNode,
 } from "@whispering233/ai-editor-shared";
-import { AimOutlined, BranchesOutlined, EditOutlined } from "@ant-design/icons";
+import {
+  AimOutlined,
+  BranchesOutlined,
+  EditOutlined,
+  SaveOutlined,
+} from "@ant-design/icons";
 import { CreateRelationDialog } from "../components/entity/create-relation-dialog";
 import { RelationsView } from "../components/entity/relations-view";
 import { NodeDeltaList } from "../components/delta/node-delta-list";
@@ -32,7 +38,7 @@ import { DeltaCreateForm } from "../components/delta/delta-create-form";
 import { TYPE_LABEL } from "../components/outline/dialogs";
 import { Button, Input, Select } from "antd";
 import { TypeChip } from "@/components/ui/tag-chip";
-import { PageHeader } from "@/components/ui/page-header";
+import { PanelHeader } from "@/components/ui/panel-header";
 import { SectionCard } from "@/components/ui/section-card";
 import { ApiError, updateOutlineNode, type UpdateOutlineBody } from "../lib/api";
 import { diffData } from "../lib/entity-detail";
@@ -278,14 +284,17 @@ export default function OutlineDetail({
 
   return (
     <section className="flex min-h-0 flex-1 flex-col">
-      {/* 页头（统一壳）：标题 + 操作区（写正文 / 设为阅读进度 / 推演标记 / 保存）+ 元信息行 + 分割线。
-          窄屏 390 下四个动作排不进一行：节点动作压成 icon-button（`title` + `aria-label` 保留文字语义），
-          保存保留文字——`PageHeader` 的换行不足以让四枚文字按钮不被 overflow-hidden 裁切。 */}
-      <PageHeader
+      {/* 页头（工作台子栏页头，见 DESIGN.md §Layout「工作台子栏页头」）：标题 + 操作区
+          （写正文 / 设为阅读进度 / 推演标记 / 保存）+ 单行元信息 + 全幅分割线（`-mx-6` 穿透列内边距）。
+          窄列不折行：节点动作压成 24px icon-button（`title` + `aria-label` 保留文字语义），
+          保存是唯一主操作 = `type="primary"` 图标按钮。元信息行也不折行：文字与徽标 `shrink-0`，
+          日期只显示 `MM-DD`（完整时间进 `title`），超宽时尾部被裁切。 */}
+      <PanelHeader
         title={node.title}
         leading={leading}
-        truncateTitle
-        action={
+        className="-mx-6"
+        insetClassName="px-6"
+        actions={
           <>
             {/* 写正文：仅章节点（正文只挂章，卷/场景 → 端点 400，不留必定失败的入口）；
                 入口指向写作页 #/writing/:id，`Button href` 渲染成 `<a>` ⇒ 保住导航链接语义；
@@ -348,19 +357,28 @@ export default function OutlineDetail({
                 onClick={() => void handleToggleDeduction()}
               />
             )}
-            <Button type="primary" onClick={() => void handleSave()} disabled={saving}>
-              {saving ? "保存中…" : "保存"}
-            </Button>
+            <Button
+              type="primary"
+              size="small"
+              icon={<SaveOutlined />}
+              loading={saving}
+              title="保存"
+              aria-label="保存"
+              onClick={() => void handleSave()}
+            />
           </>
         }
-        description={
-          /* 元信息行：类型徽标 + 更新时间 + 推演标记（排在「阅读进度」左侧，同大纲行）+ 阅读进度 */
-          <div className="flex items-center gap-2 text-xs text-muted-foreground">
-            <TypeChip tone={node.type === "volume" ? "default" : "soft"}>
+        meta={
+          <div className="flex min-w-0 flex-1 items-center gap-2 overflow-hidden text-xs text-muted-foreground">
+            <TypeChip className="shrink-0" tone={node.type === "volume" ? "default" : "soft"}>
               {TYPE_LABEL[node.type]}
             </TypeChip>
-            <span>更新于 {formatTimestamp(node.updatedAt)}</span>
-            {textLengthLabel !== null && <span className="tabular-nums">{textLengthLabel}</span>}
+            <span className="shrink-0" title={formatTimestamp(node.updatedAt)}>
+              更新于 {formatMonthDay(node.updatedAt)}
+            </span>
+            {textLengthLabel !== null && (
+              <span className="shrink-0 tabular-nums">{textLengthLabel}</span>
+            )}
             {deductionMark !== undefined && (
               <TypeChip
                 className="shrink-0"
