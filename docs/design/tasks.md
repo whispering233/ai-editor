@@ -4,24 +4,12 @@
 
 ## 当前任务卡
 
-### U2 大纲页：卷章栏头 + 详情页头统一，元信息单行
-
-状态：待办
-
-- 契约：`docs/ui/DESIGN.md` `outline-page`「工作台 rail 头」「详情页头」两条。
-- `packages/shared/src/utils/format.ts` 增 `formatMonthDay(iso?: string | null): string`（`MM-DD`，非法值 `--`，与 `formatTimestamp` 同源），按现有方式导出；补对应单测。改完 shared 先 `pnpm -r build`。
-- `packages/client/src/pages/Outline.tsx`：rail 头换 `PanelHeader`（`className="mb-0"`，默认 12px 内距包装、行区紧随分割线；右侧保留现有 `[清除推演][全部折叠/展开][+新建卷]`、`meta` 留空）；详情列桌面端 `p-6` → `pt-0`；空态 / 坏 id / 加载态 / 主详情的页头全部换 `PanelHeader`（`className="-mx-6" insetClassName="px-6"`，标题 16px）。
-- `packages/client/src/pages/OutlineDetail.tsx`：页头换 `PanelHeader`；写正文 / 阅读进度 / 推演保持 24px 图标；保存改 `type="primary" size="small" icon={<SaveOutlined />}`（`loading` 保留、`aria-label="保存"`）；元信息行改单行：类型徽标 + `更新于 {formatMonthDay(updatedAt)}`（`title` 放完整 `formatTimestamp`）+ 字数 + 推演/阅读进度徽标，去掉 `flex-wrap`，文字与徽标 `shrink-0`，超宽尾部截断。
-- 非目标：不加右侧详情收起（U5）、不动设定 / 写作页、不改 rail 宽度持久化。
-- 测试：`outline.test.tsx` 修正元信息与保存按钮断言（全量时间不再可见，改断 `title`）。
-- 完成判据（硬）：`pnpm -r build`（shared 改动后）、`pnpm --filter @whispering233/ai-editor-client test`、`pnpm typecheck`、`pnpm lint` 全绿；`git log --oneline -1` 为本卡 commit；`git status --short` 为空；汇报附 commit hash 与命令输出末尾。
-
 ### U3 设定页：rail 按钮右移 + 详情紧凑页头 + 图标操作
 
 状态：待办
 
 - 契约：`docs/ui/DESIGN.md` `setting-page`「工作台 rail 头」「详情页头」两条与「panel-header 操作口径」。
-- `packages/client/src/components/entity/setting-rail.tsx`：标题条换 `PanelHeader`（`px-3`）；右侧组顺序改为 `[全部折叠/展开][+新建][收起/展开右侧详情]`（详情钮最右端），行为不变。
+- `packages/client/src/components/entity/setting-rail.tsx`：标题条换 `PanelHeader`（`className="mb-0"`，默认 12px 内距；常驻控件行紧随分割线）；右侧组顺序改为 `[全部折叠/展开][+新建][收起/展开右侧详情]`（详情钮最右端；图标 = `RightOutlined` 收起 / `LeftOutlined` 展开），行为不变。
 - `packages/client/src/pages/SettingWorkbench.tsx`：详情列桌面端 `p-6` → `pt-0`；空态 `PageHeader` → `PanelHeader`（标题「详情」、`className="-mx-6" insetClassName="px-6"`）；向 `EntityDetail` 传 `compact`。
 - `packages/client/src/pages/EntityDetail.tsx`：新增 `compact?: boolean`；`compact` 时页头用 `PanelHeader`（`className="-mx-6" insetClassName="px-6"`，标题 16px），操作 = 保存（`type="primary" size="small"` 图标、`loading`、`aria-label="保存"`）+ 移入回收站（`DeleteOutlined`、`color="default" variant="text" size="small"`、`aria-label="移入回收站"`）；元信息单行 `创建于 {formatMonthDay} · 更新于 {formatMonthDay}`（`title` 放完整时间）+「变更记录 N 条」按钮 `shrink-0`。非 `compact`（地点/伏笔/时间轴）保持 `PageHeader` 原样。
 - 非目标：不加设定页右侧详情收起（已有，仅调按钮位置）、不动写作 / 大纲。
