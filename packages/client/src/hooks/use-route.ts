@@ -1,6 +1,6 @@
 // 自制 hash 路由（决策：轻量 hash-based useHashRoute，不引入 React Router）
 // 解析 location.hash（形如 "#/outline"、"#/characters/char-abc"）为结构化路由。
-// 路由表见 （10 路由，一级化）：#/、#/overview、#/outline、#/outline/:nodeId、
+// 路由表见 （11 路由，一级化）：#/、#/overview、#/outline、#/outline/:nodeId、#/canvas、
 // #/characters[/:id]、#/setting[/:id]、#/locations[/:id]、#/relations、#/hooks[/:id]、
 // #/timeline、#/timeline/:id、#/timepoints/:id、#/references[/:id]、
 // #/writing[/:chapterId]（写作页；旧章正文路由 #/manuscript/:chapterId 保留为已知段，由 main.tsx 的
@@ -8,7 +8,7 @@
 // #/trash、#/preferences、
 // 练习工作区五页：#/author、#/works、#/style、#/practice[/:sampleId]、#/free[/:pieceId]
 // （工作区类型路由守卫见 lib/workspace-route-guard.ts——它由 main.tsx 在渲染前判定）
-// （#/chat、#/canvas 已移除；#/entities/* 与 #/settings 仅作旧址重定向；未知 hash 回退 #/ 兜底）
+// （#/chat、#/entities/* 与 #/settings 仅作旧址重定向；未知 hash 回退 #/ 兜底）
 import { useEffect, useState } from "react";
 
 /** 路由结构：path 为归一化路径（如 "/entities/character"），segments 为分段数组 */
@@ -24,10 +24,12 @@ export interface Route {
  * practice = 练习工作区段（`#/practice` 列表 + `#/practice/:sampleId` 练习页）；
  * author/works/style/free = 练习工作区其余四页（`60-practice.md` §9）；
  * entities/settings 仍属已知段——仅作旧址重定向（main.tsx 处理），避免老书签被误判回退
- * writing = 写作页一级段（`#/writing` 无选中章 + `#/writing/:chapterId` 章正文）。 */
+ * writing = 写作页一级段（`#/writing` 无选中章 + `#/writing/:chapterId` 章正文）；
+ * canvas = 大纲画布（`#/canvas`，无深链、选中态不进 URL）。 */
 export const KNOWN_ROUTE_SEGMENTS = [
   "writing",
   "outline",
+  "canvas",
   "overview",
   "entities",
   "characters",

@@ -1,0 +1,57 @@
+/* 大纲画布（@xyflow/react）的**唯一改色入口**（契约：docs/ui/DESIGN.md `outline-canvas`「样式例外」；
+   与 components/blocknote/blocknote.css 同构）。调用点不得写 --xy-* 覆盖、不得内联色值
+   （守卫 design-discipline.test.ts 的 hardcoded-color 扫色值 ⇒ 颜色只能出现在这里）。
+
+   只引 `@xyflow/react/dist/base.css`（结构样式，无颜色）⇒ 可见部分全部靠这张表；
+   映射目标 = index.css 语义变量（--background / --card / --border / --muted-foreground）与
+   antd token（--ant-color-*）。深浅两态由 html.dark 翻转这些变量跟随，**不写两份色值**。
+   选择器：库的深色默认值挂在 `.react-flow.dark`（只有 colorMode="dark"/"system" 时才出现），
+   并列进同一张表压住它（本页用默认 colorMode，`.react-flow` 一支即生效）。
+
+   变量清单（从 node_modules 的 dist/base.css 核出，只映射本页真实可见的部分）：
+     --xy-background-color-default / --xy-background-pattern-dots-color-default
+     --xy-minimap-background-color-default / -mask-background-color-default /
+     -mask-stroke-color-default / -node-background-color-default / -node-stroke-color-default
+     --xy-attribution-background-color-default
+   连线 / handle / 选择框（--xy-edge-* / --xy-handle-* / --xy-selection-*）本页不渲染，
+   留给连线卡（plot_edge）时再映射，不预先占位。 */
+.react-flow,
+.react-flow.dark {
+  --xy-background-color-default: var(--background);
+  --xy-background-pattern-dots-color-default: var(--border);
+  --xy-minimap-background-color-default: var(--card);
+  --xy-minimap-mask-background-color-default: color-mix(in oklab, var(--background) 55%, transparent);
+  --xy-minimap-mask-stroke-color-default: var(--border);
+  --xy-minimap-node-background-color-default: var(--muted-foreground);
+  --xy-minimap-node-stroke-color-default: var(--card);
+  --xy-attribution-background-color-default: transparent;
+}
+
+/* 右下角的库署名（base.css 把链接色硬编码成灰、背景留变量）：只补字色，位置与文案不动 */
+.react-flow__attribution a {
+  color: var(--muted-foreground);
+}
+
+/* Controls：base.css 给了面板定位与 26px 按钮尺寸，**配色没有变量**（在未引的 style.css 里）
+   ⇒ 在本文件自补 chrome；圆角 / 描边 / 底与卡片同一套语义变量。 */
+.react-flow__controls {
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--card);
+  box-shadow: none;
+}
+
+.react-flow__controls-button {
+  border-bottom: 1px solid var(--border);
+  background: var(--card);
+  color: var(--foreground);
+}
+
+.react-flow__controls-button:last-child {
+  border-bottom: none;
+}
+
+.react-flow__controls-button:hover {
+  background: var(--accent);
+}

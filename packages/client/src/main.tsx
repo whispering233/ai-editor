@@ -12,6 +12,7 @@ import { AntdProvider } from "./components/AntdProvider";
 import { ErrorBoundary } from "./components/feedback/ErrorBoundary";
 import Dashboard from "./pages/Dashboard";
 import Outline from "./pages/Outline";
+import OutlineCanvas from "./pages/OutlineCanvas";
 import EntityList from "./pages/EntityList";
 import EntityDetail from "./pages/EntityDetail";
 import CharacterWorkbench from "./pages/CharacterWorkbench";
@@ -80,6 +81,9 @@ function renderPage(route: Route): ReactNode {
       ) : (
         <RedirectTo to="/outline" />
       );
+    case "canvas":
+      // 大纲画布：只读呈现 + 摆位（无深链，多余段也落到画布）
+      return <OutlineCanvas />;
     case "entities": {
       // 实体家族一级化——旧 #/entities/:type[/:id] 全量重定向到新段
       // （泛型列表入口已移除的 hook/event/timepoint/reference：丢/带 id 落宿主详情段）

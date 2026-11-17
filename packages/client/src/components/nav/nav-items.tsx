@@ -10,6 +10,7 @@ import {
   BarChartOutlined,
   BulbOutlined,
   DeleteOutlined,
+  DeploymentUnitOutlined,
   EditOutlined,
   EnvironmentOutlined,
   FieldTimeOutlined,
@@ -53,6 +54,8 @@ export const NAV_RAIL_BY_KIND: Record<WorkspaceKind, NavRailSpec> = {
       // 「写作」排在「大纲」之前（写作页 = 一级页，见 DESIGN.md `writing-page`）
       { key: "/writing", icon: <EditOutlined />, label: "写作" },
       { key: "/outline", icon: <ApartmentOutlined />, label: "大纲" },
+      // 画布 = 大纲的观察面（只读呈现 + 摆位），排在大纲之后（DESIGN.md `outline-canvas`）
+      { key: "/canvas", icon: <DeploymentUnitOutlined />, label: "大纲画布" },
       { key: "/characters", icon: <TeamOutlined />, label: "人物" },
       { key: "/setting", icon: <TagsOutlined />, label: "设定" },
       { key: "/locations", icon: <EnvironmentOutlined />, label: "地点" },
