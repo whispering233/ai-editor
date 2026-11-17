@@ -24,6 +24,7 @@ C1。
 ### C7 — 大纲画布连线（plot_edge CRUD）
 
 #### 范围
+- **前置（翻掉 C6 的只读开关）**：`OutlineCanvas.tsx` 的 `nodesConnectable={false}` / `elementsSelectable={false}` / `edges={EMPTY_EDGES}` 三处；`ChapterCard` 补 `<Handle type="source">` / `<Handle type="target">`（位置与颜色走 `canvas-theme.css` 的 `--xy-handle-*`，不在组件里写色值）。
 - 拖出即连：source handle → target card；空边（metadata 空）直接 POST；自连 / 落空取消；重复边 409 → toast。
 - 边：`label` 线上显示（空则不画文字）、选中态、点击开右侧抽屉（复用 C4 表单 + 删除按钮）；`Delete` 键与浮条按钮 → `ConfirmDialog` 物理删。
 - 单卡选中 = 聚焦邻边（其余边降透明）；点空白取消；双击卡片 = `#/outline/:id`。
