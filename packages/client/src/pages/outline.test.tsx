@@ -124,7 +124,11 @@ function render({
 }
 
 /** hook 初始 state 在 SSR 读一次 localStorage（`typeof window` 守卫）⇒ 用 window stub 预置 */
-function stubRailStorage(layout: { width: number | null; collapsed: boolean }) {
+function stubRailStorage(layout: {
+  width: number | null;
+  collapsed: boolean;
+  detailCollapsed?: boolean;
+}) {
   vi.stubGlobal("window", {
     localStorage: {
       getItem: (key: string) =>
@@ -444,6 +448,88 @@ describe("大纲页 · rail 宽度与收起（持久化）", () => {
     expect(html).toContain("w-full");
     expect(html).toContain(">大纲<");
     expect(html).not.toContain('aria-label="展开大纲树"');
+  });
+});
+
+// 右侧详情收起（DESIGN.md `outline-page`「宽度与收起」）：详情钮只在桌面且 rail 未收起时传给 rail。
+// SSR 不派发点击事件：收起态 / 展开态由 localStorage 预置走查（同 setting / writing 惯例），
+// dirty 守卫（`toggleDetailWithGuard`）走浏览器核对。
+describe("大纲页 · 右侧详情收起", () => {
+  it("展开态：rail header 右端组最右端 = 「收起右侧详情」（右箭头 + aria-expanded），详情列照常", () => {
+    stubRailStorage({ width: 333, collapsed: false, detailCollapsed: false });
+    const html = render({ nodeId: "ch-1" });
+    expect(html).toContain('aria-label="收起右侧详情"');
+    expect(html).toContain('aria-expanded="true"');
+    expect(html).not.toContain('aria-label="展开右侧详情"');
+    // 图标 = 当前点击动作（展开态收起 = 右箭头）
+    expect(html).toContain("anticon-right");
+    // 位置 = [全部折叠][+ 新建卷] 之后、详情列页头之前
+    expect(html.indexOf('aria-label="收起右侧详情"')).toBeGreaterThan(
+      html.indexOf('aria-label="新建卷"'),
+    );
+    expect(html.indexOf('aria-label="收起右侧详情"')).toBeLessThan(
+      html.indexOf("flex min-h-0 min-w-0 flex-1 flex-col p-6"),
+    );
+    // 正常两栏：rail 像素宽 + 手柄 + 详情列
+    expect(html).toContain("width:333px");
+    expect(html).toContain("border-r border-border");
+    expect(html).toContain('aria-label="调整大纲树宽度"');
+    expect(html).toContain(">雪夜出走<");
+  });
+
+  it("收起态：详情列整列不渲染、rail 全宽（无内联宽 / 无右边线 / 无手柄）、不改存宽度", () => {
+    stubRailStorage({ width: 333, collapsed: false, detailCollapsed: true });
+    const html = render({ nodeId: "ch-1" });
+    // 按钮：左箭头 + 「展开右侧详情」
+    expect(html).toContain('aria-label="展开右侧详情"');
+    expect(html).toContain('aria-expanded="false"');
+    expect(html).toContain("anticon-left");
+    expect(html).not.toContain('aria-label="收起右侧详情"');
+    // rail 吸收全宽：不传 width（无内联宽）+ `w-full border-r-0`
+    expect(html).not.toContain("width:333px");
+    expect(html).toContain("w-full border-r-0");
+    expect(html).not.toContain("border-r border-border");
+    expect(html).not.toContain('aria-label="调整大纲树宽度"');
+    // 详情列（含页头 / 选中节点详情）整列卸载；rail 与选中行保留（URL 选中不变）
+    expect(html).not.toContain("min-w-0 flex-1 flex-col p-6");
+    expect(html).not.toContain('href="#/writing/ch-1"');
+    expect(html).not.toContain('aria-label="保存"');
+    expect(html).toContain('aria-current="page"');
+  });
+
+  it("无 id 空态：详情列不渲染，rail 保留且可展开详情", () => {
+    stubRailStorage({ width: 333, collapsed: false, detailCollapsed: true });
+    const html = render();
+    expect(html).not.toContain(">详情<");
+    expect(html).not.toContain("从左侧选择一个卷、章或场查看详情");
+    expect(html).toContain(">大纲<");
+    expect(html).toContain('aria-label="展开右侧详情"');
+  });
+
+  it("空树：收起后不渲染「还没有大纲」空态（详情列随列卸载）", () => {
+    stubRailStorage({ width: 333, collapsed: false, detailCollapsed: true });
+    const html = render({ outline: EMPTY_OUTLINE });
+    expect(html).not.toContain("还没有大纲");
+    expect(html).toContain('aria-label="大纲树"');
+    expect(html).toContain('aria-label="展开右侧详情"');
+  });
+
+  it("rail 自身收起时详情列保留（两栏不会同时收起）：无详情钮", () => {
+    stubRailStorage({ width: 333, collapsed: true, detailCollapsed: true });
+    const html = render({ nodeId: "ch-1" });
+    expect(html).toContain('aria-label="展开大纲树"');
+    expect(html).not.toContain('aria-label="展开右侧详情"');
+    expect(html).not.toContain('aria-label="收起右侧详情"');
+    expect(html).toContain("min-w-0 flex-1 flex-col p-6");
+  });
+
+  it("窄屏：不渲染右侧详情钮，存储的 detailCollapsed 不生效", () => {
+    stubRailStorage({ width: 333, collapsed: false, detailCollapsed: true });
+    const html = render({ desktop: false, nodeId: "ch-1" });
+    expect(html).not.toContain('aria-label="展开右侧详情"');
+    expect(html).not.toContain('aria-label="收起右侧详情"');
+    expect(html).toContain("min-w-0 flex-1 flex-col p-6");
+    expect(html).toContain(">雪夜出走<");
   });
 });
 

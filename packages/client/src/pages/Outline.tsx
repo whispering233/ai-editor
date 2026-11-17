@@ -196,9 +196,13 @@ export default function Outline({ nodeId }: { nodeId?: string }) {
     moveResize,
     endResize,
     toggleCollapse: toggleRailCollapse,
+    toggleDetail,
   } = useOutlineRail(isDesktop);
 
   const railCollapsed = isDesktop && railLayout.collapsed;
+  // 右侧详情收起（桌面态才生效）：详情列整列不渲染、rail 吸收全宽。
+  // rail 已收起时详情列必须留着（两档收起各靠对侧那一栏的按钮，rail 不在时置回可见防空白页）。
+  const detailHidden = isDesktop && !railCollapsed && railLayout.detailCollapsed;
   // 跨页定位目标在树内、桌面收起态：先展开 rail——消费 effect 在 rail 内，不挂载则 URL/高亮都不发生
   const focusTarget = useUiStore((s) => s.focusOutlineNodeId);
   useEffect(() => {
@@ -215,6 +219,17 @@ export default function Outline({ nodeId }: { nodeId?: string }) {
     return useUiStore.getState().confirm({
       title: "放弃未保存的修改？",
       description: "当前节点的修改尚未保存，切换后将丢失",
+    });
+  }
+
+  /** 切换右侧详情收起态：收起前过未保存守卫（dirty 才弹，取消不收起）；展开无守卫 */
+  function toggleDetailWithGuard() {
+    if (railLayout.detailCollapsed) {
+      toggleDetail();
+      return;
+    }
+    void confirmDiscard().then((ok) => {
+      if (ok) toggleDetail();
     });
   }
 
@@ -391,14 +406,20 @@ export default function Outline({ nodeId }: { nodeId?: string }) {
           retry={retryOutline}
           confirmDiscard={confirmDiscard}
           width={
-            isDesktop ? (railLayout.width ?? OUTLINE_RAIL_DEFAULT_WIDTH_CSS) : undefined
+            isDesktop && !detailHidden
+              ? (railLayout.width ?? OUTLINE_RAIL_DEFAULT_WIDTH_CSS)
+              : undefined
           }
-          // 窄屏全宽无邻栏：抹掉 rail 自带的右边线（DESIGN.md §Layout「分栏边线单所有权」）
-          className={isDesktop ? undefined : "w-full border-r-0"}
+          // 窄屏全宽无邻栏、右侧详情收起时邻栏不在：抹掉 rail 自带的右边线
+          //（DESIGN.md §Layout「分栏边线单所有权」）
+          className={isDesktop && !detailHidden ? undefined : "w-full border-r-0"}
+          // 详情收起按钮只在桌面态传给 rail（窄屏无相邻详情列）
+          detailCollapsed={isDesktop ? railLayout.detailCollapsed : undefined}
+          onToggleDetail={isDesktop ? toggleDetailWithGuard : undefined}
         />
       )}
-      {/* 桌面展开态右边界 6px 拖拽手柄；收起态 / 窄屏不渲染（手柄不画线，分栏线归 rail） */}
-      {isDesktop && !railCollapsed && (
+      {/* 桌面展开态右边界 6px 拖拽手柄；收起态 / 窄屏 / 详情收起（rail 全宽）不渲染 */}
+      {isDesktop && !railCollapsed && !detailHidden && (
         <ResizeHandle
           label="调整大纲树宽度"
           active={resizing}
@@ -408,8 +429,8 @@ export default function Outline({ nodeId }: { nodeId?: string }) {
         />
       )}
       {/* 详情列：桌面端 `pt-0`（页头 `-mx-6` 穿透内边距、分割线全幅），窄屏保留 p-6
-          （DESIGN.md §Layout「工作台子栏页头」） */}
-      {(isDesktop || nodeId !== undefined) && (
+          （DESIGN.md §Layout「工作台子栏页头」）；右侧详情收起时整列不渲染 */}
+      {!detailHidden && (isDesktop || nodeId !== undefined) && (
         <div className={cn("flex min-h-0 min-w-0 flex-1 flex-col p-6", isDesktop && "pt-0")}>
           {/* 窄屏「大纲树」返回条（32px，滚动区之外） */}
           {!isDesktop && nodeId !== undefined && (
@@ -450,6 +471,8 @@ function OutlineRail({
   confirmDiscard,
   width,
   className,
+  detailCollapsed,
+  onToggleDetail,
 }: {
   /** 壳要量当前渲染宽（默认宽度是 CSS 值）作拖拽起点 */
   railRef: RefObject<HTMLElement | null>;
@@ -465,6 +488,10 @@ function OutlineRail({
   width?: number | string;
   /** 覆盖类（窄屏 `w-full border-r-0`——`cn` 用 twMerge，同属性后者胜） */
   className?: string;
+  /** 右侧详情当前是否收起（只驱动 header 按钮图标 / 无障碍状态；详情列由壳决定是否渲染） */
+  detailCollapsed?: boolean;
+  /** 切换右侧详情收起态；不传 = 不渲染该按钮（窄屏无相邻详情列） */
+  onToggleDetail?: () => void;
 }) {
   const outline = useProjectStore((s) => s.outline);
   const outlineLoading = useProjectStore((s) => s.outlineLoading);
@@ -1368,6 +1395,25 @@ function OutlineRail({
               onClick={() => startCreate(ROOT_NODE_ID, "volume")}
               icon={<PlusOutlined className="text-sm" />}
             />
+            {/* 右侧详情收起 / 展开（右端组最右端，紧邻被收起的详情列；DESIGN.md `outline-page`「rail header」） */}
+            {onToggleDetail !== undefined && (
+              <Button
+                color="default"
+                variant="text"
+                size="small"
+                title={detailCollapsed ? "展开右侧详情" : "收起右侧详情"}
+                aria-label={detailCollapsed ? "展开右侧详情" : "收起右侧详情"}
+                aria-expanded={!detailCollapsed}
+                onClick={onToggleDetail}
+                icon={
+                  detailCollapsed ? (
+                    <LeftOutlined className="text-sm" />
+                  ) : (
+                    <RightOutlined className="text-sm" />
+                  )
+                }
+              />
+            )}
           </>
         }
       />
