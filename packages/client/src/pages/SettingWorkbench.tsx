@@ -6,7 +6,11 @@
 // `#/setting/:id` 只渲染详情全宽 + 顶部 32px「设定树」返回条（滚动区之外）。
 // 数据：rail 自拉 `GET /entities` + `GET /relations`（settings 树）；详情仍走 `EntityDetail` 自己的 GET。
 // 本壳只持两个 tick：`reloadKey`（详情保存 onSaved / 数据变更信号 → rail 重拉）与 `useDataRefresh`。
-// 未保存守卫：详情上报 dirty，切行 / 清选中 / 窄屏返回条先 `confirm`（浏览器后退仍不拦，见 backlog.md）。
+// 未保存守卫：详情上报 dirty，切行 / 清选中 / 窄屏返回条 / 收起右侧详情先 `confirm`
+// （浏览器后退仍不拦，见 backlog.md）。
+// 两档收起（DESIGN.md `setting-page`「宽度与两档收起」，均存于 hooks/use-setting-rail）：
+// 左栏收起 = 不渲染 rail（按钮在详情列页头 `leading`）；右侧详情收起 = 详情列整列不渲染、rail 吸收全宽
+// （按钮在 rail header；不改存宽度、不改 URL、点行不自动展开），两栏不会同时收起。
 import { useEffect, useState } from "react";
 import type { ReactNode } from "react";
 import { Button } from "antd";
@@ -29,7 +33,8 @@ import { useUiStore } from "../stores/ui";
 /**
  * 设定工作台壳：`id` 与路由一致（undefined = `#/setting` 无选中）。
  * 左列 rail 宽度 / 收起态由 hooks/use-setting-rail 持有（桌面态默认宽度 = SETTING_RAIL_DEFAULT_WIDTH_CSS）；
- * 右列详情页头由 `EntityDetail` 自己渲染，本壳只把「收起 / 展开设定树」按钮作为 `leading` 传下去。
+ * 右列详情页头由 `EntityDetail` 自己渲染，本壳只把「收起 / 展开设定树」按钮作为 `leading` 传下去；
+ * 右侧详情的收起 / 展开按钮由本壳传入 rail header（`detailCollapsed` / `onToggleDetail`）。
  */
 export default function SettingWorkbench({ id }: { id?: string }) {
   const isDesktop = useMediaQuery("(min-width: 1024px)");
@@ -41,6 +46,7 @@ export default function SettingWorkbench({ id }: { id?: string }) {
     moveResize,
     endResize,
     toggleCollapse,
+    toggleDetail,
   } = useSettingRail(isDesktop);
   /** rail 重拉计数（详情保存 / 数据变更信号 → +1；rail 内写操作另有自己的内部 tick） */
   const [tick, setTick] = useState(0);
@@ -52,6 +58,9 @@ export default function SettingWorkbench({ id }: { id?: string }) {
   useEffect(() => setDetailDirty(false), [id]);
 
   const railCollapsed = isDesktop && layout.collapsed;
+  // 右侧详情收起（桌面态才生效）：详情列整列不渲染、rail 吸收全宽。
+  // 左栏已收起时详情列必须留着（两档收起各靠对侧那一栏的按钮，rail 不在时置回可见防空白页）。
+  const detailHidden = isDesktop && !railCollapsed && layout.detailCollapsed;
 
   /** 未保存守卫：true = 可以离开（无修改或用户确认放弃）；取消后留在原处、表单不清 */
   async function confirmDiscard(): Promise<boolean> {
@@ -67,6 +76,17 @@ export default function SettingWorkbench({ id }: { id?: string }) {
     if (next === (id ?? null)) return;
     void confirmDiscard().then((ok) => {
       if (ok) navigate(next === null ? "/setting" : `/setting/${next}`);
+    });
+  }
+
+  /** 切换右侧详情收起态：收起前过未保存守卫（dirty 才弹，取消不收起）；展开无守卫 */
+  function toggleDetailWithGuard() {
+    if (layout.detailCollapsed) {
+      toggleDetail();
+      return;
+    }
+    void confirmDiscard().then((ok) => {
+      if (ok) toggleDetail();
     });
   }
 
@@ -117,6 +137,8 @@ export default function SettingWorkbench({ id }: { id?: string }) {
 
   // rail：桌面展开态有；窄屏只在无 id（树页）时有；桌面收起态 = 0px（不渲染 rail，详情列吸收宽度）
   const showRail = !railCollapsed && (isDesktop || id === undefined);
+  // 详情列：桌面收起态整列不渲染（不留空容器）；窄屏只在有 id 时渲染
+  const showDetailColumn = !detailHidden && (isDesktop || id !== undefined);
 
   return (
     // -m-6 / h-[calc(100%+3rem)]：抵消中栏内容区的 p-6（同大纲页 / 人物工作台外壳，见 DESIGN.md
@@ -134,19 +156,24 @@ export default function SettingWorkbench({ id }: { id?: string }) {
           nodeId={id ?? null}
           reloadKey={tick}
           onSelect={selectNode}
+          // 右侧详情收起 = rail 吸收全宽（不写 layout.width）；窄屏全宽同此口径
           width={
-            isDesktop
+            isDesktop && !detailHidden
               ? layout.width !== null
                 ? `${layout.width}px`
                 : SETTING_RAIL_DEFAULT_WIDTH_CSS
               : undefined
           }
-          // 窄屏全宽无邻栏：抹掉 rail 自带的右边线（DESIGN.md §Layout「分栏边线单所有权」）
-          className={isDesktop ? undefined : "w-full border-r-0"}
+          // 无邻栏时抹掉 rail 自带的右边线（DESIGN.md §Layout「分栏边线单所有权」）；
+          // 右侧详情收起时邻栏不在，同窄屏
+          className={isDesktop && !detailHidden ? undefined : "w-full border-r-0"}
+          // 详情收起按钮只在桌面态传给 rail（窄屏无相邻详情列）
+          detailCollapsed={isDesktop ? layout.detailCollapsed : undefined}
+          onToggleDetail={isDesktop ? toggleDetailWithGuard : undefined}
         />
       )}
-      {/* 桌面展开态右边界 6px 拖拽手柄；收起态 / 窄屏不渲染（手柄不画线，分栏线归 rail） */}
-      {isDesktop && !railCollapsed && (
+      {/* 桌面展开态右边界 6px 拖拽手柄；收起态 / 窄屏 / 详情收起（rail 全宽）不渲染 */}
+      {isDesktop && !railCollapsed && !detailHidden && (
         <ResizeHandle
           label="调整设定树宽度"
           active={resizing}
@@ -155,7 +182,7 @@ export default function SettingWorkbench({ id }: { id?: string }) {
           onEnd={endResize}
         />
       )}
-      {(isDesktop || id !== undefined) && (
+      {showDetailColumn && (
         <div className="flex min-h-0 min-w-0 flex-1 flex-col p-6">
           {/* 窄屏「设定树」返回条（32px，滚动区之外；dirty 时先确认） */}
           {!isDesktop && id !== undefined && (

@@ -2,7 +2,7 @@
 // （原整页树视图 `SettingTreeView` 收敛为栏，壳 = pages/SettingWorkbench）。
 // `#/setting` / `#/setting/:id` 共用一个壳，**选中唯一来源 = URL**：本栏不再持 `selectedId`，
 // 选中由 prop `nodeId` 驱动、切换经 `onSelect`（壳负责未保存守卫与导航）。
-// 顶部 = 40px 自定义 header（标题 + 全部折叠/展开 + 新建）+ 常驻控件行（搜索 / 标签 / 排序 / 描述）；
+// 顶部 = 40px 自定义 header（标题 + [详情收起/展开] [全部折叠/展开] [+ 新建]）+ 常驻控件行（搜索 / 标签 / 排序 / 描述）；
 // 下面是自身滚动的行区。原 `PageHeader` + `PageDivider` 与树外层圆角卡边框已删（栏已是容器）。
 // 数据：全量 setting（limit 取 `MAX_ENTITY_LIST_LIMIT` + 名称排序）+ 全量 belongs_to 层级边 →
 // buildSettingTree（lib/setting-tree）组装递归树；溢出防御见 buildSettingTree（父截断提升为根）。
@@ -27,6 +27,7 @@ import { Button, Input, Select, Switch } from "antd";
 import {
   DeleteOutlined,
   DownOutlined,
+  LeftOutlined,
   MenuFoldOutlined,
   MenuUnfoldOutlined,
   PlusOutlined,
@@ -84,7 +85,8 @@ type CreatingState = { parentId: string | null } | null;
  * 设定树栏：header（40px，自定义——原页头右端组迁入）+ 常驻控件行 + 行区（自身纵向滚动）。
  * 宽度 / 收起态由壳持有（hooks/use-setting-rail）：本栏只消费 `width`；右侧拖拽手柄由壳作为兄弟渲染。
  * 选中唯一来源 = URL（`nodeId`）；本栏不存选中态，切换 / 清选中一律经 `onSelect`（壳负责守卫与导航）。
- * 收起 / 展开入口不在本栏（在详情列页头 `leading`），见 DESIGN.md `setting-page`「rail header」。
+ * 左栏（本栏）收起 / 展开入口在详情列页头 `leading`；右侧详情收起 / 展开入口在本栏 header 右端组最左
+ * （`detailCollapsed` / `onToggleDetail`，窄屏不传 = 不渲染），见 DESIGN.md `setting-page`「宽度与两档收起」。
  */
 export function SettingRail({
   railRef,
@@ -93,6 +95,8 @@ export function SettingRail({
   onSelect,
   width,
   className,
+  detailCollapsed,
+  onToggleDetail,
 }: {
   /** 壳要量当前渲染宽（默认宽度是 CSS 值）作拖拽起点 */
   railRef?: Ref<HTMLElement>;
@@ -106,6 +110,10 @@ export function SettingRail({
   width?: string;
   /** 覆盖类（窄屏 `w-full border-r-0`——`cn` 用 twMerge，同属性后者胜） */
   className?: string;
+  /** 右侧详情当前是否收起（只驱动 header 按钮图标 / 无障碍状态；详情列由壳决定是否渲染） */
+  detailCollapsed?: boolean;
+  /** 切换右侧详情收起态（壳做未保存守卫）；不传 = 不渲染该按钮（窄屏无相邻详情列） */
+  onToggleDetail?: () => void;
 }) {
   const [roots, setRoots] = useState<SettingTreeNode[] | null>(null);
   const [truncated, setTruncated] = useState(false);
@@ -1036,11 +1044,29 @@ export function SettingRail({
       //（DESIGN.md §Layout「分栏边线单所有权」——手柄不画线，只有面板边线能覆盖全部场景）
       className={cn("flex min-h-0 shrink-0 flex-col border-r border-border", className)}
     >
-      {/* rail header（40px，自定义非 PageHeader）：标题 + 全部折叠/展开 + 新建；
-          header 不放详情收起钮（卡 4 才加，见 DESIGN.md `setting-page`） */}
+      {/* rail header（40px，自定义非 PageHeader）：标题 + [详情收起/展开] [全部折叠/展开] [+ 新建]；
+          详情按钮只在桌面态（壳传 onToggleDetail）渲染，见 DESIGN.md `setting-page`「宽度与两档收起」 */}
       <div className="flex h-10 shrink-0 items-center gap-1 border-b border-border px-3">
         <span className="min-w-0 flex-1 truncate text-base font-semibold">设定</span>
         <div className="ml-auto flex shrink-0 items-center gap-1">
+          {onToggleDetail && (
+            <Button
+              color="default"
+              variant="text"
+              size="small"
+              title={detailCollapsed ? "展开右侧详情" : "收起右侧详情"}
+              aria-label={detailCollapsed ? "展开右侧详情" : "收起右侧详情"}
+              aria-expanded={!detailCollapsed}
+              onClick={onToggleDetail}
+              icon={
+                detailCollapsed ? (
+                  <LeftOutlined className="text-sm" />
+                ) : (
+                  <RightOutlined className="text-sm" />
+                )
+              }
+            />
+          )}
           <Button
             color="default"
             variant="text"
