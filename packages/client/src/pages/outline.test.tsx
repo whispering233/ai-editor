@@ -1,8 +1,9 @@
 // 大纲页（`#/outline` / `#/outline/:nodeId`）SSR 走查：仓内无 jsdom，用 react-dom/server 直渲染页面
 // （同 pages/writing.test.tsx 惯例）。契约 = docs/ui/DESIGN.md `outline-page` + §Layout「分栏边线单所有权」。
 //
-// 覆盖：分栏壳（rail + 详情列）/ rail header 图标组 / 推演徽标 / 详情列各空态 / 窄屏两级互斥 /
-// 宽度与收起持久化。`useMediaQuery` 的 useState 初始化器读 `window.matchMedia`，SSR 下直接跑会崩 ⇒
+// 覆盖：分栏壳（rail + 详情列）/ rail header 图标组 / 推演徽标（rail 图标态）/ 详情列各空态 /
+// 窄屏两级互斥 / 宽度与收起持久化 / 选中唯一来源 = URL（aria-current + bg-accent）/ 删除收敛纯函数。
+// `useMediaQuery` 的 useState 初始化器读 `window.matchMedia`，SSR 下直接跑会崩 ⇒
 // 用 `vi.hoisted` 变量 mock（浏览器行为不变；测试只切 desktop / narrow 两态）。
 // 右键菜单项活在 portal 里、关闭态不渲染 ⇒ 菜单文案由 lib/deduction.test.ts 的纯函数覆盖，
 // 「点菜单项 → 徽标即时刷新」走浏览器人工核对（无 jsdom 无法派发右键事件）。
@@ -18,6 +19,7 @@ import type {
 } from "@whispering233/ai-editor-shared";
 import Outline from "./Outline";
 import OutlineDetail from "./OutlineDetail";
+import { deleteInvalidatesSelection } from "../lib/outline-tree";
 import { useProjectStore } from "../stores/project";
 
 const media = vi.hoisted(() => ({ desktop: true }));
@@ -159,15 +161,32 @@ describe("大纲页树视图：推演节点徽标", () => {
     const html = render({ deductionNodes: ["ch-1", "ch-3"] });
     expect(rowHtml(html, "ch-1")).toContain('title="推演起点（第1章） · 第 1 / 共 2 个推演节点"');
     expect(rowHtml(html, "ch-3")).toContain('title="推演终点（第3章） · 第 2 / 共 2 个推演节点"');
-    expect(rowHtml(html, "ch-1")).toContain(">推演起点<");
-    expect(rowHtml(html, "ch-3")).toContain(">推演终点<");
+    expect(rowHtml(html, "ch-1")).toContain('aria-label="推演起点"');
+    expect(rowHtml(html, "ch-3")).toContain('aria-label="推演终点"');
+    expect(rowHtml(html, "ch-1")).toContain("anticon-branches");
   });
 
   it("单标记：文案 = 推演节点，不附 k / N；未标记的章行不渲染徽标", () => {
     const html = render({ deductionNodes: ["ch-2"] });
     expect(rowHtml(html, "ch-2")).toContain('title="推演节点（第2章）"');
+    expect(rowHtml(html, "ch-2")).toContain('aria-label="推演节点"');
+    expect(rowHtml(html, "ch-2")).not.toContain(">推演节点<"); // 图标态，不渲染文字 chip
     expect(html).not.toContain("推演起点");
     expect(rowHtml(html, "ch-1")).not.toContain("推演");
+  });
+
+  it("rail 徽标为图标态：只出图标 + title / aria-label，不渲染文字 chip", () => {
+    const row = rowHtml(
+      render({ deductionNodes: ["ch-1"], config: { currentPosition: "ch-1" } }),
+      "ch-1",
+    );
+    // 推演 = BranchesOutlined、阅读进度 = AimOutlined（完整语义进 title / aria-label）
+    expect(row).toContain("anticon-branches");
+    expect(row).toContain("anticon-aim");
+    expect(row).toContain('title="阅读进度"');
+    expect(row).toContain('aria-label="阅读进度"');
+    expect(row).not.toContain(">推演起点<");
+    expect(row).not.toContain(">阅读进度<");
   });
 
   it("无标记：整页不出现推演徽标", () => {
@@ -197,11 +216,50 @@ describe("大纲页树视图：推演节点徽标", () => {
       render({ deductionNodes: ["ch-1"], config: { currentPosition: "ch-1" } }),
       "ch-1",
     );
-    const deduction = row.indexOf("推演节点");
+    const deduction = row.indexOf("推演");
     const current = row.indexOf("阅读进度");
     expect(deduction).toBeGreaterThan(-1);
     expect(current).toBeGreaterThan(-1);
     expect(deduction).toBeLessThan(current);
+  });
+});
+
+// 选中唯一来源 = URL（DESIGN.md `outline-page`）：不存组件选中态——`#/outline/:id` 的 id 即选中，
+// `#/outline` / 坏 id 无选中。（行单击导航 / 同 id 幂等是浏览器手势，无 jsdom，走人工核对。）
+describe("大纲页 · 选中唯一来源 = URL", () => {
+  it("有 id：该行 bg-accent + aria-current=page，其他行不命中选中", () => {
+    const html = render({ nodeId: "ch-1" });
+    const row = rowHtml(html, "ch-1");
+    expect(row).toContain('aria-current="page"');
+    expect(row).toContain("active:cursor-grabbing bg-accent");
+    expect(rowHtml(html, "ch-2")).not.toContain("aria-current");
+    expect(rowHtml(html, "vol-1")).not.toContain("aria-current");
+  });
+
+  it("无 id / 坏 id：没有行被标为选中（坏 id 空态仍存在）", () => {
+    for (const html of [render(), render({ nodeId: "ghost" })]) {
+      expect(html).not.toContain('aria-current="page"');
+      expect(html).not.toContain("active:cursor-grabbing bg-accent");
+    }
+    expect(render({ nodeId: "ghost" })).toContain("该节点不存在或已被删除");
+  });
+});
+
+// 删除后 URL 收敛判定（纯函数——点击路径无 jsdom，判据本身可直测）：
+// 删的是 URL 节点自身或其祖先 ⇒ 删除成功后 `location.replace("#/outline")`；坏 id 不收敛（保留引导）。
+describe("删除当前 / 祖先节点 → URL 收敛判定", () => {
+  const nodes = OUTLINE.children;
+
+  it("删除 URL 节点自身或其祖先 → true", () => {
+    expect(deleteInvalidatesSelection(nodes, "ch-1", "ch-1")).toBe(true);
+    expect(deleteInvalidatesSelection(nodes, "vol-1", "sc-1")).toBe(true);
+    expect(deleteInvalidatesSelection(nodes, "ch-1", "sc-1")).toBe(true);
+  });
+
+  it("删除其他分支 / 坏 id → false（不把坏 id 引导收敛成无选中）", () => {
+    expect(deleteInvalidatesSelection(nodes, "ch-2", "ch-1")).toBe(false);
+    expect(deleteInvalidatesSelection(nodes, "vol-2", "ch-1")).toBe(false);
+    expect(deleteInvalidatesSelection(nodes, "ghost", "ghost")).toBe(false);
   });
 });
 

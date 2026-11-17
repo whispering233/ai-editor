@@ -111,6 +111,19 @@ export function isDescendant(nodes: OutlineNode[], nodeId: string, targetId: str
 }
 
 /**
+ * 删除 `deletedId` 是否会让 URL 选中（`selectedId`）失效——删除的是它自身或其祖先。
+ * 选中节点不在树中（坏 id）→ false：坏 id 的空态与返回引导归详情列，删除动作不收敛 URL。
+ */
+export function deleteInvalidatesSelection(
+  nodes: OutlineNode[],
+  deletedId: string,
+  selectedId: string,
+): boolean {
+  const path = findNodePath(nodes, selectedId);
+  return path !== null && path.includes(deletedId);
+}
+
+/**
  * 拖拽移动合法性（严格三层 + 不自挂/不挂子树）：
  * - 目标父必须是该节点类型的合法父（parentOptionsForType）
  * - 不能挂到自己（targetId === nodeId）或自己的后代（子树）
