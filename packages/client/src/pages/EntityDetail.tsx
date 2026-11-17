@@ -9,8 +9,8 @@
 // 就绪后补（带上下文进聊天）
 import { useEffect, useRef, useState } from "react";
 import type { ReactNode } from "react";
-import { HolderOutlined } from "@ant-design/icons";
-import { formatTimestamp, MAX_ENTITY_LIST_LIMIT } from "@whispering233/ai-editor-shared";
+import { HolderOutlined, DeleteOutlined, SaveOutlined } from "@ant-design/icons";
+import { formatMonthDay, formatTimestamp, MAX_ENTITY_LIST_LIMIT } from "@whispering233/ai-editor-shared";
 import type { EntityType } from "@whispering233/ai-editor-shared";
 import { ConfirmDialog } from "../components/outline/dialogs";
 import { SuggestionDatalist } from "../components/ui/suggestion-datalist";
@@ -22,6 +22,7 @@ import { entityListHost } from "../lib/entity-paths";
 import { Button, Input, Select } from "antd";
 import type { InputRef } from "antd";
 import { PageHeader } from "@/components/ui/page-header";
+import { PanelHeader } from "@/components/ui/panel-header";
 import {
   ApiError,
   CLIENT_NETWORK_ERROR,
@@ -246,13 +247,17 @@ export default function EntityDetail({
   type,
   id,
   leading,
+  compact,
   onSaved,
   onDirtyChange,
 }: {
   type: string;
   id: string;
-  /** 标题行前置元素（透传 `PageHeader` 的 `leading`；设定工作台放「设定树」收起按钮） */
+  /** 标题行前置元素（`PageHeader` / `PanelHeader` 的 `leading`；设定工作台放「设定树」收起按钮） */
   leading?: ReactNode;
+  /** 工作台子栏形态（仅设定页传）：页头换 `PanelHeader`（图标操作 + 单行元信息），
+   * 分割线 `-mx-6` 穿透详情列内边距；不传 = 普通中栏页（`PageHeader` 文字按钮） */
+  compact?: boolean;
   /** 保存成功回调（可选，附加）：人物工作台用它刷新左栏列表的姓名/角色定位——
    * 不传则行为与本卡前完全一致（其他宿主无感） */
   onSaved?: () => void;
@@ -530,39 +535,94 @@ export default function EntityDetail({
 
   return (
     <section>
-      {/* 页头（统一壳）：标题 + 操作 + 元信息行 + 分割线 */}
-      <PageHeader
-        leading={leading}
-        title={detail?.name ?? "…"}
-        truncateTitle
-        action={
-          <>
-            <Button onClick={() => void handleSave()} disabled={!detail || saving}>
-              {saving ? "保存中…" : "保存"}
-            </Button>
-            <Button danger disabled={!detail} onClick={() => void handleDelete()}>
-              移入回收站
-            </Button>
-          </>
-        }
-        description={
-          /* 元信息行（文字与「变更记录 N 条」入口同用 muted-foreground，双主题一致） */
-          detail ? (
-            <p className="text-xs text-muted-foreground">
-              创建于 {formatTimestamp(detail.createdAt)} · 更新于{" "}
-              {formatTimestamp(detail.updatedAt)} ·{" "}
-              <button
-                type="button"
-                onClick={() => setDeltaOpen((v) => !v)}
-                title="展开状态预览：计算该实体在任意大纲节点处的累积状态"
-                className="rounded-md border border-border px-1.5 py-0.5 text-muted-foreground hover:bg-muted hover:text-foreground"
-              >
-                变更记录 {detail.deltaCount} 条
-              </button>
-            </p>
-          ) : undefined
-        }
-      />
+      {compact ? (
+        /* 页头（工作台子栏页头，DESIGN.md §Layout「工作台子栏页头」）：分割线 `-mx-6` 穿透列内边距；
+           操作一律 24px 图标（窄列不折行），保存是唯一主操作；元信息单行不折行（MM-DD + 完整时间进 title） */
+        <PanelHeader
+          leading={leading}
+          title={detail?.name ?? "…"}
+          className="-mx-6"
+          insetClassName="px-6"
+          actions={
+            <>
+              <Button
+                type="primary"
+                size="small"
+                icon={<SaveOutlined />}
+                loading={saving}
+                disabled={!detail}
+                title="保存"
+                aria-label="保存"
+                onClick={() => void handleSave()}
+              />
+              <Button
+                color="default"
+                variant="text"
+                size="small"
+                icon={<DeleteOutlined />}
+                disabled={!detail}
+                title="移入回收站"
+                aria-label="移入回收站"
+                onClick={() => void handleDelete()}
+              />
+            </>
+          }
+          meta={
+            detail ? (
+              <div className="flex min-w-0 flex-1 items-center gap-2 text-xs text-muted-foreground">
+                <span
+                  className="min-w-0 truncate"
+                  title={`创建于 ${formatTimestamp(detail.createdAt)} · 更新于 ${formatTimestamp(detail.updatedAt)}`}
+                >
+                  {`创建于 ${formatMonthDay(detail.createdAt)} · 更新于 ${formatMonthDay(detail.updatedAt)}`}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setDeltaOpen((v) => !v)}
+                  title="展开状态预览：计算该实体在任意大纲节点处的累积状态"
+                  className="shrink-0 rounded-md border border-border px-1.5 py-0.5 text-muted-foreground hover:bg-muted hover:text-foreground"
+                >
+                  变更记录 {detail.deltaCount} 条
+                </button>
+              </div>
+            ) : undefined
+          }
+        />
+      ) : (
+        /* 普通中栏页头（统一壳）：标题 + 操作 + 元信息行 + 分割线 */
+        <PageHeader
+          leading={leading}
+          title={detail?.name ?? "…"}
+          truncateTitle
+          action={
+            <>
+              <Button onClick={() => void handleSave()} disabled={!detail || saving}>
+                {saving ? "保存中…" : "保存"}
+              </Button>
+              <Button danger disabled={!detail} onClick={() => void handleDelete()}>
+                移入回收站
+              </Button>
+            </>
+          }
+          description={
+            /* 元信息行（文字与「变更记录 N 条」入口同用 muted-foreground，双主题一致） */
+            detail ? (
+              <p className="text-xs text-muted-foreground">
+                创建于 {formatTimestamp(detail.createdAt)} · 更新于{" "}
+                {formatTimestamp(detail.updatedAt)} ·{" "}
+                <button
+                  type="button"
+                  onClick={() => setDeltaOpen((v) => !v)}
+                  title="展开状态预览：计算该实体在任意大纲节点处的累积状态"
+                  className="rounded-md border border-border px-1.5 py-0.5 text-muted-foreground hover:bg-muted hover:text-foreground"
+                >
+                  变更记录 {detail.deltaCount} 条
+                </button>
+              </p>
+            ) : undefined
+          }
+        />
+      )}
 
       {/* 状态预览区块（S5.4：元信息行入口展开；位于表单上方） */}
       {detail && deltaOpen && (

@@ -16,7 +16,7 @@ import type { ReactNode } from "react";
 import { Button } from "antd";
 import { ArrowLeftOutlined, LeftOutlined, RightOutlined } from "@ant-design/icons";
 import { SettingRail } from "../components/entity/setting-rail";
-import { PageHeader } from "@/components/ui/page-header";
+import { PanelHeader } from "@/components/ui/panel-header";
 import { ResizeHandle } from "@/components/ui/resize-handle";
 import { EmptyState } from "@/components/ui/empty-state";
 import { useMediaQuery } from "../hooks/use-media-query";
@@ -90,7 +90,7 @@ export default function SettingWorkbench({ id }: { id?: string }) {
     });
   }
 
-  // 收起 / 展开入口：详情列页头标题行最左（`PageHeader` `leading`，同写作页）；窄屏无相邻栏不渲染
+  // 收起 / 展开入口：详情列页头标题行最左（`PanelHeader` `leading`，同写作页）；窄屏无相邻栏不渲染
   const railToggle = isDesktop ? (
     <Button
       color="default"
@@ -114,7 +114,12 @@ export default function SettingWorkbench({ id }: { id?: string }) {
   const detail: ReactNode =
     id === undefined ? (
       <section className="flex min-h-0 flex-1 flex-col">
-        <PageHeader title="详情" leading={railToggle} />
+        <PanelHeader
+          title="详情"
+          leading={railToggle}
+          className="-mx-6"
+          insetClassName="px-6"
+        />
         <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">
           <EmptyState padding="sm">
             {/* 桌面收起态左侧没有栏：引导指向页头左侧的展开钮（同大纲页） */}
@@ -130,6 +135,7 @@ export default function SettingWorkbench({ id }: { id?: string }) {
         type="setting"
         id={id}
         leading={railToggle}
+        compact
         onDirtyChange={setDetailDirty}
         onSaved={() => setTick((t) => t + 1)}
       />
@@ -188,7 +194,13 @@ export default function SettingWorkbench({ id }: { id?: string }) {
         />
       )}
       {showDetailColumn && (
-        <div className="flex min-h-0 min-w-0 flex-1 flex-col p-6">
+        <div
+          className={cn(
+            "flex min-h-0 min-w-0 flex-1 flex-col p-6",
+            // 桌面端 `pt-0`：详情页头 `-mx-6` 穿透列内边距，分割线全幅（DESIGN.md §Layout「工作台子栏页头」）
+            isDesktop && "pt-0",
+          )}
+        >
           {/* 窄屏「设定树」返回条（32px，滚动区之外；dirty 时先确认） */}
           {!isDesktop && id !== undefined && (
             <a

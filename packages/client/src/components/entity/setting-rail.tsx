@@ -37,6 +37,7 @@ import {
 } from "@ant-design/icons";
 import { MAX_ENTITY_LIST_LIMIT } from "@whispering233/ai-editor-shared";
 import { RowContextMenu } from "./row-context-menu";
+import { PanelHeader } from "@/components/ui/panel-header";
 import { TagChip } from "@/components/ui/tag-chip";
 import { DropIndicator } from "@/components/ui/drop-indicator";
 import { EmptyState } from "@/components/ui/empty-state";
@@ -82,10 +83,10 @@ type SettingDragTarget =
 type CreatingState = { parentId: string | null } | null;
 
 /**
- * 设定树栏：header（40px，自定义——原页头右端组迁入）+ 常驻控件行 + 行区（自身纵向滚动）。
+ * 设定树栏：header（`PanelHeader`）+ 常驻控件行 + 行区（自身纵向滚动）。
  * 宽度 / 收起态由壳持有（hooks/use-setting-rail）：本栏只消费 `width`；右侧拖拽手柄由壳作为兄弟渲染。
  * 选中唯一来源 = URL（`nodeId`）；本栏不存选中态，切换 / 清选中一律经 `onSelect`（壳负责守卫与导航）。
- * 左栏（本栏）收起 / 展开入口在详情列页头 `leading`；右侧详情收起 / 展开入口在本栏 header 右端组最左
+ * 左栏（本栏）收起 / 展开入口在详情列页头 `leading`；右侧详情收起 / 展开入口在本栏 header 右端组最右端
  * （`detailCollapsed` / `onToggleDetail`，窄屏不传 = 不渲染），见 DESIGN.md `setting-page`「宽度与两档收起」。
  */
 export function SettingRail({
@@ -1048,56 +1049,60 @@ export function SettingRail({
       //（DESIGN.md §Layout「分栏边线单所有权」——手柄不画线，只有面板边线能覆盖全部场景）
       className={cn("flex min-h-0 shrink-0 flex-col border-r border-border", className)}
     >
-      {/* rail header（40px，自定义非 PageHeader）：标题 + [详情收起/展开] [全部折叠/展开] [+ 新建]；
+      {/* rail header（`PanelHeader`，`mb-0`：行区 / 控件行紧随分割线）：标题 +
+          [全部折叠/展开] [+ 新建] [详情收起/展开]——详情钮排最右端（紧邻被收起的详情列）；
           详情按钮只在桌面态（壳传 onToggleDetail）渲染，见 DESIGN.md `setting-page`「宽度与两档收起」 */}
-      <div className="flex h-10 shrink-0 items-center gap-1 border-b border-border px-3">
-        <span className="min-w-0 flex-1 truncate text-base font-semibold">设定</span>
-        <div className="ml-auto flex shrink-0 items-center gap-1">
-          {onToggleDetail && (
+      <PanelHeader
+        title="设定"
+        className="mb-0"
+        actions={
+          <>
             <Button
               color="default"
               variant="text"
               size="small"
-              title={detailCollapsed ? "展开右侧详情" : "收起右侧详情"}
-              aria-label={detailCollapsed ? "展开右侧详情" : "收起右侧详情"}
-              aria-expanded={!detailCollapsed}
-              onClick={onToggleDetail}
+              title={collapsedIds.size > 0 ? "全部展开" : "全部折叠"}
+              aria-label={collapsedIds.size > 0 ? "全部展开" : "全部折叠"}
+              disabled={!canToggle}
+              onClick={toggleAllCollapse}
               icon={
-                detailCollapsed ? (
-                  <LeftOutlined className="text-sm" />
+                collapsedIds.size > 0 ? (
+                  <MenuUnfoldOutlined className="text-sm" />
                 ) : (
-                  <RightOutlined className="text-sm" />
+                  <MenuFoldOutlined className="text-sm" />
                 )
               }
             />
-          )}
-          <Button
-            color="default"
-            variant="text"
-            size="small"
-            title={collapsedIds.size > 0 ? "全部展开" : "全部折叠"}
-            aria-label={collapsedIds.size > 0 ? "全部展开" : "全部折叠"}
-            disabled={!canToggle}
-            onClick={toggleAllCollapse}
-            icon={
-              collapsedIds.size > 0 ? (
-                <MenuUnfoldOutlined className="text-sm" />
-              ) : (
-                <MenuFoldOutlined className="text-sm" />
-              )
-            }
-          />
-          <Button
-            color="default"
-            variant="text"
-            size="small"
-            title="新建设定"
-            aria-label="新建设定"
-            onClick={() => startCreate(null)}
-            icon={<PlusOutlined className="text-sm" />}
-          />
-        </div>
-      </div>
+            <Button
+              color="default"
+              variant="text"
+              size="small"
+              title="新建设定"
+              aria-label="新建设定"
+              onClick={() => startCreate(null)}
+              icon={<PlusOutlined className="text-sm" />}
+            />
+            {onToggleDetail && (
+              <Button
+                color="default"
+                variant="text"
+                size="small"
+                title={detailCollapsed ? "展开右侧详情" : "收起右侧详情"}
+                aria-label={detailCollapsed ? "展开右侧详情" : "收起右侧详情"}
+                aria-expanded={!detailCollapsed}
+                onClick={onToggleDetail}
+                icon={
+                  detailCollapsed ? (
+                    <LeftOutlined className="text-sm" />
+                  ) : (
+                    <RightOutlined className="text-sm" />
+                  )
+                }
+              />
+            )}
+          </>
+        }
+      />
 
       {/* 常驻控件行（不随行区滚动）：搜索 + 标签 + 排序 + 描述开关；窄 rail 按 flex-wrap 折行 */}
       <div className="flex shrink-0 flex-wrap items-center gap-2 px-3 py-2">
