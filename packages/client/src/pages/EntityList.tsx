@@ -1,5 +1,5 @@
 // 实体列表页（S3.5；替换 T7.1 占位壳；U8 增补「关联」段）
-// 路由（一级化）：#/characters | #/setting（树形视图）| #/locations | #/relations——
+// 路由（一级化）：#/characters | #/setting（设定工作台，见 pages/SettingWorkbench）| #/locations | #/relations——
 // 各类型独立一级段，main.tsx 按段路由传入 type；hook/event/timepoint 泛型入口已去重（富页/宿主段承接），
 // 旧 #/entities/:type[/:id] 在 main.tsx 全量重定向到新段；
 // A1（用户反馈）：页首残留的「实体」标题与类型切换 Segmented 已移除——
@@ -10,10 +10,8 @@
 // 摘要列按类型（lib/entity-list.ts SUMMARY_COLUMNS）/空态两种文案区分/行点击跳详情（S3.6）；
 // 「关联（U8）」——type==="relations" 渲染 RelationsView（前端过滤全量关系），
 // 「+ 新建」变「+ 建立关联」打开共用 CreateRelationDialog（列表模式，源可选）
-// （2026-08）：设定 tab（entityType==="setting"）改为**树形视图**（SettingTreeView，
-// 与设定树 tab 合并）；设定不走表格/分页，
-// 搜索+标签筛选在树内进行（树形视图自带工具栏），上级设定筛选被树形导航吸收（下拉移除）；
-// location 保持表格视图（**character 已改走 `#/characters` 人物工作台，本页不再服务 character**；
+// （2026-08）：设定 tab 改树形视图；2026-11 设定段迁出本页（设定树 + 详情 = pages/SettingWorkbench），
+// 本页不再服务 setting：location 保持表格视图（**character 已改走 `#/characters` 人物工作台**；
 // 行级 AskAiButton 已移除——右键菜单替代）
 // 「+ 新建」按钮（列表头/空态两个入口）→ 列表首行内联编辑行（UX4：name + 该类型首字段——
 // hook 的 status 下拉、其余文本；字段配置复用 lib/entity-list.ts CREATE_FIRST_FIELD；
@@ -49,7 +47,6 @@ import { useUiStore } from "../stores/ui";
 import { CreateRelationDialog } from "../components/entity/create-relation-dialog";
 import { RowContextMenu } from "../components/entity/row-context-menu";
 import { RelationsView } from "../components/entity/relations-view";
-import { SettingTreeView } from "../components/entity/setting-tree";
 import { SuggestionDatalist, uniqueStrings } from "../components/ui/suggestion-datalist";
 import { EmptyState } from "../components/ui/empty-state";
 
@@ -88,9 +85,9 @@ export default function EntityList({ type }: { type: string }) {
   const entityType = (ENTITY_TYPES as readonly string[]).includes(type)
     ? (type as ListableEntityType)
     : ("character" as ListableEntityType);
-  /** 页头控件行是否由子视图渲染（设定树 / 关联总览：工具栏随各自视图结构与状态）——
-   * 这两页的 `PageHeader` 不画分割线，由视图在工具栏之后放 `PageDivider` */
-  const viewOwnsToolbar = isRelations || entityType === "setting";
+  /** 页头控件行是否由子视图渲染（关联总览：工具栏随视图结构与状态）——
+   * 该页的 `PageHeader` 不画分割线，由视图在工具栏之后放 `PageDivider` */
+  const viewOwnsToolbar = isRelations;
 
   const [items, setItems] = useState<EntitySummary[] | null>(null);
   const [total, setTotal] = useState(0);
@@ -180,9 +177,9 @@ export default function EntityList({ type }: { type: string }) {
   }, [qInput]);
 
   // 列表加载：type/q/offset/sort/order 变化驱动；卸载或参数变化时丢弃过期响应
-  // 关联 tab / 设定 tab（树形视图自拉数据）：列表请求不发起，进出 tab 由对应分支触发兜底
+  // 关联 tab（关系总览视图自拉数据）：列表请求不发起
   useEffect(() => {
-    if (isRelations || entityType === "setting") return;
+    if (isRelations) return;
     let cancelled = false;
     setLoading(true);
     setError(null);
@@ -323,12 +320,9 @@ export default function EntityList({ type }: { type: string }) {
         controls={headerControls}
       />
 
-      {/* 关联 tab：关系总览视图（前端过滤全量）；设定 tab：树形视图（与设定树合并——
-          搜索+标签树内过滤、无分页、上级筛选被树形导航吸收）；其余类型 tab：原表格视图 */}
+      {/* 关联 tab：关系总览视图（前端过滤全量）；其余类型 tab：原表格视图 */}
       {isRelations ? (
         <RelationsView reloadKey={reloadTick} onOpenCreate={() => setCreateOpen(true)} />
-      ) : entityType === "setting" ? (
-        <SettingTreeView reloadKey={reloadTick} />
       ) : (
         <>
 

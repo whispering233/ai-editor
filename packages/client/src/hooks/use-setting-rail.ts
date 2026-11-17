@@ -10,13 +10,16 @@ import { clampPanelWidth } from "./use-panels";
 
 /** localStorage key（唯一 key，勿手抄字面量） */
 export const SETTING_RAIL_KEY = "ai-editor:setting-rail";
+/** 默认宽度（尚未拖拽过）：中栏 1/2，保底 320px（镜像 OUTLINE_RAIL_DEFAULT_WIDTH_CSS）；
+ * `- 3px` 让出 6px 拖拽手柄的一半，两栏合起来正好铺满中栏 */
+export const SETTING_RAIL_DEFAULT_WIDTH_CSS = "max(320px, calc(50% - 3px))";
 /** 拖拽下限（标题 / 摘要仍可读） */
 export const SETTING_RAIL_MIN = 280;
 /** 拖拽上限（再宽挤压详情列） */
 export const SETTING_RAIL_MAX = 720;
 
 export interface SettingRailLayout {
-  /** 像素宽度；null = 未拖拽过的默认宽度（CSS 的 max(320px, 中栏 1/2)） */
+  /** 像素宽度；null = 未拖拽过的默认宽度（见 `SETTING_RAIL_DEFAULT_WIDTH_CSS`） */
   width: number | null;
   /** 左栏（设定树）收起：整栏不渲染，详情列吸收宽度 */
   collapsed: boolean;

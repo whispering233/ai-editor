@@ -14,6 +14,7 @@ import Dashboard from "./pages/Dashboard";
 import Outline from "./pages/Outline";
 import EntityList from "./pages/EntityList";
 import EntityDetail from "./pages/EntityDetail";
+import SettingWorkbench from "./pages/SettingWorkbench";
 import CharacterWorkbench from "./pages/CharacterWorkbench";
 import HookPanel from "./pages/HookPanel";
 import Timeline from "./pages/Timeline";
@@ -92,12 +93,8 @@ function renderPage(route: Route): ReactNode {
       // 两个子路由都走同一宿主（只传 id；工作台在 #/characters 无 id 时推导选中后重定向）
       return <CharacterWorkbench id={second} />;
     case "setting":
-      // 设定段 = 树形视图列表（#/setting）+ 详情（#/setting/:id）
-      return second !== undefined ? (
-        <EntityDetail key={`setting:${second}`} type="setting" id={second} />
-      ) : (
-        <EntityList type="setting" />
-      );
+      // 设定页 = 中栏内 master-detail（设定树 rail + 设定详情）：`#/setting` 无选中、`#/setting/:id` 选中
+      return <SettingWorkbench id={second} />;
     case "locations":
       return second !== undefined ? (
         <EntityDetail key={`location:${second}`} type="location" id={second} />
