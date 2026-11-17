@@ -1,43 +1,68 @@
-// 建立关联对话框的关系类型下拉口径（卡片 1.6：伏笔锚点仅章）
+// 建立关联对话框的关系类型下拉与提交 guard 口径
 //
-// 服务端收窄（卡 1.3）：relation_type ∈ plants/advances/resolves 且 source_type=outline_node 时，
-// 源节点必须是 chapter（非章 → 400 VALIDATION_ERROR）。对话框是唯一还能凑出「卷/场景 → 伏笔」
-// 组合的入口（Outline 行右键菜单对所有层级行挂载、OutlineDetail 节点详情亦同；列表模式源端下拉
-// 只有实体类型，不产生该组合）——本模块在下拉层排除，与调用方传入的节点层级同向收窄，
-// 不留「必定 400」的死胡同（与 lib/current-position.ts 的 isCurrentPositionHost 同一思路）。
-import { HOOK_RELATION_TYPES, RELATION_TYPES, RELATION_TYPE_META } from "@whispering233/ai-editor-shared";
+// 端点适用性（哪些类型可用于「源 → 目标」）= shared `RELATION_TYPE_META[*].endpoints` 的成对声明，
+// 谓词单一实现 = shared `relationTypeAllowedFor`（本模块只派生，不手抄类型清单）。
+// 矩阵之外保留两条客户端更严的口径：
+// ① `group === "mount"` 不进通用对话框：挂载（timepoint → event 1:n，G2）由时间轴 UI 专管
+//    （组尾新建 POST /relation 固定方向、跨组拖拽 move_to 复合端点），自定义 occurs_at 不在此暴露；
+// ② 源为大纲节点但层级未知（`nodeType` 缺失）时排除伏笔三类：shared 谓词对缺失 nodeType 是**通配**，
+//    而服务端「伏笔源端仅章」必定 400——下拉与提交 guard 都按更严的一侧收口，不留死胡同。
+import {
+  ENTITY_TYPE_LABELS,
+  HOOK_RELATION_TYPES,
+  OUTLINE_NODE_TYPE_LABELS,
+  RELATION_TYPES,
+  RELATION_TYPE_META,
+  relationTypeAllowedFor,
+  type RelationEndpointRef,
+} from "@whispering233/ai-editor-shared";
 import { relationTypeLabel } from "./entity-detail";
-import type { OutlineNodeType } from "./api";
+
+/** 端点入参（结构同 shared 谓词入参；`nodeType` 仅大纲节点侧有意义） */
+export type RelationTypeSource = RelationEndpointRef;
+
+/** 伏笔三类（`HOOK_RELATION_TYPES` 的字面量联合转字符串集合，供 `includes` 用） */
+const HOOK_TYPES: readonly string[] = HOOK_RELATION_TYPES;
+
+/** 层级未知的节点源是否因此被 fail-closed 排除（见文件头 ②） */
+function unknownLevelHook(type: string, from: RelationEndpointRef): boolean {
+  return from.type === "outline_node" && from.nodeType === undefined && HOOK_TYPES.includes(type);
+}
 
 /**
- * 对话框关系类型下拉基集（oracle P2-2：occurs_at 方向白名单）：
- * **排除 `group === "mount"`**（现仅 `occurs_at`）——挂载（timepoint → event 1:n，G2）由时间轴 UI 专管
- * （组尾新建 POST /relation 固定方向、跨组拖拽 move_to 复合端点），对话框不暴露自定义 occurs_at 创建，
- * UI 层天然限制「仅 timepoint → event」方向（目标端下拉亦无 event 可选，双保险）。
+ * 关系类型下拉选项（按「源端点 + 目标端点」收窄）：
+ * `from === null`（调用方尚未定源）或 `to` 缺省时只保留基集，不由矩阵收窄。
  */
-const DIALOG_RELATION_TYPES: readonly string[] = RELATION_TYPES.filter(
-  (t) => RELATION_TYPE_META[t].group !== "mount",
-);
-
-/** 源端入参形状（结构类型：RelationSource 的可见子集；此处声明避免 lib → components 反向依赖） */
-export interface RelationTypeSource {
-  type: string;
-  /** 源端为大纲节点时的节点层级（调用点显式传入，不靠 store 反查） */
-  nodeType?: OutlineNodeType;
+export function dialogRelationTypeOptions(
+  from: RelationTypeSource | null,
+  to?: RelationEndpointRef,
+): string[] {
+  const base = RELATION_TYPES.filter((t) => RELATION_TYPE_META[t].group !== "mount");
+  const narrowed = from?.type === "outline_node" && from.nodeType === undefined
+    ? base.filter((t) => !HOOK_TYPES.includes(t))
+    : base;
+  if (from === null || to === undefined) return narrowed;
+  return narrowed.filter((t) => relationTypeAllowedFor(t, from, to));
 }
 
-/** 源端点是否可承载伏笔锚点——仅**章**节点（卡 1.3 服务端同口径）；实体源无此限制 */
-function hookAnchorAllowed(source: RelationTypeSource | null): boolean {
-  if (source === null || source.type !== "outline_node") return true;
-  // nodeType 缺失按非章处理（fail-closed：宁可少一个选项，也不留必定 400 的入口）
-  return source.nodeType === "chapter";
+/** 端点中文标签（错误文案用）：实体取 shared 实体标签，节点层级取卷/章/场景 */
+function endpointLabel(endpoint: RelationEndpointRef): string {
+  if (endpoint.type !== "outline_node") return ENTITY_TYPE_LABELS[endpoint.type];
+  if (endpoint.nodeType === undefined) return "大纲节点";
+  return OUTLINE_NODE_TYPE_LABELS[endpoint.nodeType as keyof typeof OUTLINE_NODE_TYPE_LABELS] ?? "大纲节点";
 }
 
-/** 关系类型下拉选项（按源端层级过滤）：非章大纲节点源排除 plants/advances/resolves */
-export function dialogRelationTypeOptions(source: RelationTypeSource | null): string[] {
-  if (hookAnchorAllowed(source)) return [...DIALOG_RELATION_TYPES];
-  const excludedHookTypes = new Set<string>(HOOK_RELATION_TYPES);
-  return DIALOG_RELATION_TYPES.filter((t) => !excludedHookTypes.has(t));
+/**
+ * 提交前 guard（类型输入是自由文本 AutoComplete，下拉只是建议）：非法组合 → 中文文案，合法 / 自定义类型 → null。
+ * 与 `dialogRelationTypeOptions` 同口径：矩阵谓词 + fail-closed（层级未知的节点源不进伏笔）。
+ */
+export function relationEndpointError(
+  type: string,
+  from: RelationEndpointRef,
+  to: RelationEndpointRef,
+): string | null {
+  if (!unknownLevelHook(type, from) && relationTypeAllowedFor(type, from, to)) return null;
+  return `「${relationTypeLabel(type)}」不能用于 ${endpointLabel(from)} → ${endpointLabel(to)}`;
 }
 
 // ============ 已用自定义类型派生（卡片 8.2） ============
