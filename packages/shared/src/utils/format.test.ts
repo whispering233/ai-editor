@@ -1,6 +1,6 @@
 // 文本格式化测试（T1.3）：时间戳 / 截断 / key 掩码的边界行为
 import { describe, expect, it } from "vitest";
-import { formatRelativeTime, formatTimestamp, truncate } from "./format.js";
+import { formatMonthDay, formatRelativeTime, formatTimestamp, truncate } from "./format.js";
 
 describe("formatTimestamp", () => {
   it("合法 ISO 8601 → YYYY-MM-DD HH:mm 格式（本地时区）", () => {
@@ -15,6 +15,20 @@ describe("formatTimestamp", () => {
   it("非法输入与空串原样返回（防御性）", () => {
     expect(formatTimestamp("not-a-date")).toBe("not-a-date");
     expect(formatTimestamp("")).toBe("");
+  });
+});
+
+describe("formatMonthDay", () => {
+  it("合法 ISO 8601 → MM-DD（本地时区、补零）", () => {
+    expect(formatMonthDay("2026-01-05T08:05:00")).toBe("01-05");
+    expect(formatMonthDay("2026-12-31T23:59:00")).toBe("12-31");
+  });
+
+  it("缺省 / null / 非法输入 → --（占位不返空串）", () => {
+    expect(formatMonthDay()).toBe("--");
+    expect(formatMonthDay(null)).toBe("--");
+    expect(formatMonthDay("")).toBe("--");
+    expect(formatMonthDay("not-a-date")).toBe("--");
   });
 });
 

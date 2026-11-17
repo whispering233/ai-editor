@@ -1,14 +1,32 @@
 // 文本格式化工具（纯函数，零 Node 依赖——client 浏览器打包安全）
 
+/** ISO 8601 → 本地 Date；缺省 / 非法返回 null（时间格式化的唯一解析口径） */
+function parseIso(iso: string | null | undefined): Date | null {
+  if (iso == null) return null;
+  const date = new Date(iso);
+  return Number.isNaN(date.getTime()) ? null : date;
+}
+
+const pad2 = (n: number): string => String(n).padStart(2, "0");
+
 /**
  * ISO 8601 时间戳 → 本地化 `YYYY-MM-DD HH:mm`（时间约定：统一 ISO 8601 字符串）
  * 非法输入（含空串）原样返回，防御性处理
  */
 export function formatTimestamp(iso: string): string {
-  const date = new Date(iso);
-  if (Number.isNaN(date.getTime())) return iso;
-  const pad = (n: number): string => String(n).padStart(2, "0");
-  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}`;
+  const date = parseIso(iso);
+  if (date === null) return iso;
+  return `${date.getFullYear()}-${pad2(date.getMonth() + 1)}-${pad2(date.getDate())} ${pad2(date.getHours())}:${pad2(date.getMinutes())}`;
+}
+
+/**
+ * ISO 8601 时间戳 → 本地 `MM-DD`（面板页头单行元信息用，完整时间放 `title`）
+ * 缺省 / 非法 → `--`（占位不返回空串，避免行内元素塌陷）
+ */
+export function formatMonthDay(iso?: string | null): string {
+  const date = parseIso(iso);
+  if (date === null) return "--";
+  return `${pad2(date.getMonth() + 1)}-${pad2(date.getDate())}`;
 }
 
 /**
