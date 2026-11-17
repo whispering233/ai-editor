@@ -65,6 +65,21 @@ describe("dialogRelationTypeOptions（双端端点收窄）", () => {
     expect(relationTypeAllowedFor("plants", { type: "outline_node" }, { type: "hook" })).toBe(true);
   });
 
+  it("章 → 卷：不含 plot_edge；章 → 章：含（目标层级参与收窄）", () => {
+    expect(
+      dialogRelationTypeOptions(
+        { type: "outline_node", nodeType: "chapter" },
+        { type: "outline_node", nodeType: "volume" },
+      ),
+    ).not.toContain("plot_edge");
+    expect(
+      dialogRelationTypeOptions(
+        { type: "outline_node", nodeType: "chapter" },
+        { type: "outline_node", nodeType: "chapter" },
+      ),
+    ).toContain("plot_edge");
+  });
+
   it("mount 组恒不进对话框（挂载只由时间轴 UI 建）", () => {
     const pairs = [
       [null, undefined],

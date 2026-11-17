@@ -136,6 +136,7 @@ export function CreateRelationDialog({
   // 端点变化（含目标节点层级）→ 当前输入不再合法则清空（自定义类型不在选项集里，但按 guard 合法时保留）
   const endpointKey = `${endpointFrom.type}:${endpointFrom.nodeType ?? ""}→${endpointTo.type}:${endpointTo.nodeType ?? ""}`;
   useEffect(() => {
+    setError(null); // 端点变了，上一次提交的红字已不适用
     setRelationTypeText((current) =>
       current !== "" &&
       relationEndpointError(resolveRelationTypeInput(current), endpointFrom, endpointTo) !== null

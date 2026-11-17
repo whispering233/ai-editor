@@ -169,7 +169,7 @@ CREATE INDEX idx_relation_type   ON relation_records(relation_type) WHERE delete
 | `depends_on` | 伏笔依赖 | `hook → hook` | hook→hook |
 | `involves` | 涉及 | `hook → 任意实体` | hook→实体 |
 
-> **端点适用性（2026-11）**：上表「端点」列 = shared `RELATION_TYPE_META[*].endpoints` 的**成对声明**（`{ from, to }[]`；缺省 = 通配）。它**只收窄 UI 选单与 AI 工具白名单**（画布 / 关联页下拉不出现「地点被击杀」这类组合），**服务端不新增校验**（保留既有三条：伏笔源端仅章、`belongs_to` 防环、`occurs_at` 1:n）。写成对而不是独立的 from/to 集合，是因为后者会推出 `timepoint → location` 这种不存在的关系。举证不足的类型（`appears_in` / `involves`）保持通配——宁可多显示一个选项，也不隐藏合法组合。
+> **端点适用性（2026-11）**：上表「端点」列 = shared `RELATION_TYPE_META[*].endpoints` 的**成对声明**（`{ from, to }[]`；缺省 = 通配）。它**只收窄 UI 选单与 AI 工具白名单**（画布 / 关联页下拉不出现「地点被击杀」这类组合），**服务端不新增校验**（保留既有三条：伏笔源端仅章、`belongs_to` 防环、`occurs_at` 1:n）。写成对而不是独立的 from/to 集合，是因为后者会推出 `timepoint → location` 这种不存在的关系。`appears_in` / `involves` 的宽松侧按同表端点列声明为 `"*"`（`appears_in` = 任意实体 → 大纲节点，`involves` = 伏笔 → 任意实体）；`"*"` 只表示**声明侧**通配，实际端点带 `"*"` 一律不匹配。
 >
 > **关系说明（2026-11）**：`metadata` 约定 `{ label?: string; description?: string }`——`label` = 短标签（画布连线上显示），`description` = 长说明（只在抽屉 / 关联页展示）。空串 = 删除该键；整对象替换、字段归一单一实现 = shared `normalizeRelationMetadata`（POST / PUT / AI 工具共用）。**其余键保留不报错**（自由袋未被收走），但 UI 与 AI 不再写。
 

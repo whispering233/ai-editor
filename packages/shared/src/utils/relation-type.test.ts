@@ -146,6 +146,12 @@ describe("relationTypeAllowedFor（端点适用性）", () => {
     expect(relationTypeAllowedFor("involves", hook, volume)).toBe(true);
   });
 
+  it("实际侧 `*` 不生效：只认声明侧通配", () => {
+    expect(relationTypeAllowedFor("ally", { type: "*" }, character)).toBe(false);
+    expect(relationTypeAllowedFor("appears_in", character, { type: "*" })).toBe(false);
+    expect(relationTypeAllowedFor("plot_edge", { type: "*" }, { type: "*" })).toBe(false);
+  });
+
   it("未知 / 自定义类型恒通过（含原型链键名）", () => {
     expect(relationTypeAllowedFor("宿敌", location, character)).toBe(true);
     expect(relationTypeAllowedFor("", location, character)).toBe(true);
