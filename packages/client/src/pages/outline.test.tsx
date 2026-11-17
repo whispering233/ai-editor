@@ -452,7 +452,10 @@ describe("大纲页 · rail 宽度与收起（持久化）", () => {
 // 写正文入口迁移（writing-1）：详情页是章正文的另一个入口，写作页为一级页后目标改指 `#/writing/:id`。
 // 写法 = `Button href`（antd 渲染成 `<a>`）⇒ SSR 可直接断言目标；卷节点仍不给入口（正文只挂章）。
 describe("大纲节点详情页：写正文入口指向写作页", () => {
-  function renderDetailFor(nodeId: string): string {
+  function renderDetailFor(
+    nodeId: string,
+    onNavigate?: (path: string) => void | Promise<void>,
+  ): string {
     const node = findNode(OUTLINE.children, nodeId);
     if (node === null) throw new Error(`测试数据里没有节点 ${nodeId}`);
     Object.assign(useProjectStore.getInitialState(), {
@@ -463,7 +466,12 @@ describe("大纲节点详情页：写正文入口指向写作页", () => {
       outlineWithMetadata: true,
     });
     return renderToString(
-      <OutlineDetail node={node} nodeId={nodeId} onReload={async () => {}} />,
+      <OutlineDetail
+        node={node}
+        nodeId={nodeId}
+        onReload={async () => {}}
+        onNavigate={onNavigate}
+      />,
     ).replace(/<!--[^>]*-->/g, "");
   }
 
@@ -473,6 +481,14 @@ describe("大纲节点详情页：写正文入口指向写作页", () => {
     expect(html).toContain('href="#/writing/ch-1"');
     expect(html).toContain("anticon-edit");
     expect(html).not.toContain("#/manuscript/");
+  });
+
+  // 壳注入 onNavigate 时守卫挂在 onClick 上（SSR 不输出事件处理器）；这里只钉住「href 不被移除」——
+  // 无回调的独立渲染（含无 JS 的首帧）仍要靠它导航。确认 / 取消 / 干净三条交互由 ui-verifier 真浏览器验证。
+  it("带 onNavigate 时仍渲染 href（链接语义与无回调 fallback 都在）", () => {
+    const html = renderDetailFor("ch-1", async () => {});
+    expect(html).toContain('href="#/writing/ch-1"');
+    expect(html).toContain("写正文");
   });
 
   it("卷节点：不渲染「写正文」（正文只挂章，不留必定 400 的入口）", () => {

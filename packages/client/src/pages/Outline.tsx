@@ -343,6 +343,9 @@ export default function Outline({ nodeId }: { nodeId?: string }) {
         onReload={reload}
         leading={railToggle}
         onDirtyChange={setDetailDirty}
+        onNavigate={async (path) => {
+          if (await confirmDiscard()) navigate(path);
+        }}
       />
     );
   }

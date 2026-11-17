@@ -76,7 +76,8 @@ export function isOutlineDetailDirty(
 
 /** 可嵌入（中栏分栏壳的右列）：节点由壳 `findNode` 派生传入（本组件不自拉大纲）；
  * `leading` = 页头标题行最左的槽（壳注入 rail 收起 / 展开钮）；`onReload` = 保存后由壳收敛整树；
- * `onDirtyChange` = 未保存状态上报给壳（rail 切换 / 返回条 / 新建导航前确认）。
+ * `onDirtyChange` = 未保存状态上报给壳（rail 切换 / 返回条 / 新建导航前确认）；
+ * `onNavigate` = 壳的离开守卫（写正文前确认，见下），不给则退回裸 `href` 跳转。
  * 页头常驻、内容区独立滚动（DESIGN.md §Layout「页头常驻」）。 */
 export default function OutlineDetail({
   node,
@@ -84,12 +85,14 @@ export default function OutlineDetail({
   onReload,
   leading,
   onDirtyChange,
+  onNavigate,
 }: {
   node: OutlineNode;
   nodeId: string;
   onReload: () => Promise<void>;
   leading?: ReactNode;
   onDirtyChange?: (dirty: boolean) => void;
+  onNavigate?: (path: string) => void | Promise<void>;
 }) {
   const outline = useProjectStore((s) => s.outline);
   const config = useProjectStore((s) => s.config);
@@ -292,6 +295,15 @@ export default function OutlineDetail({
                 variant="text"
                 size="small"
                 href={`#/writing/${node.id}`}
+                onClick={
+                  onNavigate &&
+                  ((e) => {
+                    // 带修饰键 / 非主键 = 浏览器原生链接行为（新标签页 / 新窗口）；新页不会清当前页表单，无需守卫
+                    if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey || e.button !== 0) return;
+                    e.preventDefault();
+                    void onNavigate(`/writing/${node.id}`);
+                  })
+                }
                 icon={<EditOutlined />}
                 title="写正文"
                 aria-label="写正文"
