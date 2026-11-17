@@ -1,6 +1,8 @@
 // 实体 / 关系常量
 // 常量命名 UPPER_SNAKE_CASE，as const 保持字面量类型
 
+import type { RelationEndpointRef } from "../utils/relation-type.js";
+
 /** 实体类型（entities 表 type 列 CHECK 约束）——event 为时间轴事件；timepoint 为 G2 时间标签点（name=时间标签文本，data 空，G2 修订）；reference 为参考资料 */
 export const ENTITY_TYPES = ["character", "setting", "location", "hook", "event", "timepoint", "reference"] as const;
 
@@ -62,28 +64,68 @@ export type RelationTypeGroup = "character" | "structure" | "anchor" | "hook" | 
  * 新增预定义类型必须补属性，否则编译失败。
  * `symmetric` 仅对称类型（语义对等，展示层合并 + 冲突检测把单向存在报为缺口）标注——
  * 未标注即有向；自定义类型一律有向。
+ * `endpoints` = 端点适用性的成对声明，逐条对齐 `docs/db/schema.md`「预定义关系类型表」的
+ * 「端点」列；**缺省 = 通配**（举证不足的类型不写）。只收窄 UI 选单与 AI 工具白名单，
+ * 服务端不新增校验。
  */
 export const RELATION_TYPE_META: Record<
   RelationType,
-  { label: string; group: RelationTypeGroup; symmetric?: true }
+  {
+    label: string;
+    group: RelationTypeGroup;
+    symmetric?: true;
+    endpoints?: readonly { from: RelationEndpointRef; to: RelationEndpointRef }[];
+  }
 > = {
-  belongs_to: { label: "所属", group: "structure" },
-  owns: { label: "拥有", group: "structure" },
-  masters: { label: "掌握", group: "structure" },
-  ally: { label: "盟友", group: "character", symmetric: true },
-  rival: { label: "对手", group: "character", symmetric: true },
-  mentor: { label: "师徒", group: "character" },
-  family: { label: "家族", group: "character", symmetric: true },
-  kills: { label: "击杀", group: "character" },
+  belongs_to: {
+    label: "所属",
+    group: "structure",
+    endpoints: [
+      { from: { type: "character" }, to: { type: "setting" } },
+      { from: { type: "setting" }, to: { type: "setting" } },
+    ],
+  },
+  owns: { label: "拥有", group: "structure", endpoints: [{ from: { type: "character" }, to: { type: "setting" } }] },
+  masters: { label: "掌握", group: "structure", endpoints: [{ from: { type: "character" }, to: { type: "setting" } }] },
+  ally: { label: "盟友", group: "character", symmetric: true, endpoints: [{ from: { type: "character" }, to: { type: "character" } }] },
+  rival: { label: "对手", group: "character", symmetric: true, endpoints: [{ from: { type: "character" }, to: { type: "character" } }] },
+  mentor: { label: "师徒", group: "character", endpoints: [{ from: { type: "character" }, to: { type: "character" } }] },
+  family: { label: "家族", group: "character", symmetric: true, endpoints: [{ from: { type: "character" }, to: { type: "character" } }] },
+  kills: { label: "击杀", group: "character", endpoints: [{ from: { type: "character" }, to: { type: "character" } }] },
   appears_in: { label: "出现于", group: "anchor" },
-  occurs_at: { label: "发生于", group: "mount" },
-  plot_edge: { label: "剧情连线", group: "canvas" },
-  plants: { label: "埋设", group: "hook" },
-  advances: { label: "推进", group: "hook" },
-  resolves: { label: "回收", group: "hook" },
-  depends_on: { label: "依赖", group: "hook" },
+  occurs_at: {
+    label: "发生于",
+    group: "mount",
+    endpoints: [
+      { from: { type: "timepoint" }, to: { type: "event" } },
+      { from: { type: "outline_node" }, to: { type: "location" } },
+    ],
+  },
+  plot_edge: {
+    label: "剧情连线",
+    group: "canvas",
+    endpoints: [
+      { from: { type: "outline_node", nodeType: "chapter" }, to: { type: "outline_node", nodeType: "chapter" } },
+    ],
+  },
+  plants: {
+    label: "埋设",
+    group: "hook",
+    endpoints: [{ from: { type: "outline_node", nodeType: "chapter" }, to: { type: "hook" } }],
+  },
+  advances: {
+    label: "推进",
+    group: "hook",
+    endpoints: [{ from: { type: "outline_node", nodeType: "chapter" }, to: { type: "hook" } }],
+  },
+  resolves: {
+    label: "回收",
+    group: "hook",
+    endpoints: [{ from: { type: "outline_node", nodeType: "chapter" }, to: { type: "hook" } }],
+  },
+  depends_on: { label: "依赖", group: "hook", endpoints: [{ from: { type: "hook" }, to: { type: "hook" } }] },
   involves: { label: "涉及", group: "hook" },
-  occurs_in: { label: "锚定于", group: "anchor" },
+  occurs_in: { label: "锚定于", group: "anchor", endpoints: [{ from: { type: "event" }, to: { type: "outline_node" } }] },
 };
 
 /** 实体列表 `limit` 上限（**单一定义**）：REST schema（types/api.ts 的 `.max()`）、

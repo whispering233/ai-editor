@@ -106,8 +106,8 @@ describe("实体 / 关系常量", () => {
     }
  // 抽样核对实际口径（避免只断言结构）
     expect(RELATION_TYPE_META.ally.label).toBe("盟友");
-    expect(RELATION_TYPE_META.occurs_at).toEqual({ label: "发生于", group: "mount" });
-    expect(RELATION_TYPE_META.plot_edge).toEqual({ label: "剧情连线", group: "canvas" });
+    expect(RELATION_TYPE_META.occurs_at).toMatchObject({ label: "发生于", group: "mount" });
+    expect(RELATION_TYPE_META.plot_edge).toMatchObject({ label: "剧情连线", group: "canvas" });
  // 对称集合 = symmetric 派生（单一来源；tools/client 消费方同此口径）
     expect(RELATION_TYPES.filter((t) => RELATION_TYPE_META[t].symmetric === true)).toEqual([
       "ally",

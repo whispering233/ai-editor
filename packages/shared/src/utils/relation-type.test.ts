@@ -3,9 +3,12 @@
 // 归一（trim）；并锁「错误消息是可直接回显的中文」。
 import { describe, expect, it } from "vitest";
 import {
+  allowedRelationTypes,
   normalizeRelationType,
   RELATION_TYPE_MAX_LENGTH,
+  relationTypeAllowedFor,
   relationTypeSyntaxError,
+  type RelationEndpointRef,
 } from "./relation-type.js";
 
 describe("relationTypeSyntaxError（语法校验单一来源）", () => {
@@ -63,5 +66,98 @@ describe("normalizeRelationType（归一）", () => {
     expect(normalizeRelationType(" 宿敌 ")).toBe("宿敌");
     expect(normalizeRelationType("宿 敌")).toBe("宿 敌");
     expect(normalizeRelationType("")).toBe("");
+  });
+});
+
+// 端点适用性矩阵：声明源 = docs/db/schema.md「预定义关系类型表」的「端点」列
+const character: RelationEndpointRef = { type: "character" };
+const location: RelationEndpointRef = { type: "location" };
+const setting: RelationEndpointRef = { type: "setting" };
+const hook: RelationEndpointRef = { type: "hook" };
+const event: RelationEndpointRef = { type: "event" };
+const timepoint: RelationEndpointRef = { type: "timepoint" };
+const chapter: RelationEndpointRef = { type: "outline_node", nodeType: "chapter" };
+const volume: RelationEndpointRef = { type: "outline_node", nodeType: "volume" };
+const node: RelationEndpointRef = { type: "outline_node" };
+
+describe("relationTypeAllowedFor（端点适用性）", () => {
+  it("人↔人类型：character→character 通过；location→character 拒绝", () => {
+    for (const t of ["ally", "rival", "mentor", "family", "kills"]) {
+      expect(relationTypeAllowedFor(t, character, character)).toBe(true);
+      expect(relationTypeAllowedFor(t, location, character)).toBe(false);
+    }
+  });
+
+  it("层级类：character→setting / setting→setting 通过；setting→character 拒绝", () => {
+    expect(relationTypeAllowedFor("belongs_to", character, setting)).toBe(true);
+    expect(relationTypeAllowedFor("belongs_to", setting, setting)).toBe(true);
+    expect(relationTypeAllowedFor("belongs_to", setting, character)).toBe(false);
+    expect(relationTypeAllowedFor("owns", character, setting)).toBe(true);
+    expect(relationTypeAllowedFor("masters", character, setting)).toBe(true);
+  });
+
+  it("occurs_at 双语义：timepoint→event 通过、timepoint→location 拒绝（成对而非集合）、outline_node→location 通过", () => {
+    expect(relationTypeAllowedFor("occurs_at", timepoint, event)).toBe(true);
+    expect(relationTypeAllowedFor("occurs_at", timepoint, location)).toBe(false);
+    expect(relationTypeAllowedFor("occurs_at", node, location)).toBe(true);
+    expect(relationTypeAllowedFor("occurs_at", event, timepoint)).toBe(false);
+  });
+
+  it("plot_edge 仅章→章：章→章通过；卷→章 / 章→卷拒绝", () => {
+    expect(relationTypeAllowedFor("plot_edge", chapter, chapter)).toBe(true);
+    expect(relationTypeAllowedFor("plot_edge", volume, chapter)).toBe(false);
+    expect(relationTypeAllowedFor("plot_edge", chapter, volume)).toBe(false);
+  });
+
+  it("nodeType 只在两侧都给出时比较：未给 = 通配", () => {
+    expect(relationTypeAllowedFor("plot_edge", node, node)).toBe(true);
+    expect(relationTypeAllowedFor("plot_edge", { type: "outline_node", nodeType: "scene" }, chapter)).toBe(false);
+  });
+
+  it("伏笔链：plants/advances/resolves 仅章→hook；depends_on 仅 hook→hook", () => {
+    for (const t of ["plants", "advances", "resolves"]) {
+      expect(relationTypeAllowedFor(t, chapter, hook)).toBe(true);
+      expect(relationTypeAllowedFor(t, volume, hook)).toBe(false);
+      expect(relationTypeAllowedFor(t, chapter, character)).toBe(false);
+    }
+    expect(relationTypeAllowedFor("depends_on", hook, hook)).toBe(true);
+    expect(relationTypeAllowedFor("depends_on", hook, character)).toBe(false);
+  });
+
+  it("occurs_in 仅 event→outline_node", () => {
+    expect(relationTypeAllowedFor("occurs_in", event, node)).toBe(true);
+    expect(relationTypeAllowedFor("occurs_in", event, character)).toBe(false);
+  });
+
+  it("通配：appears_in 任意实体→outline_node、involves 任意两端均通过", () => {
+    expect(relationTypeAllowedFor("appears_in", character, node)).toBe(true);
+    expect(relationTypeAllowedFor("appears_in", location, chapter)).toBe(true);
+    expect(relationTypeAllowedFor("involves", hook, location)).toBe(true);
+    expect(relationTypeAllowedFor("involves", hook, chapter)).toBe(true);
+  });
+
+  it("未知 / 自定义类型恒通过（含原型链键名）", () => {
+    expect(relationTypeAllowedFor("宿敌", location, character)).toBe(true);
+    expect(relationTypeAllowedFor("", location, character)).toBe(true);
+    expect(relationTypeAllowedFor("__proto__", location, character)).toBe(true);
+    expect(relationTypeAllowedFor("toString", location, character)).toBe(true);
+  });
+});
+
+describe("allowedRelationTypes（一次取全）", () => {
+  it("character→character 只含人↔人类型 + 通配类", () => {
+    const allowed = allowedRelationTypes(character, character);
+    expect(allowed).toEqual(["ally", "rival", "mentor", "family", "kills", "appears_in", "involves"]);
+  });
+
+  it("character→outline_node 含 appears_in，但不含 occurs_in / plot_edge", () => {
+    const allowed = allowedRelationTypes(character, chapter);
+    expect(allowed).toContain("appears_in");
+    expect(allowed).not.toContain("occurs_in");
+    expect(allowed).not.toContain("plot_edge");
+  });
+
+  it("章→章 = plot_edge + 通配", () => {
+    expect(allowedRelationTypes(chapter, chapter)).toEqual(["appears_in", "plot_edge", "involves"]);
   });
 });
