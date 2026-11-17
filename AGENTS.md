@@ -84,6 +84,7 @@
 - 块编辑器升级 = 显式 commit + 全量测 + 浏览器像素核对；禁 `@blocknote/xl-*`；`server` / `tools` / `db` / `agent` 不得依赖 `@blocknote/*`（服务端不解析块结构）。
 - `Ctrl/Cmd + S` = 保存当前内容 + 生成本地存档：键位常量 = `client/src/lib/save-shortcut.ts`；动作走 `registerSaveHandler` 注册栈（后注册者优先）；存档唯一注册者 = `AppShell` 的 `useSaveArchive`；页面保存失败必须 `return false`（阻断存档）。
 - **大纲页（master-detail）实现侧**：大纲只拉一次（页面壳持有 `useOutlineLoader`，`OutlineDetail` 不自拉，`node` 由壳 `findNode` 派生传入）；选中唯一来源 = URL `#/outline/:nodeId`（`#/outline` 无选中）；detail 的 `useDataRefresh` 只刷关系 / 变更记录，**不得再 `reload()` 整树**；未保存守卫 = rail / 空白区 / 窄屏返回条 / 详情页头「写正文」外链（普通左键走 `onNavigate` → 壳 `confirmDiscard`；修饰键 / 中键保留浏览器原生新标签页），**浏览器后退仍不拦**（见 `backlog.md`）；拖拽落点单源 = `lib/outline-tree.ts` 的 `resolveDropPlan`（目标行父合法 → 同级前后；父不合法但目标行自身可承载 → `inside` + 子级末尾，覆盖空 / 折叠 / 非空卷章；卷 → 卷仍同级），页面不得另起判定；rail 宽度 / 收起态 key `ai-editor:outline-rail`。契约见 `DESIGN.md` `outline-page`。
+- **设定页（master-detail）实现侧**：壳 = `pages/SettingWorkbench`，`SettingRail` 不自持选中（`nodeId` prop + `onSelect`，**选中唯一来源 = URL**）；树内写操作成功后经 `onMutated` 通知宿主走 `notifyDataChanged()`，**详情 dirty 时不发**（不得静默重置表单）；详情收起 = 整列不渲染且不改存宽度、点行不自动展开；rail 默认宽 / 边界 / 持久化 key 只在 `hooks/use-setting-rail.ts` 定义（窄屏两级互斥）。契约见 `DESIGN.md` `setting-page`。
 - 聊天链路：SSE 解析唯一实现 = `hooks/use-sse.ts`；store 的 loadSeq / msgSeq 竞态、事件级流身份守卫、中止在途 SSE 的约定不得回退；工具行归一唯一入口 = `ChatPanel` 的 `asToolCall`。
 - 提案 UI：`PROPOSAL_TYPE_LABELS` 必须覆盖 `PROPOSAL_TOOLS` 全集；历史只读卡从 `toolCalls` 重建并按 `toolCallId` 与 live 去重，不新增表 / API。
 - 推演标记提交基底必须用可见标记（`lib/deduction.ts` 的 `toggledDeductionNodes`）——拿 raw `config.deductionNodes` 回传会把失效 id 送回服务端，严格 400 会让该书标记操作永久锁死。

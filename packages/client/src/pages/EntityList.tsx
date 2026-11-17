@@ -497,7 +497,7 @@ export default function EntityList({ type }: { type: string }) {
                         </td>
                       )}
                       {col.key3 && (
-                        // 描述列（M2，仅 setting）：行内 truncate + hover title 查看完整摘要（服务端已截断 100 字符）
+                        // 第三摘要列（key3；当前列表仅 location / relations 路由进来，该列是 character / setting 的历史配置）：行内 truncate + hover title 查看完整摘要（服务端已截断 100 字符）
                         <td
                           className="max-w-40 truncate px-3 py-2 text-muted-foreground"
                           title={

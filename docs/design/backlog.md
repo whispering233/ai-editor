@@ -276,7 +276,7 @@
   - 触发条件：antd minor 升级时（测试会提醒，届时对齐 `w-6` 或改成 token 驱动的宽度）。
 
 - **客户端 `SettingTreeNode.category` 是死键**（2026-09 发布前审计发现）
-  - 现状：`client/src/lib/setting-tree.ts` 的树节点带 `category`，只写不读（旧分类徐标残留；`components/entity/setting-tree.tsx:769` 注释已说明改用 tags）；注意 **`EntitySummary.summary.category` 仍是活字段**（`parent-setting-select.tsx` 在渲染），不能一并删。
+  - 现状：`client/src/lib/setting-tree.ts` 的树节点带 `category`，只写不读（旧分类徐标残留；`components/entity/setting-rail.tsx:806` 注释已说明改用 tags）；注意 **`EntitySummary.summary.category` 仍是活字段**（`parent-setting-select.tsx` 在渲染），不能一并删。
   - 触发条件：下次触碰设定树数据派生时。
   - 最小修法：删 `SettingTreeNode.category` + 输入映射 + `setting-tree.test.ts` 对应断言。
 
@@ -554,7 +554,7 @@
 - **antd `Typography` 自带字体栈与 `--font-sans` 不一致**（21.8 oracle 登记，非本卡引入） — 现状：antd 字体栈是 Latin+Emoji 栈，Linux 上数字与空格会落到彩色 emoji 字体（实测警告行「39」字形异常），Windows/macOS 命中系统字体无影响；既有先例（`Trash.tsx` 计数、云备份面板时间）同款。触发条件：出现 Linux 用户抱怨字体怪异。最小修法：给 antd 字体栈补 `PingFang SC` / `Microsoft YaHei`（或给 `--font-sans` 对齐），需全站核一遗像素。
 - **延期项≠技术债记录**：真正"必须做但没做"的项请写进本文件的相应小节，并在触发条件写清"何时必须做"。
 - **大纲页 / 设定页不迁移 antd `Tree`（2026-09 考察结论）**
-  - 结论：保持自绘缩进行。成本 = `Outline.tsx` / `setting-tree.tsx` 两处视图层重写（纯逻辑 `lib/outline-tree.ts` / `lib/setting-tree.ts` 与单测可留）；**语义冲突在拖拽**——rc-tree 用鼠标水平位置（`dropLevelOffset`）决定落层级，与现有「行上下半 = 同级前后 / 行中段 = 成为子级 / 空白区 = 排根末尾」·三套语义不对应，且**空片区落点 rc-tree 无对应**；antd `Tree.js` 把 `dropIndicatorRender` 写在 props 展开之后（**不可注入**），指示线只能改 CSS。
+  - 结论：保持自绘缩进行。成本 = `Outline.tsx` / `setting-rail.tsx` 两处视图层重写（纯逻辑 `lib/outline-tree.ts` / `lib/setting-tree.ts` 与单测可留）；**语义冲突在拖拽**——rc-tree 用鼠标水平位置（`dropLevelOffset`）决定落层级，与现有「行上下半 = 同级前后 / 行中段 = 成为子级 / 空白区 = 排根末尾」·三套语义不对应，且**空片区落点 rc-tree 无对应**；antd `Tree.js` 把 `dropIndicatorRender` 写在 props 展开之后（**不可注入**），指示线只能改 CSS。
   - 收益只有两项：键盘导航（↑↓ `activeKey` / ←→ 折叠）、大树虚拟滚动（`virtual` 默认 true）——但**触发条件：单本项目大纲节点数百且展开卡顿，或明确需要键盘无障碍时**⇒ **按需单点补**（默认只展开卷 / 只给大纲页加虚拟列表 / rc-tree 直接接管），不换引擎。
   - 可用 token（日后真要迁）：`indentSize` / `titleHeight`（默认 = `controlHeightSM` 24，可按层级覆盖）、`nodeSelectedBg`；v6 语义槽 `classNames.item|itemTitle|itemSwitcher|itemIcon`。
   - **已失效的旧理由（不要再用）**：`DESIGN.md` 曾写「antd Tree 选中面派生 token 不可信」——`controlItemBgActive` 已在 `AntdProvider` 全局覆盖为 `{colors.surface-muted}`，并有 `antd-tokens.test.ts` 对比度守卫；真理由是行为集与拖拽语义。

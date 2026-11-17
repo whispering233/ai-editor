@@ -36,9 +36,10 @@ export const SUMMARY_COLUMNS: Record<ListableEntityType, SummaryColumnConfig> = 
     key3: "ability_panel",
     label3: "能力",
   },
- // （2026-08）：设定分类由 rules 标签承接，摘要列从「类别」改为「标签」
- // （2026-08）：设定 tab 改为树形视图（不走表格），「上级设定」特殊列
- // （key2="parent"，M2）随表格移除；「描述」列保留配置（树形视图不渲染表格，无实际作用）
+ // （2026-08）：设定分类由 rules 标签承接，摘要列从「类别」改为「标签」；
+ // 2026-11 设定改走 `#/setting` 设定工作台（树 rail + 详情），本表不再渲染 setting——
+ // 键仅作兜底/类型完整性保留（同 character）。
+ // 「上级设定」「描述」列同理不再可达（保留配置以免类型收缩牵连路由）。
   setting: {
     key1: "tags",
     label1: "标签",
@@ -101,7 +102,8 @@ export interface CreateFirstFieldConfig {
 // 注（2026-09，发布前清理）：同 SUMMARY_COLUMNS——character 键仅作兜底/类型完整性保留。
 export const CREATE_FIRST_FIELD: Record<ListableEntityType, CreateFirstFieldConfig> = {
   character: { key: "role", label: "角色定位", input: "text" },
- // K2（2026-08 用户复核）：设定分类统一字段 tags——新建行直接打标签（逗号分隔多值）
+ // K2（2026-08 用户复核）：设定分类统一字段 tags——新建行直接打标签（逗号分隔多值）；
+ // 2026-11 设定迁出本页（新建入口在设定树 rail），键仅作兜底/类型完整性保留。
   setting: { key: "tags", label: "标签", input: "tags" },
   location: { key: "type", label: "地点类型", input: "text" },
  // hook.status 是受控枚举（planted → progressing → resolved / abandoned）
