@@ -121,13 +121,16 @@ function CanvasFlow({ projectId, cards, marks }: CanvasFlowProps) {
   // ===== 连线（plot_edge）=====
   // 关系列表是唯一事实源：建边 / 删边 / 改标签成功后一律重拉，边从列表派生（不手工 push）
   const [relations, setRelations] = useState<RelationSummaryItem[] | null>(null);
+  // 连线加载失败 = 画布可能不完整；不静默降级（否则「本来没连线」与「没拉到」不可区分）
+  const [plotEdgesError, setPlotEdgesError] = useState(false);
   const loadPlotEdges = useCallback(async () => {
     try {
       const res = await listRelations({ relation_type: PLOT_EDGE_RELATION_TYPE, depth: 1 });
       setRelations(res.relations);
+      setPlotEdgesError(false);
     } catch {
-      // 连线是观察面的增强：拉不到就按「还没有连线」渲染，不阻塞画布、不出错误条
-      setRelations([]);
+      // 保留上一次拉到的边（重拉失败不该把已有连线抹掉），错误由画布顶部错误条承载
+      setPlotEdgesError(true);
     }
   }, []);
   useEffect(() => {
@@ -211,14 +214,16 @@ function CanvasFlow({ projectId, cards, marks }: CanvasFlowProps) {
     [plotEdges],
   );
 
-  /** 确认删边：物理删（不可恢复）→ 重拉列表；取消则什么都不做（边从未被移除） */
+  /** 确认删边：物理删（不可恢复）→ **无论如何都重拉**（部分失败时画布要回到服务端真相） */
   async function handleConfirmEdgeDelete(): Promise<void> {
-    for (const edge of plotEdgeDeleteTargets(plotEdges, pendingDeleteIds ?? [])) {
-      await deleteRelation(edge.id);
-    }
+    const targets = plotEdgeDeleteTargets(plotEdges, pendingDeleteIds ?? []);
+    const results = await Promise.allSettled(targets.map((edge) => deleteRelation(edge.id)));
     await loadPlotEdges();
     setEditingEdgeId(null);
-    useUiStore.getState().showToast("已删除连线");
+    const failed = results.filter((result) => result.status === "rejected").length;
+    useUiStore
+      .getState()
+      .showToast(failed === 0 ? "已删除连线" : `有 ${failed} 条连线删除失败，已重新载入`, failed === 0 ? "success" : "error");
   }
 
   /** 拖动结束 = 手工坐标落盘（只存这一张；其余章继续按可见章序网格补位） */
@@ -252,35 +257,45 @@ function CanvasFlow({ projectId, cards, marks }: CanvasFlowProps) {
           .join(" → ");
 
   return (
-    <div className="min-h-0 flex-1">
-      <ReactFlow
-        className="h-full w-full"
-        nodes={nodes}
-        edges={edges}
-        nodeTypes={NODE_TYPES}
-        onNodesChange={handleNodesChange}
-        onEdgesChange={handleEdgesChange}
-        onNodeDragStop={handleNodeDragStop}
-        onMoveEnd={handleMoveEnd}
-        onConnect={handleConnect}
-        onEdgesDelete={handleEdgesDelete}
-        onEdgeClick={(_event, edge) => setEditingEdgeId(edge.id)}
-        // 单击卡片 = 选中并聚焦邻边；点空白取消；双击 = 跳大纲节点（所以双击不缩放）
-        onNodeClick={(_event, node) => setFocusedNodeId(node.id)}
-        onPaneClick={() => setFocusedNodeId(null)}
-        onNodeDoubleClick={(_event, node) => navigate(`#/outline/${node.id}`)}
-        deleteKeyCode="Delete"
-        defaultViewport={initialViewport}
-        fitView={initialViewport === undefined}
-        fitViewOptions={FIT_VIEW_OPTIONS}
-        minZoom={CANVAS_MIN_ZOOM}
-        maxZoom={CANVAS_MAX_ZOOM}
-        zoomOnDoubleClick={false}
-        attributionPosition="bottom-left"
-      >
-        <Controls showInteractive={false} position="top-left" />
-        <MiniMap position="top-right" pannable zoomable ariaLabel="章节缩略图" />
-      </ReactFlow>
+    <div className="flex min-h-0 flex-1 flex-col">
+      {plotEdgesError && (
+        <div className={cn(errorBannerClass, "m-3 mb-0 flex items-center gap-3")}>
+          <span className="min-w-0 flex-1">连线加载失败，画布上的连线可能不完整</span>
+          <Button size="small" onClick={() => void loadPlotEdges()}>
+            重试
+          </Button>
+        </div>
+      )}
+      <div className="min-h-0 flex-1">
+        <ReactFlow
+          className="h-full w-full"
+          nodes={nodes}
+          edges={edges}
+          nodeTypes={NODE_TYPES}
+          onNodesChange={handleNodesChange}
+          onEdgesChange={handleEdgesChange}
+          onNodeDragStop={handleNodeDragStop}
+          onMoveEnd={handleMoveEnd}
+          onConnect={handleConnect}
+          onEdgesDelete={handleEdgesDelete}
+          onEdgeClick={(_event, edge) => setEditingEdgeId(edge.id)}
+          // 单击卡片 = 选中并聚焦邻边；点空白取消；双击 = 跳大纲节点（所以双击不缩放）
+          onNodeClick={(_event, node) => setFocusedNodeId(node.id)}
+          onPaneClick={() => setFocusedNodeId(null)}
+          onNodeDoubleClick={(_event, node) => navigate(`#/outline/${node.id}`)}
+          deleteKeyCode={["Delete", "Backspace"]}
+          defaultViewport={initialViewport}
+          fitView={initialViewport === undefined}
+          fitViewOptions={FIT_VIEW_OPTIONS}
+          minZoom={CANVAS_MIN_ZOOM}
+          maxZoom={CANVAS_MAX_ZOOM}
+          zoomOnDoubleClick={false}
+          attributionPosition="bottom-left"
+        >
+          <Controls showInteractive={false} position="top-left" />
+          <MiniMap position="top-right" pannable zoomable ariaLabel="章节缩略图" />
+        </ReactFlow>
+      </div>
       {editingRelation !== undefined && (
         // key = 边 id：换边就重挂，草稿即该边的当前值（同 EditRelationDialog 的「挂载时取初值」）
         <PlotEdgeDrawer
