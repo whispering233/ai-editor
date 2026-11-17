@@ -459,7 +459,8 @@ export default function Outline({ nodeId }: { nodeId?: string }) {
 // ============ 左列：大纲树 rail（结构编辑的唯一入口）============
 
 /**
- * 大纲树栏：header（40px，自定义——右端组迁自原页面页头）+ 行区（自身纵向滚动）。
+ * 大纲树栏：header（PanelHeader——标题行 40 + 预留元信息行 24 + 1px 分割线；右端组迁自原页面页头）
+ * + 行区（自身纵向滚动）。
  * 宽度 / 收起态由壳持有（hooks/use-outline-rail）：本栏只消费 `width`；右侧拖拽手柄由壳作为兄弟渲染。
  * 收起入口不在本栏（在详情列页头），见 DESIGN.md `outline-page`「rail header」。
  */

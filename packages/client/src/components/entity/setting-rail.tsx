@@ -2,7 +2,8 @@
 // （原整页树视图 `SettingTreeView` 收敛为栏，壳 = pages/SettingWorkbench）。
 // `#/setting` / `#/setting/:id` 共用一个壳，**选中唯一来源 = URL**：本栏不再持 `selectedId`，
 // 选中由 prop `nodeId` 驱动、切换经 `onSelect`（壳负责未保存守卫与导航）。
-// 顶部 = 40px 自定义 header（标题 + [详情收起/展开] [全部折叠/展开] [+ 新建]）+ 常驻控件行（搜索 / 标签 / 排序 / 描述）；
+// 顶部 = PanelHeader（工作台子栏页头：标题行 40 + 预留元信息行 24 + 1px 分割线；右端组 = [全部折叠/展开] [+ 新建] [收起/展开右侧详情]）
+// + 常驻控件行（搜索 / 标签 / 排序 / 描述）；
 // 下面是自身滚动的行区。原 `PageHeader` + `PageDivider` 与树外层圆角卡边框已删（栏已是容器）。
 // 数据：全量 setting（limit 取 `MAX_ENTITY_LIST_LIMIT` + 名称排序）+ 全量 belongs_to 层级边 →
 // buildSettingTree（lib/setting-tree）组装递归树；溢出防御见 buildSettingTree（父截断提升为根）。
