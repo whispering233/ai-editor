@@ -4,14 +4,6 @@
 
 ## 当前任务卡
 
-### 卡 4：跨页定位与边角收敛
-
-- **目标**：`focusOutlineNodeId`（概览开场跳转）在树就绪后展开祖先、3s 高亮并 `location.replace("#/outline/:id")`；深链 `#/outline/:id` 直接选中；删除当前节点 / 祖先 / 全部折叠 / 刷新后的选中与详情保持；空树 CTA「新建第一卷」；无项目 / 加载失败 / 坏 id 的文案与返回路径统一；坏 id 空态按钮在窄详情列 `flex-wrap` + `whitespace-nowrap`（文字不竖排，必要时上下排）。
-- **允许改**：`packages/client/src/pages/Outline.tsx`、`packages/client/src/pages/OutlineDetail.tsx`、`packages/client/src/lib/outline-tree.ts`（仅纯函数）、`outline.test.tsx`。
-- **不做**：不做虚拟滚动、键盘导航、折叠态持久化、自动选中上次编辑节点（均留 `backlog.md`）；不改 `current_position` 语义。
-- **验收**：从概览「阅读进度」/ 关系面板跳转后 URL 为目标节点、祖先已展开、高亮约 3s；`#/outline` 不自动选中；删除祖先节点后不出现死详情；「全部折叠」按字面执行且详情保留；空树 / 无项目 / 坏 id 的按钮可达。
-- **完成判据（硬）**：同上。oracle：reviewer 独立复跑 + 浏览器核深链与删除边角。
-
 ### 卡 5：测试、像素走查与文档收口
 
 - **目标**：补 `outline.test.tsx` 的 SSR 断言（树 / 详情 / 空态 / 窄屏 / 图标徽标）；`use-outline-rail` 的纯函数测试已随卡 1 落地，本卡只复跑；跑全量验证；由 `ui-verifier` 做有上限的浏览器像素走查；更新 `CHANGELOG.md` Unreleased；清空本文件的任务卡。
