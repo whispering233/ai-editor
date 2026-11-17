@@ -36,6 +36,18 @@ describe("PanelHeader · 几何（标题行 40 + 元信息行 24 + 分割线）"
     expect(html.indexOf("h-10")).toBeLessThan(html.indexOf("h-6"));
     expect(html.indexOf("h-6")).toBeLessThan(html.indexOf("h-px"));
   });
+
+  it("横向内距只加在两行包装上：分割线是 header 的直接子节点（全幅横贯列宽）", () => {
+    const html = render(<PanelHeader title="卷章" />);
+    // 默认内距 px-3 作用于两行包装（标题 / 元信息与内容对齐）
+    expect(html).toContain('<div class="flex flex-col px-3">');
+    const headerTag = /<header[^>]*>/.exec(html)?.[0] ?? "";
+    expect(headerTag).not.toContain("px-");
+    // 包装闭合后紧跟分割线，再闭合 header ⇒ 分割线不在带内距的包装内
+    expect(html).toContain(
+      '</div></div><div class="h-px w-full shrink-0 bg-border"></div></header>',
+    );
+  });
 });
 
 describe("PanelHeader · leading / actions / className", () => {
@@ -53,12 +65,16 @@ describe("PanelHeader · leading / actions / className", () => {
     expect(html.indexOf("h-6")).toBeGreaterThan(html.indexOf("上一章"));
   });
 
-  it("className 合并：详情列 `-mx-6 px-6` 穿透内边距；rail 用 `mb-0` 让行区紧随分割线", () => {
-    const detail = render(<PanelHeader title="正文" className="-mx-6 px-6" />);
-    expect(detail).toContain("mb-4 flex shrink-0 flex-col -mx-6 px-6");
+  it("className 只放外边距：详情列 `-mx-6` + `insetClassName=\"px-6\"` 穿透内边距；rail 用 `mb-0`", () => {
+    const detail = render(
+      <PanelHeader title="正文" className="mb-4 -mx-6" insetClassName="px-6" />,
+    );
+    expect(detail).toContain("flex shrink-0 flex-col mb-4 -mx-6");
+    expect(detail).toContain('<div class="flex flex-col px-6">');
 
-    const rail = render(<PanelHeader title="卷章" className="mb-0 px-3" />);
-    expect(rail).toContain("mb-0 px-3");
+    const rail = render(<PanelHeader title="卷章" className="mb-0" />);
+    expect(rail).toContain('<header class="flex shrink-0 flex-col mb-0">');
+    expect(rail).toContain('<div class="flex flex-col px-3">');
     expect(rail).not.toContain("mb-4"); // twMerge：同属性后者胜
   });
 });

@@ -69,8 +69,9 @@ export function ChapterRail({
       className={cn("flex shrink-0 flex-col border-r border-border", className)}
     >
       {/* 子栏页头（40 + 24 + 分割线；收起 / 展开入口在正文列页头，不在本栏）。
-          `mb-0`：行区紧随分割线（DESIGN.md §Layout「工作台子栏页头」内容起点口径）。 */}
-      <PanelHeader title="卷章" className="mb-0 px-3" />
+          `mb-0`：行区紧随分割线（DESIGN.md §Layout「工作台子栏页头」内容起点口径）；
+          横向内距用默认 `px-3`（加在两行包装上，分割线仍全幅）。 */}
+      <PanelHeader title="卷章" className="mb-0" />
 
       {/* 行区：独立纵向滚动；p-2 = 8px */}
       <div className="min-h-0 flex-1 overflow-y-auto p-2">

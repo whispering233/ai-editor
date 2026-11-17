@@ -167,7 +167,12 @@ export default function Writing({ chapterId }: { chapterId?: string }) {
       // GET /manuscript/:id（404 落 console），等大纲到达才发现章不存在。
       bodyContent = (
         <section className="flex min-h-0 flex-1 flex-col">
-          <PanelHeader title="写作" leading={railToggle} className="mb-4 -mx-6 px-6" />
+          <PanelHeader
+            title="写作"
+            leading={railToggle}
+            className="mb-4 -mx-6"
+            insetClassName="px-6"
+          />
           <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">
             {outlineFailed ? (
               outlineFailureBanner
@@ -181,7 +186,12 @@ export default function Writing({ chapterId }: { chapterId?: string }) {
       // 显式坏 chapterId：不自动回退（最近导航失效由 writing-3 的解析阶段处理）
       bodyContent = (
         <section className="flex min-h-0 flex-1 flex-col">
-          <PanelHeader title="写作" leading={railToggle} className="mb-4 -mx-6 px-6" />
+          <PanelHeader
+            title="写作"
+            leading={railToggle}
+            className="mb-4 -mx-6"
+            insetClassName="px-6"
+          />
           <div className={cn(errorBannerClass, "flex items-center gap-3")}>
             <span className="min-w-0 flex-1">章节不存在或已删除</span>
             <Button href="#/writing">返回章节目录</Button>
@@ -207,7 +217,12 @@ export default function Writing({ chapterId }: { chapterId?: string }) {
   } else if (isDesktop) {
     bodyContent = (
       <section className="flex min-h-0 flex-1 flex-col">
-        <PanelHeader title="写作" leading={railToggle} className="mb-4 -mx-6 px-6" />
+        <PanelHeader
+          title="写作"
+          leading={railToggle}
+          className="mb-4 -mx-6"
+          insetClassName="px-6"
+        />
         <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">
           {outline === null ? (
             outlineFailed ? outlineFailureBanner : bodySkeleton

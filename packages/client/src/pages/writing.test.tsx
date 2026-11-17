@@ -161,6 +161,9 @@ describe("写作页 · 桌面（rail + 正文列）", () => {
     expect(html).toContain("truncate text-base font-semibold");
     expect(html).toContain("flex h-10 min-w-0 items-center gap-2");
     expect(html).toContain("flex h-6 min-w-0 items-center gap-2");
+    // 正文列页头：内距在包装上、header 只负边距 ⇒ 分割线全幅（不经 px-6 内缩）
+    expect(html).toContain('<div class="flex flex-col px-6">');
+    expect(html).toContain('<header class="flex shrink-0 flex-col mb-4 -mx-6">');
     expect(html).toContain("从左侧选择一章开始写作");
     expect(html).not.toContain("还没有章节");
     expect(html).not.toContain("章节目录");

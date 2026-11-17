@@ -407,7 +407,8 @@ export function ChapterEditor({ outline, chapterId, basePath, onSaved, headerLea
         <PanelHeader
           title={chapterTitle ?? "正文"}
           leading={headerLeading}
-          className="mb-4 -mx-6 px-6"
+          className="mb-4 -mx-6"
+          insetClassName="px-6"
           actions={
             <>
               {/* 导入入口：隐藏文件框（浏览器与桌面同一套；按钮触发，选完清空 value 以便重复选同一文件） */}

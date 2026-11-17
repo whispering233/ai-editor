@@ -75,7 +75,12 @@ describe("ChapterRail · 几何与行内容", () => {
     expect(html).toContain("flex h-10 min-w-0 items-center gap-2");
     expect(html).toContain("flex h-6 min-w-0 items-center gap-2");
     expect(html).toContain("h-px w-full shrink-0 bg-border");
-    expect(html).toContain("mb-0 px-3"); // 行区紧随分割线
+    // 行区紧随分割线（header 无 mb）；横向内距在两行包装上，分割线是 header 直接子节点（全幅）
+    expect(html).toContain('<header class="flex shrink-0 flex-col mb-0">');
+    expect(html).toContain('<div class="flex flex-col px-3">');
+    expect(html).toContain(
+      '</div></div><div class="h-px w-full shrink-0 bg-border"></div></header>',
+    );
     expect(html).toContain("overflow-y-auto");
     // 不传 width：不写内联宽（窄屏全宽走 className，同属性后者胜）
     expect(render()).not.toContain("width:240px");
