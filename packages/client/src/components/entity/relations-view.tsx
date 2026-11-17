@@ -3,7 +3,7 @@
 // （服务端 source_type / target_type 支持 AND，但名称 q 不支持模糊，统一在前端过滤）。
 // 过滤（filterRelations 纯函数，可单测）：源类型 / 目标类型（各自独立，空串 = 不限；同时给 = AND）/
 // 关系类型 / 名称（sourceName/targetName 任一包含、大小写不敏感；名称可能 undefined——回退 id）。
-// 行：源（端点类型徽标 + 源名）→ 关系类型标签（relationTypeLabel + 方向箭头 →）→ 目标（徽标 + 目标名）→ [删除]；
+// 行：源（端点类型徽标 + 源名）→ 关系类型标签（relationTypeLabel + 方向箭头 →）→ 目标（徽标 + 目标名）→ [编辑说明][删除]；
 // 端点名旁的类型徽标**排在名称前**（列内对齐，见 DESIGN.md §relations-view）；端点点击跳各自宿主段详情（人物/设定/地点/伏笔/事件/时间点/参考资料 →
 // characters|setting|locations|hooks|timeline|timepoints|references）；大纲节点（S12.2 起）跳 #/outline/:nodeId。
 // 删除：ConfirmDialog 物理删确认（不可恢复，可重新建立）→ DELETE → toast「已删除关系」→ 重拉。
@@ -18,13 +18,14 @@ import type { RelationSummaryItem } from "../../lib/api";
 import { relationTypeLabel } from "../../lib/entity-detail";
 import { customRelationTypeUsages, relationTypeSelectOptions } from "../../lib/relation-types";
 import { ConfirmDialog } from "../outline/dialogs";
+import { EditRelationDialog } from "./edit-relation-dialog";
 import { EmptyState } from "../ui/empty-state";
 import { entityDetailPath } from "../../lib/entity-paths";
 import type { EntityType } from "@whispering233/ai-editor-shared";
 import { Alert, Button, Input, Select, Skeleton } from "antd";
 import { TypeChip } from "@/components/ui/tag-chip";
 import { PageDivider } from "@/components/ui/page-header";
-import { DeleteOutlined, SearchOutlined } from "@ant-design/icons";
+import { DeleteOutlined, EditOutlined, SearchOutlined } from "@ant-design/icons";
 import { navigate } from "../../hooks/use-route";
 import { useUiStore } from "../../stores/ui";
 
@@ -150,6 +151,7 @@ export function RelationsView({
   const [tick, setTick] = useState(0);
   const [filter, setFilter] = useState<RelationFilter>(EMPTY_RELATION_FILTER);
   const [deleteTarget, setDeleteTarget] = useState<RelationSummaryItem | null>(null);
+  const [editTarget, setEditTarget] = useState<RelationSummaryItem | null>(null);
 
   // 拉关系列表：scope 模式按端点过滤（source_type+source_id，depth=1）；
   // 列表模式拉全量（depth=1 双向紧邻；进入 tab 挂载即拉，外部 reloadKey / 内部 tick 变化重拉）
@@ -351,6 +353,15 @@ export function RelationsView({
                     </span>
                   </>
                 )}
+                {/* 编辑说明（label / description）——按钮在删除左侧；保存后走既有重载路径 */}
+                <Button
+                  color="default" variant="text"
+                  size="small"
+                  aria-label={`编辑关系说明（${endpointLabel(r, "source")} → ${endpointLabel(r, "target")}）`}
+                  title="编辑说明"
+                  icon={<EditOutlined />}
+                  onClick={() => setEditTarget(r)}
+                />
                 <Button
                   color="danger" variant="text"
                   size="small"
@@ -363,6 +374,15 @@ export function RelationsView({
             ))}
           </ul>
         </div>
+      )}
+
+      {/* 编辑关系说明（metadata 整体替换；成功 → toast + 重拉） */}
+      {editTarget && (
+        <EditRelationDialog
+          relation={editTarget}
+          onSaved={() => setTick((t) => t + 1)}
+          onClose={() => setEditTarget(null)}
+        />
       )}
 
       {/* 删关系确认（物理删，不可恢复，可重新建立——与详情页文案一致） */}
