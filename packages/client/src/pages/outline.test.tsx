@@ -18,8 +18,8 @@ import type {
   ProjectConfig,
 } from "@whispering233/ai-editor-shared";
 import Outline from "./Outline";
-import OutlineDetail from "./OutlineDetail";
-import { deleteInvalidatesSelection } from "../lib/outline-tree";
+import OutlineDetail, { isOutlineDetailDirty } from "./OutlineDetail";
+import { deleteInvalidatesSelection, findNode } from "../lib/outline-tree";
 import { useProjectStore } from "../stores/project";
 
 const media = vi.hoisted(() => ({ desktop: true }));
@@ -28,7 +28,7 @@ vi.mock("../hooks/use-media-query", () => ({
 }));
 
 // 大纲 loader 只记调用：SSR 不跑 effect，但「谁挂了这个 hook」可在渲染期观察到——
-// 桌面收起 / 窄屏深链这两条 rail 不渲染的路径下，壳必须是唯一的调用者（否则树永远不加载）。
+// 壳是**唯一**调用者（rail / 详情都由壳传 reload），详情不再自拉。
 const loader = vi.hoisted(() => ({ calls: [] as { withMetadata: boolean }[] }));
 vi.mock("../hooks/use-outline-loader", () => ({
   useOutlineLoader: (opts: { withMetadata: boolean }) => {
@@ -378,6 +378,11 @@ describe("大纲页 · 壳自身加载树（rail 不渲染的路径）", () => {
     expect(html).not.toContain('aria-label="大纲树"');
     expect(loader.calls).toEqual([{ withMetadata: true }]);
   });
+
+  it("rail + 详情都渲染时 loader 仍只有壳一份（详情不自拉、不重拉整树）", () => {
+    render({ nodeId: "ch-1" });
+    expect(loader.calls).toEqual([{ withMetadata: true }]);
+  });
 });
 
 describe("大纲页 · rail 宽度与收起（持久化）", () => {
@@ -429,7 +434,9 @@ describe("大纲页 · rail 宽度与收起（持久化）", () => {
 // 写正文入口迁移（writing-1）：详情页是章正文的另一个入口，写作页为一级页后目标改指 `#/writing/:id`。
 // 写法 = `Button href`（antd 渲染成 `<a>`）⇒ SSR 可直接断言目标；卷节点仍不给入口（正文只挂章）。
 describe("大纲节点详情页：写正文入口指向写作页", () => {
-  function renderDetail(nodeId: string): string {
+  function renderDetailFor(nodeId: string): string {
+    const node = findNode(OUTLINE.children, nodeId);
+    if (node === null) throw new Error(`测试数据里没有节点 ${nodeId}`);
     Object.assign(useProjectStore.getInitialState(), {
       config: CONFIG,
       outline: OUTLINE,
@@ -437,17 +444,68 @@ describe("大纲节点详情页：写正文入口指向写作页", () => {
       outlineLoading: false,
       outlineWithMetadata: true,
     });
-    return renderToString(<OutlineDetail nodeId={nodeId} />).replace(/<!--[^>]*-->/g, "");
+    return renderToString(
+      <OutlineDetail node={node} nodeId={nodeId} onReload={async () => {}} />,
+    ).replace(/<!--[^>]*-->/g, "");
   }
 
   it("章节点：「写正文」= 导航链接，目标 #/writing/:id（不再指旧 #/manuscript/:id）", () => {
-    const html = renderDetail("ch-1");
+    const html = renderDetailFor("ch-1");
     expect(html).toContain("写正文");
     expect(html).toContain('href="#/writing/ch-1"');
+    expect(html).toContain("anticon-edit");
     expect(html).not.toContain("#/manuscript/");
   });
 
   it("卷节点：不渲染「写正文」（正文只挂章，不留必定 400 的入口）", () => {
-    expect(renderDetail("vol-1")).not.toContain("写正文");
+    expect(renderDetailFor("vol-1")).not.toContain("写正文");
+  });
+
+  it("页头动作压缩为 icon-button：写正文 / 阅读进度 / 推演标记带 title 与 aria-label", () => {
+    const html = renderDetailFor("ch-1");
+    expect(html).toContain('aria-label="写正文"');
+    expect(html).toContain('aria-label="设为阅读进度"');
+    expect(html).toContain('aria-label="标记为推演节点"');
+    expect(html).toContain("anticon-aim");
+    expect(html).toContain("anticon-branches");
+    // 保存保留文字
+    expect(html).toContain("保 存");
+  });
+});
+
+// dirty 纯函数（壳的未保存守卫与详情表单同源）：标题 / 摘要 / data 任一未提交变化 → true。
+describe("大纲详情表单 dirty 判定", () => {
+  const node = OUTLINE.children[0].children![0]; // ch-1：title「雪夜出走」、无 summary / data
+
+  it("无变化 → false", () => {
+    expect(isOutlineDetailDirty(node, node.title, "", {})).toBe(false);
+  });
+
+  it("标题变化 → true", () => {
+    expect(isOutlineDetailDirty(node, "新标题", "", {})).toBe(true);
+  });
+
+  // 清空标题不是可提交变化（保存被标题非空校验拦下），dirty 也不成立
+  it("清空标题 → false", () => {
+    expect(isOutlineDetailDirty(node, "", "", {})).toBe(false);
+  });
+
+  it("摘要纯空白 → false", () => {
+    expect(isOutlineDetailDirty(node, node.title, "   ", {})).toBe(false);
+  });
+
+  it("摘要变化 → true", () => {
+    expect(isOutlineDetailDirty(node, node.title, "新摘要", {})).toBe(true);
+  });
+
+  it("data 变化 → true", () => {
+    expect(isOutlineDetailDirty(node, node.title, "", { reversal: "新反转" })).toBe(true);
+  });
+
+  // 基准 = 上次同步 / 保存的基线，不是当前 node：rail 改名后 node 先变，旧表单不能算 dirty
+  it("比较基准是基线而非当前 node", () => {
+    const base = { ...node, title: "旧标题" };
+    expect(isOutlineDetailDirty(base, "旧标题", "", {})).toBe(false);
+    expect(isOutlineDetailDirty(base, node.title, "", {})).toBe(true);
   });
 });

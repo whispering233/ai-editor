@@ -15,7 +15,8 @@
 // 2026-11（master-detail 改版）：本文件 = 中栏内分栏壳 `Outline` + 左列 `OutlineRail`（即原整页树视图）。
 // 壳：`#/outline` / `#/outline/:nodeId` 都渲染同一个壳，nodeId 只决定右列（详情 / 空态）；宽度 / 收起
 // 见 hooks/use-outline-rail。**选中唯一来源 = URL**：不另存组件选中态，行单击 = 导航 `#/outline/:id`
-// （同 id 幂等），选中行 = `bg-accent` + `aria-current="page"`；双击不再进详情；dirty 守卫留给后续卡。
+// （同 id 幂等），选中行 = `bg-accent` + `aria-current="page"`；双击不再进详情；未保存守卫 = 详情
+// 上报 dirty，rail 切换 / 空白区清选中 / 窄屏返回条 / 新建导航前先 `confirm`。
 // 路由：#/outline（2026-11 起只有树视图，写作入口独立成 #/writing）；数据：GET /api/v1/outline?with_metadata=true
 // （整树，按页开启见 hooks/use-outline-loader）+ GET /api/v1/relation（伏笔标记，S9.2）；操作：POST/PUT/DELETE /outline、PUT /project/config（设阅读进度）
 // 2026-09：卷/章行的类型徽标改为**编号徽标**（`第N卷` / `第N章`，展示口径——只计可见节点、删后重排，
@@ -27,7 +28,7 @@
 // 刷新策略：所有写操作成功后统一 loadOutline 重拉整树（服务端权威——move 重排 order、软删级联子树、
 // 还原级联；本地补丁易与服务端不一致；本地文件读取毫秒级，重拉成本可忽略）。outline 树数据仍在
 // project store（跨页共用：顶栏阅读进度标题映射、节点 id → title 映射），本页只持有 UI 态
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { DragEvent, KeyboardEvent, MouseEvent, ReactNode, RefObject } from "react";
 import { Button } from "antd";
 import { buildDeductionMarks, type OutlineNode } from "@whispering233/ai-editor-shared";
@@ -178,10 +179,14 @@ export default function Outline({ nodeId }: { nodeId?: string }) {
   const outlineError = useProjectStore((s) => s.outlineError);
   const config = useProjectStore((s) => s.config);
   const configLoading = useProjectStore((s) => s.configLoading);
-  // 壳自己也要拉树：rail 不渲染的两条路径（桌面收起 + 深链 `#/outline/:id`、窄屏 `#/outline/:id`）
-  // 下壳是唯一的加载者，否则 `outline` 永远是 null、详情列永远停在骨架。
-  // 卡 3 前与 rail / 详情各自的 loader 并存（store 幂等 + 在途早退，重复调用无副作用）。
-  const { retry: retryOutline } = useOutlineLoader({ withMetadata: true });
+  // 壳是**唯一**的大纲加载者（DESIGN.md `outline-page`「数据与刷新」）：rail / 详情都不再各自挂
+  // `useOutlineLoader`，`reload` 同时给保存后的整树收敛与 rail 写操作后的重拉。
+  const { reload, retry: retryOutline } = useOutlineLoader({ withMetadata: true });
+  // 数据变更信号（AI 提案确认写库 / MainToolbar 刷新按钮）：壳重拉树（rail 隐藏时也得刷）；
+  // 详情只重载关系 / 变更记录，不另发 GET（DESIGN.md `outline-page`「数据与刷新」）
+  useDataRefresh(() => void reload());
+  // 详情表单未保存状态（rail 切换 / 空白区 / 窄屏返回条 / 新建导航前 confirm）
+  const [detailDirty, setDetailDirty] = useState(false);
   const isDesktop = useMediaQuery("(min-width: 1024px)");
   const {
     layout: railLayout,
@@ -195,6 +200,19 @@ export default function Outline({ nodeId }: { nodeId?: string }) {
 
   const railCollapsed = isDesktop && railLayout.collapsed;
   const noProject = config === null && !configLoading;
+  // 切节点（含回 `#/outline`）清零 dirty：新节点尚未编辑
+  useEffect(() => setDetailDirty(false), [nodeId]);
+  /** 未保存守卫：true = 可以离开（无修改或用户确认放弃）；取消后留在原处、表单不清 */
+  async function confirmDiscard(): Promise<boolean> {
+    if (!detailDirty) return true;
+    return useUiStore.getState().confirm({
+      title: "放弃未保存的修改？",
+      description: "当前节点的修改尚未保存，切换后将丢失",
+    });
+  }
+
+  const selectedNode =
+    outline !== null && nodeId !== undefined ? findNode(outline.children, nodeId) : null;
 
   // 收起 / 展开入口：详情列页头标题行最左（`PageHeader` `leading`，同写作页）；窄屏无相邻栏不渲染
   const railToggle = isDesktop ? (
@@ -281,7 +299,7 @@ export default function Outline({ nodeId }: { nodeId?: string }) {
         </div>
       </section>
     );
-  } else if (findNode(outline.children, nodeId) === null) {
+  } else if (selectedNode === null) {
     // 坏 id / 已删节点：页头 + 引导（不留一个空白的详情列）
     detail = (
       <section className="flex min-h-0 flex-1 flex-col">
@@ -308,7 +326,16 @@ export default function Outline({ nodeId }: { nodeId?: string }) {
       </section>
     );
   } else {
-    detail = <OutlineDetail key={nodeId} nodeId={nodeId} leading={railToggle} />;
+    detail = (
+      <OutlineDetail
+        key={nodeId}
+        node={selectedNode}
+        nodeId={nodeId}
+        onReload={reload}
+        leading={railToggle}
+        onDirtyChange={setDetailDirty}
+      />
+    );
   }
 
   // rail：桌面展开态有；窄屏只在无 id（树页）时有；桌面收起态 = 0px（不渲染 rail，详情列吸收宽度）
@@ -328,6 +355,9 @@ export default function Outline({ nodeId }: { nodeId?: string }) {
         <OutlineRail
           railRef={railRef}
           nodeId={nodeId}
+          reload={reload}
+          retry={retryOutline}
+          confirmDiscard={confirmDiscard}
           width={
             isDesktop ? (railLayout.width ?? OUTLINE_RAIL_DEFAULT_WIDTH_CSS) : undefined
           }
@@ -351,6 +381,13 @@ export default function Outline({ nodeId }: { nodeId?: string }) {
           {!isDesktop && nodeId !== undefined && (
             <a
               href="#/outline"
+              onClick={(e) => {
+                // dirty 时先确认（取消 = 留在详情，不清表单）
+                e.preventDefault();
+                void confirmDiscard().then((ok) => {
+                  if (ok) navigate("/outline");
+                });
+              }}
               className="flex h-8 shrink-0 items-center gap-2 text-sm text-muted-foreground transition-colors hover:text-foreground"
             >
               <ArrowLeftOutlined className="text-xs" />
@@ -374,6 +411,9 @@ export default function Outline({ nodeId }: { nodeId?: string }) {
 function OutlineRail({
   railRef,
   nodeId,
+  reload,
+  retry,
+  confirmDiscard,
   width,
   className,
 }: {
@@ -381,6 +421,12 @@ function OutlineRail({
   railRef: RefObject<HTMLElement | null>;
   /** URL 选中节点（唯一选中来源；undefined = `#/outline` 无选中） */
   nodeId?: string;
+  /** 壳的整树重拉（写操作后收敛；本栏不自建 loader） */
+  reload: () => Promise<void>;
+  /** 壳的加载失败重试 */
+  retry: () => void;
+  /** 未保存守卫：true = 可以导航（无修改或用户确认放弃） */
+  confirmDiscard: () => Promise<boolean>;
   /** 展开态宽度（CSS 值或像素）；不传 = 不设内联宽（窄屏全宽走 className） */
   width?: number | string;
   /** 覆盖类（窄屏 `w-full border-r-0`——`cn` 用 twMerge，同属性后者胜） */
@@ -390,17 +436,14 @@ function OutlineRail({
   const outlineLoading = useProjectStore((s) => s.outlineLoading);
   const config = useProjectStore((s) => s.config);
   const configLoading = useProjectStore((s) => s.configLoading);
-  // 大纲加载（hook 管首拉/补齐/失败重试；`withMetadata` 保持既有口径——章的字数统计由写作页 rail / 章详情页消费）
-  const { reload, retry } = useOutlineLoader({ withMetadata: true });
+  // 删除是异步的：完成后要看**当前** URL（而非点击时闭包里的 nodeId）才决定是否收敛
+  const nodeIdRef = useRef(nodeId);
+  nodeIdRef.current = nodeId;
   // 跨页定位（U4 方案 A）：ui store 的 transient 目标节点 id——概览页点击「阅读进度」
   // 设置后跳转本页；本页消费（展开祖先+滚动+高亮）后清除，不侵入 hash 路由
   const focusOutlineNodeId = useUiStore((s) => s.focusOutlineNodeId);
   const clearFocusOutlineNode = useUiStore((s) => s.clearFocusOutlineNode);
   const setCurrentFocus = useUiStore((s) => s.setCurrentFocus);
-
-  // 数据变更信号（问题 1）：AI 提案确认写库 / MainToolbar 刷新按钮 → 重拉整树；
-  // 伏笔标记 effect 依赖 outline 对象，树重拉后自动联动刷新（见该 effect 注释）
-  useDataRefresh(() => void reload());
 
   const [error, setError] = useState<string | null>(null);
   /** 折叠的节点 id 集合（空集 = 全部展开） */
@@ -673,6 +716,14 @@ function OutlineRail({
       cancelCreate();
       return;
     }
+    // 发 API 前确认（新建成功后直接导航，不再弹第二次）。确认框抢焦点会先触发 InlineInput 的
+    // `onBlur=cancelCreate`，所以取消分支要把输入行与已输入卷名恢复回来（详情 dirty 不动）
+    const snapshot = { creatingAt, value: createValue };
+    if (!(await confirmDiscard())) {
+      setCreatingAt(snapshot.creatingAt);
+      setCreateValue(snapshot.value);
+      return;
+    }
     cancelCreate();
     try {
       const res = await createOutlineNode({ type, title, parent_id: parentId });
@@ -701,16 +752,18 @@ function OutlineRail({
 
   /** 行单击：非交互元素 → 导航到该节点（选中唯一来源 = URL）；交互元素（按钮/输入框/链接）
    * stopPropagation，不冒泡到树容器（容器单击 = 清选中） */
-  function handleRowClick(e: MouseEvent<HTMLDivElement>, node: OutlineNode) {
+  async function handleRowClick(e: MouseEvent<HTMLDivElement>, node: OutlineNode) {
     if ((e.target as HTMLElement).closest("button, input, a")) {
       e.stopPropagation();
       return;
     }
     e.stopPropagation();
     if (dragNodeId !== null) return; // 拖拽结束的收尾点击不导航
+    if (nodeId === node.id) return; // 同 id 幂等：不重复 push、不弹未保存确认
+    if (!(await confirmDiscard())) return; // 取消：留在原处、不清表单
     cancelEdit();
     cancelCreate();
-    navigate(`/outline/${node.id}`); // 同 id → navigate 内部 no-op
+    navigate(`/outline/${node.id}`);
   }
 
   /** 行键盘：URL 选中节点按 Enter → 新建子级（子级类型由父层级推导 CHILD_TYPE，
@@ -883,13 +936,13 @@ function OutlineRail({
     await submitDeductionMarks(toggledDeductionNodes(deduction.marks, node.id));
   }
 
-  /** 软删直接执行（H2：不再弹二次确认）；删除的是 URL 节点或其祖先 → 重拉树后回 `#/outline`
-   * （不留死详情）；OUTLINE_NODE_NOT_FOUND（已被 purge）→ 横幅 + 刷新树；其余错误 toast */
+  /** 软删直接执行（H2：不再弹二次确认）；删除的是**当前 URL** 指向的节点或其祖先 → 重拉树后回 `#/outline`
+   * （不留死详情）；OUTLINE_NODE_NOT_FOUND（已被 purge）→ 横幅 + 刷新树；其余错误 toast。
+   * 在途交互（删除请求 / 重拉树）期间用户可能已切到别的节点 ⇒ 收尾时按 `nodeIdRef`（当前 URL）
+   * 而非点击时的闭包重算，不误清刚切过去的新选中。 */
   async function handleDelete(node: OutlineNode) {
-    // 先判后删：删除成功后再看树就晚了（URL 节点已从树中消失，只能区分「本来就不存在」与「刚被删」）
-    const clearsSelection =
-      nodeId !== undefined &&
-      deleteInvalidatesSelection(outline?.children ?? [], node.id, nodeId);
+    // 先快照删除前的树：删除成功后该子树已不在树上，无法再判断「URL 节点是否在被打掉的子树里」
+    const treeBefore = outline?.children ?? [];
     try {
       const res = await deleteOutlineNode(node.id);
       const { children, relations, deltas } = res.cascaded;
@@ -901,7 +954,13 @@ function OutlineRail({
         .getState()
         .showToast(`已移入回收站${parts.length > 0 ? `（含 ${parts.join("、")}）` : ""}`);
       await afterTreeChanged();
-      if (clearsSelection) window.location.replace("#/outline");
+      const currentId = nodeIdRef.current;
+      if (
+        currentId !== undefined &&
+        deleteInvalidatesSelection(treeBefore, node.id, currentId)
+      ) {
+        window.location.replace("#/outline");
+      }
     } catch (err) {
       if (err instanceof ApiError && err.code === "OUTLINE_NODE_NOT_FOUND") {
         setError(describeOutlineError("OUTLINE_NODE_NOT_FOUND"));
@@ -963,7 +1022,7 @@ function OutlineRail({
         onDragLeave: (e: DragEvent<HTMLDivElement>) => handleDragLeave(e, node.id),
         onDrop: (e: DragEvent<HTMLDivElement>) => void handleDrop(e, node.id),
         "aria-current": selected ? ("page" as const) : undefined,
-        onClick: (e: MouseEvent<HTMLDivElement>) => handleRowClick(e, node),
+        onClick: (e: MouseEvent<HTMLDivElement>) => void handleRowClick(e, node),
         onKeyDown: (e: KeyboardEvent<HTMLDivElement>) => handleRowKeyDown(e, node),
         className: cn(
           "relative cursor-grab rounded-md px-2 py-1 transition-colors hover:bg-muted/60 active:cursor-grabbing",
@@ -1281,7 +1340,10 @@ function OutlineRail({
           // 空白区单击 = 清选中（回 `#/outline`）；交互元素 / 拖拽收尾不触发
           if ((e.target as HTMLElement).closest("button, input, a")) return;
           if (dragNodeId !== null) return;
-          navigate("/outline");
+          if (nodeId === undefined) return; // 已无选中：不弹确认
+          void confirmDiscard().then((ok) => {
+            if (ok) navigate("/outline");
+          });
         }}
       >
         {/* 页级错误横幅（destructive token 类） */}

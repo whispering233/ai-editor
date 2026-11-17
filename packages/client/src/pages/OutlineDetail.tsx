@@ -4,13 +4,14 @@
 // D2：header 加「标记为推演节点 / 移出推演节点」（仅章节点渲染）+ 元信息行推演徽标
 // （提交实现与大纲行右键菜单共用 = lib/deduction.ts）
 // 路由：#/outline/:nodeId（中栏大纲 tab 二级路由，main.tsx outline 分支拦截第二段，仿实体详情）
-// 数据：节点本体来自 project store 的 outline 树（GET /outline 已含 data）——findNode 按 id 查找，
-// 软删/缺失 → 404 态；**变更记录仅章**（卡片 1.2：卷/场景不渲染该区块，也不留必定 400 的入口）——
+// 数据：节点由页面壳 `findNode` 派生传入（本组件不自拉 GET /outline，也不自行重拉整树）；
+// **变更记录仅章**（卡片 1.2：卷/场景不渲染该区块，也不留必定 400 的入口）——
 // GET /delta/node/:nodeId（NodeDeltaList 区块）；
 // 相关实体 GET /relation?source_type=outline_node&source_id=:nodeId&depth=1（RelationsView scope 模式）
 // 编辑：PUT /outline/:nodeId——title/summary/data 部分更新（data 浅合并）；diff 只提交变更字段：
 // title 非空且有变化（shouldCommitTitle）、summary 有变化且允许清空（提交空串真正清除——
 // 服务端 patch.summary !== undefined 即写入）、data diffData（lib/entity-detail，空值规约）；
+// 成功后 `onReload` 由壳收敛整树（rail 标题 / 摘要跟着更新），表单回写 trimmed 值不闪回旧值。
 // 引用字段（climax_scene/inciting_scene）「未设置」→ 空串（服务端 z.string.optional 不接受 null）
 // 交互：详情页无面包屑（B1 移除）——返回上级走左栏 NavRail / 大纲树；header [保存] 整表单一次提交；
 // VALIDATION_ERROR → 结构化信息卡底部行内错误；「+ 新建变更」（S12.3）→ 内联表单（目标/字段/op/值/
@@ -18,7 +19,12 @@
 // 样式 token 类（oracle 红线：禁止硬编码色类）
 import { useEffect, useMemo, useState } from "react";
 import type { ReactNode } from "react";
-import { buildDeductionMarks, formatTimestamp } from "@whispering233/ai-editor-shared";
+import {
+  buildDeductionMarks,
+  formatTimestamp,
+  type OutlineNode,
+} from "@whispering233/ai-editor-shared";
+import { AimOutlined, BranchesOutlined, EditOutlined } from "@ant-design/icons";
 import { CreateRelationDialog } from "../components/entity/create-relation-dialog";
 import { RelationsView } from "../components/entity/relations-view";
 import { NodeDeltaList } from "../components/delta/node-delta-list";
@@ -27,7 +33,6 @@ import { TYPE_LABEL } from "../components/outline/dialogs";
 import { Button, Input, Select } from "antd";
 import { TypeChip } from "@/components/ui/tag-chip";
 import { PageHeader } from "@/components/ui/page-header";
-import { EmptyState } from "@/components/ui/empty-state";
 import { SectionCard } from "@/components/ui/section-card";
 import { ApiError, updateOutlineNode, type UpdateOutlineBody } from "../lib/api";
 import { diffData } from "../lib/entity-detail";
@@ -38,12 +43,10 @@ import {
   toggleConflictLevel,
   type NodeFieldConfig,
 } from "../lib/outline-detail";
-import { findNode, shouldCommitSummary, shouldCommitTitle } from "../lib/outline-tree";
+import { shouldCommitSummary, shouldCommitTitle } from "../lib/outline-tree";
 import { formatTextLength } from "../lib/manuscript";
-import { navigate } from "../hooks/use-route";
 import { useSaveShortcut } from "../lib/save-shortcut";
 import { useDataRefresh } from "../hooks/use-data-refresh";
-import { useOutlineLoader } from "../hooks/use-outline-loader";
 import { isCurrentPositionHost, setCurrentPosition } from "../lib/current-position";
 import {
   deductionMarkTitle,
@@ -55,26 +58,49 @@ import {
 import { useProjectStore } from "../stores/project";
 import { useUiStore } from "../stores/ui";
 
-/** 可嵌入（中栏分栏壳的右列）：`leading` = 页头标题行最左的槽（壳注入 rail 收起 / 展开钮）；
+/** 详情表单是否 dirty：标题 / 摘要 / data 任一有未提交变化（纯函数，供壳的未保存守卫与测试共用）。
+ * 基准 `baseline` = 上次同步 / 保存的服务端值，不是当前 node——rail 改名后 node 先变，拿 node 当基准
+ * 会把旧表单误判成 dirty 并让同步 effect 跳过，保存再把旧标题 PUT 回去。 */
+export function isOutlineDetailDirty(
+  baseline: OutlineNode,
+  titleValue: string,
+  summaryValue: string,
+  dataForm: Record<string, unknown>,
+): boolean {
+  return (
+    shouldCommitTitle(baseline.title, titleValue) ||
+    shouldCommitSummary(baseline.summary, summaryValue) ||
+    diffData(baseline.data ?? {}, dataForm) !== null
+  );
+}
+
+/** 可嵌入（中栏分栏壳的右列）：节点由壳 `findNode` 派生传入（本组件不自拉大纲）；
+ * `leading` = 页头标题行最左的槽（壳注入 rail 收起 / 展开钮）；`onReload` = 保存后由壳收敛整树；
+ * `onDirtyChange` = 未保存状态上报给壳（rail 切换 / 返回条 / 新建导航前确认）。
  * 页头常驻、内容区独立滚动（DESIGN.md §Layout「页头常驻」）。 */
 export default function OutlineDetail({
+  node,
   nodeId,
+  onReload,
   leading,
+  onDirtyChange,
 }: {
+  node: OutlineNode;
   nodeId: string;
+  onReload: () => Promise<void>;
   leading?: ReactNode;
+  onDirtyChange?: (dirty: boolean) => void;
 }) {
   const outline = useProjectStore((s) => s.outline);
-  const outlineLoading = useProjectStore((s) => s.outlineLoading);
   const config = useProjectStore((s) => s.config);
-  const configLoading = useProjectStore((s) => s.configLoading);
-  // 大纲加载（本页元信息行展示章的 metadata.textLength ⇒ withMetadata: true；
-  // hook 管首拉/补齐/失败重试——loadOutline 在 store 内静默吞错，页面以 outline===null 兜底）
-  const { reload, retry } = useOutlineLoader({ withMetadata: true });
-  // 表单（node 数据副本；树刷新后重置为服务端权威值）
-  const [titleValue, setTitleValue] = useState("");
-  const [summaryValue, setSummaryValue] = useState("");
-  const [dataForm, setDataForm] = useState<Record<string, unknown> | null>(null);
+  // 表单（node 数据副本；干净表单跟随服务端，dirty 表单保留——见下方同步 effect）
+  const [titleValue, setTitleValue] = useState(node.title);
+  const [summaryValue, setSummaryValue] = useState(node.summary ?? "");
+  const [dataForm, setDataForm] = useState<Record<string, unknown>>(
+    () => JSON.parse(JSON.stringify(node.data ?? {})) as Record<string, unknown>,
+  );
+  // 表单的基线 = 上次同步 / 保存的服务端值（dirty 判定与同步 effect 的闸门都用它，不用当前 node）
+  const [baseline, setBaseline] = useState<OutlineNode>(node);
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   // 设为阅读进度提交态（防重复提交）
@@ -88,21 +114,19 @@ export default function OutlineDetail({
   const [deltaFormOpen, setDeltaFormOpen] = useState(false);
   const [deltaReloadKey, setDeltaReloadKey] = useState(0);
 
-  // 数据变更信号（问题 1）：AI 提案确认写库 / MainToolbar 刷新按钮 → 重拉整树（node 变化驱动
-  // 表单重置）+ 相关实体与变更记录区块重载（AI 可能为本节点新增关系/变更记录）
+  // 数据变更信号（问题 1）：AI 提案确认写库 / MainToolbar 刷新按钮 → 只重载相关实体与变更记录
+  // 区块（AI 可能为本节点新增关系/变更记录）；整树由壳的 `useDataRefresh` 重拉一次，本组件不再
+  // 触发第二棵树的 GET（DESIGN.md `outline-page`「数据与刷新」）
   useDataRefresh(() => {
-    void reload();
     setRelKey((k) => k + 1);
     setDeltaReloadKey((k) => k + 1);
   });
 
-  const node = outline === null ? null : findNode(outline.children, nodeId);
-  const notFound = outline !== null && node === null;
-  const fields = node ? detailFieldsForNodeType(node.type) : [];
+  const fields = detailFieldsForNodeType(node.type);
   const sceneOptions = sceneNodeOptions(outline?.children ?? []);
   const isCurrent = config?.currentPosition === nodeId;
-  /** 本节点是否可承载「阅读进度」（卡片 1.1 章级收窄：仅章；节点未加载时不置灰按钮由 node===null 分支承担） */
-  const currentPositionHost = node !== null && isCurrentPositionHost(node.type);
+  /** 本节点是否可承载「阅读进度」（卡片 1.1 章级收窄：仅章） */
+  const currentPositionHost = isCurrentPositionHost(node.type);
   /** 本页节点的推演标记（未标记 / 非章 / 失效 id → undefined）：标记集合由 shared
    * `buildDeductionMarks` 现算（文案与章号同源），`config.deductionNodes` 由 store 重拉驱动刷新 */
   const deduction = useMemo(
@@ -123,35 +147,62 @@ export default function OutlineDetail({
   }, [deductionVisible, setCurrentFocus]);
 
   /** 本页节点是否可标记（§15 不变式 1：仅章；卷/场景不渲染入口——不留必定 400 的按钮） */
-  const deductionHost = node !== null && isDeductionMarkHost(node.type);
+  const deductionHost = isDeductionMarkHost(node.type);
   /** 本章正文字数文案（卡 12.5；卷/场景无正文，0 或未写 → null 不显示）——
    *  数据来自 GET /outline?with_metadata=true 的 metadata.textLength（不读正文全文） */
   const textLengthLabel = formatTextLength(
-    node?.type === "chapter" ? (node.metadata?.textLength ?? 0) : 0,
+    node.type === "chapter" ? (node.metadata?.textLength ?? 0) : 0,
   );
 
-  // 节点 → 表单（依赖 node 引用：outline 未刷新则引用稳定不重置；保存后 loadOutline 新树 → 重置）
+  // 节点 → 表单：换节点必同步；同节点则干净表单跟随服务端、dirty 表单保留。
+  // 依赖 `node` 引用：树 reload 换了引用（rail 行内改名 / AI 写库 / MainToolbar 刷新）时，干净表单
+  // 必须同步服务端的新标题 / 摘要 / data，否则之后点保存会把旧值 PUT 回去。
   useEffect(() => {
-    if (node === null) return;
+    if (node.id !== baseline.id) {
+      setTitleValue(node.title);
+      setSummaryValue(node.summary ?? "");
+      setDataForm(JSON.parse(JSON.stringify(node.data ?? {})) as Record<string, unknown>);
+      setBaseline(node);
+      return;
+    }
+    // 上次同步后用户改过表单 → 保留；否则跟随服务端（rail 改名 / AI 写库 / 刷新）
+    if (isOutlineDetailDirty(baseline, titleValue, summaryValue, dataForm)) return;
     setTitleValue(node.title);
     setSummaryValue(node.summary ?? "");
     setDataForm(JSON.parse(JSON.stringify(node.data ?? {})) as Record<string, unknown>);
+    setBaseline(node);
   }, [node]);
+
+  // 未保存状态上报壳（rail 切换 / 空白区清选中 / 窄屏返回条 / 新建导航前确认）
+  const dirty = isOutlineDetailDirty(baseline, titleValue, summaryValue, dataForm);
+  useEffect(() => {
+    onDirtyChange?.(dirty);
+  }, [dirty, onDirtyChange]);
+  // 详情被壳卸载（选中节点消失 / 切到空态）时清掉壳里的 detailDirty，避免残留脏标记卡住导航
+  useEffect(() => () => {
+    onDirtyChange?.(false);
+  }, [onDirtyChange]);
 
   /** 保存：diff 只提交变更字段（title/summary/data 一次提交，服务端部分更新 + data 浅合并） */
   async function handleSave() {
-    if (node === null || saving) return;
+    if (saving) return;
     const title = titleValue.trim();
     if (title === "") {
       setSaveError("标题不能为空");
       return false; // 保存失败：Ctrl+S 据此不生成备份
     }
     const patch: UpdateOutlineBody = {};
-    if (shouldCommitTitle(node.title, titleValue)) patch.title = title;
-    if (shouldCommitSummary(node.summary, summaryValue)) patch.summary = summaryValue.trim();
-    const dataDiff = diffData(node.data ?? {}, dataForm ?? {});
+    if (shouldCommitTitle(baseline.title, titleValue)) patch.title = title;
+    if (shouldCommitSummary(baseline.summary, summaryValue)) patch.summary = summaryValue.trim();
+    const dataDiff = diffData(baseline.data ?? {}, dataForm);
     if (dataDiff !== null) patch.data = dataDiff;
     if (Object.keys(patch).length === 0) {
+      // 表单已与基线同值：node 可能被外部改名（rail）/ AI 写库更新，先让表单跟随服务端再归零基线，
+      // 否则旧表单会被判 dirty 卡死
+      setTitleValue(node.title);
+      setSummaryValue(node.summary ?? "");
+      setDataForm(JSON.parse(JSON.stringify(node.data ?? {})) as Record<string, unknown>);
+      setBaseline(node);
       useUiStore.getState().showToast("没有变更");
       return;
     }
@@ -159,12 +210,16 @@ export default function OutlineDetail({
     setSaveError(null);
     try {
       await updateOutlineNode(node.id, patch);
+      // 回写 trimmed 值并把基线前移到刚提交的值：保存后 dirty 立即归零（重拉的新 node 走同步 effect 收敛）
+      setTitleValue(title);
+      setSummaryValue(summaryValue.trim());
+      setBaseline({ ...node, title, summary: summaryValue.trim(), data: dataForm });
       useUiStore.getState().showToast("已保存");
-      await reload();
+      await onReload();
     } catch (err) {
       if (err instanceof ApiError && err.code === "OUTLINE_NODE_NOT_FOUND") {
-        // 节点已被 purge：重拉树后自然进入 404 态（节点不在树中）
-        await reload();
+        // 节点已被 purge：壳重拉树后自然进入坏 id 空态（节点不在树中）
+        await onReload();
         return false;
       }
       setSaveError(err instanceof ApiError ? err.message : "保存失败，请重试");
@@ -176,7 +231,7 @@ export default function OutlineDetail({
 
   /** 设置 data 表单字段值 */
   function setDataField(key: string, value: unknown) {
-    setDataForm((prev) => (prev ? { ...prev, [key]: value } : prev));
+    setDataForm((prev) => ({ ...prev, [key]: value }));
   }
 
   /**
@@ -188,7 +243,7 @@ export default function OutlineDetail({
    * 入口可见性与右键菜单同口径（卡片 1.1）。
    */
   async function handleSetCurrent() {
-    if (node === null || settingCurrent || isCurrent || !currentPositionHost) return;
+    if (settingCurrent || isCurrent || !currentPositionHost) return;
     setSettingCurrent(true);
     try {
       await setCurrentPosition(node.id);
@@ -204,7 +259,7 @@ export default function OutlineDetail({
    * 在途防重入由 markingDeduction 承担。
    */
   async function handleToggleDeduction() {
-    if (node === null || markingDeduction || !deductionHost) return;
+    if (markingDeduction || !deductionHost) return;
     setMarkingDeduction(true);
     try {
       await submitDeductionMarks(toggledDeductionNodes(deduction, node.id));
@@ -213,56 +268,46 @@ export default function OutlineDetail({
     }
   }
 
-  // Ctrl/Cmd+S 保存（B2）：仅节点就绪时注册（notFound/无项目/加载失败时不抢快捷键）
-  useSaveShortcut(() => handleSave(), node !== null);
+  // Ctrl/Cmd+S 保存（B2）：行内编辑时 rail 的保存先注册在栈顶，未编辑时落到本详情表单
+  useSaveShortcut(() => handleSave());
 
   // ============ 渲染 ============
 
-  if (notFound) {
-    return (
-      <section>
-        <EmptyState
-          padding="lg"
-          action={
-            <div className="flex justify-center gap-2">
-              <a
-                href="#/trash"
-                className="rounded-md border border-border px-4 py-1.5 text-sm text-muted-foreground hover:bg-muted"
-              >
-                去回收站
-              </a>
-              <Button onClick={() => navigate("/outline")}>返回大纲</Button>
-            </div>
-          }
-        >
-          该节点不存在或已被删除
-        </EmptyState>
-      </section>
-    );
-  }
-
-  const noProject = config === null && !configLoading;
-
   return (
     <section className="flex min-h-0 flex-1 flex-col">
-      {/* 页头（统一壳）：标题 + 操作区（设为阅读进度 / 保存）+ 元信息行 + 分割线 */}
+      {/* 页头（统一壳）：标题 + 操作区（写正文 / 设为阅读进度 / 推演标记 / 保存）+ 元信息行 + 分割线。
+          窄屏 390 下四个动作排不进一行：节点动作压成 icon-button（`title` + `aria-label` 保留文字语义），
+          保存保留文字——`PageHeader` 的换行不足以让四枚文字按钮不被 overflow-hidden 裁切。 */}
       <PageHeader
-        title={node?.title ?? "…"}
+        title={node.title}
         leading={leading}
         truncateTitle
         action={
           <>
             {/* 写正文（卡 12.5）：仅章节点（正文只挂章，卷/场景 → 端点 400，不留必定失败的入口）；
                 入口指向写作页 #/writing/:id，`Button href` 渲染成 `<a>` ⇒ 保住导航链接语义（同大纲树写作入口的链接写法） */}
-            {node?.type === "chapter" && (
-              <Button href={`#/writing/${node.id}`}>写正文</Button>
+            {node.type === "chapter" && (
+              <Button
+                color="default"
+                variant="text"
+                size="small"
+                href={`#/writing/${node.id}`}
+                icon={<EditOutlined />}
+                title="写正文"
+                aria-label="写正文"
+              />
             )}
             {/* S13.2 设为阅读进度（动作入口；状态徽标在元信息行）：已是阅读进度 → 禁用 + 「阅读进度」标记，
                 与 S13.1 前大纲页 disabled={isCurrent || busy} 语义一致；
                 卡片 1.1 章级收窄：非章节点（卷/场景）禁用并说明原因——服务端接受非章会 400，
                 留一个必定失败的按钮只会报出误导性错误（同上） */}
             <Button
-              disabled={node === null || isCurrent || settingCurrent || !currentPositionHost}
+              color="default"
+              variant="text"
+              size="small"
+              disabled={isCurrent || settingCurrent || !currentPositionHost}
+              icon={<AimOutlined />}
+              aria-label={isCurrent ? "阅读进度" : "设为阅读进度"}
               title={
                 !currentPositionHost
                   ? "仅章节点可设为阅读进度（卷/场景不可标记）"
@@ -271,91 +316,54 @@ export default function OutlineDetail({
                     : "标记为阅读进度位置（顶栏展示 + 定位跳转基准）"
               }
               onClick={() => void handleSetCurrent()}
-            >
-              {isCurrent ? "阅读进度" : "设为阅读进度"}
-            </Button>
+            />
             {/* D2 推演节点标记（动作入口；状态徽标在元信息行）：仅章节点渲染（§15 不变式 1——
                 卷/场景服务端 400，不留必定失败的入口），文案按当前状态切换（已标记 → 移出） */}
             {deductionHost && (
               <Button
+                color="default"
+                variant="text"
+                size="small"
                 disabled={markingDeduction}
+                icon={<BranchesOutlined />}
+                aria-label={deductionMenuLabel(deductionMark !== undefined)}
                 title={
                   deductionMark !== undefined
                     ? "从推演节点集合中移出（剧情推演不再以本章为边界）"
                     : "标记为推演节点（剧情推演以本章为边界）"
                 }
                 onClick={() => void handleToggleDeduction()}
-              >
-                {deductionMenuLabel(deductionMark !== undefined)}
-              </Button>
+              />
             )}
-            <Button
-              type="primary"
-              onClick={() => void handleSave()}
-              disabled={node === null || saving}
-            >
+            <Button type="primary" onClick={() => void handleSave()} disabled={saving}>
               {saving ? "保存中…" : "保存"}
             </Button>
           </>
         }
         description={
           /* 元信息行：类型徽标 + 更新时间 + 推演标记（排在「阅读进度」左侧，同大纲行）+ 阅读进度 */
-          node ? (
-            <div className="flex items-center gap-2 text-xs text-muted-foreground">
-              <TypeChip tone={node.type === "volume" ? "default" : "soft"}>
-                {TYPE_LABEL[node.type]}
+          <div className="flex items-center gap-2 text-xs text-muted-foreground">
+            <TypeChip tone={node.type === "volume" ? "default" : "soft"}>
+              {TYPE_LABEL[node.type]}
+            </TypeChip>
+            <span>更新于 {formatTimestamp(node.updatedAt)}</span>
+            {textLengthLabel !== null && <span className="tabular-nums">{textLengthLabel}</span>}
+            {deductionMark !== undefined && (
+              <TypeChip
+                className="shrink-0"
+                title={deductionMarkTitle(deductionMark, deduction.length)}
+              >
+                {deductionMark.label}
               </TypeChip>
-              <span>更新于 {formatTimestamp(node.updatedAt)}</span>
-              {textLengthLabel !== null && <span className="tabular-nums">{textLengthLabel}</span>}
-              {deductionMark !== undefined && (
-                <TypeChip
-                  className="shrink-0"
-                  title={deductionMarkTitle(deductionMark, deduction.length)}
-                >
-                  {deductionMark.label}
-                </TypeChip>
-              )}
-              {isCurrent && <TypeChip className="shrink-0">阅读进度</TypeChip>}
-            </div>
-          ) : undefined
+            )}
+            {isCurrent && <TypeChip className="shrink-0">阅读进度</TypeChip>}
+          </div>
         }
       />
 
       {/* 内容区：独立滚动（页头不跟着走） */}
       <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">
-      {noProject ? (
-        /* 未打开项目：引导回首页（同大纲列表页） */
-        <EmptyState
-          padding="sm"
-          action={
-            <a href="#/" className="text-sm text-muted-foreground underline hover:text-foreground">
-              回到首页打开或创建书籍
-            </a>
-          }
-        >
-          未打开项目，无法编辑大纲
-        </EmptyState>
-      ) : outlineLoading && outline === null ? (
-        /* 加载骨架 */
-        <div className="space-y-2 rounded-md border border-border p-3">
-          {Array.from({ length: 6 }, (_, i) => (
-            <div
-              key={i}
-              className="h-5 animate-pulse rounded bg-muted"
-              style={{ width: `${92 - (i % 3) * 24}%`, marginLeft: (i % 3) * 20 }}
-            />
-          ))}
-        </div>
-      ) : outline === null ? (
-        /* 树加载失败（loadOutline 静默吞错后的兜底呈现，同大纲列表页） */
-        <div className="rounded-md border border-border p-4 text-sm text-muted-foreground">
-          大纲加载失败
-          <Button className="ml-3" onClick={retry}>
-            重试
-          </Button>
-        </div>
-      ) : node === null || dataForm === null ? null : (
-        /* 表单区：信息区（基础信息/结构化信息/变更记录/伏笔标记）在上，关联区（相关实体）在下 */
+        {/* 表单区：信息区（基础信息/结构化信息/变更记录/伏笔标记）在上，关联区（相关实体）在下 */}
         <div className="flex flex-col gap-4">
           <div className="flex min-w-0 flex-col gap-4">
             {/* 基础信息：标题/摘要 */}
@@ -391,7 +399,7 @@ export default function OutlineDetail({
                     <p className="mb-1 text-sm font-medium text-foreground">{f.label}</p>
                     <FieldControl
                       field={f}
-                      value={dataForm?.[f.key]}
+                      value={dataForm[f.key]}
                       sceneOptions={sceneOptions}
                       onChange={(v) => setDataField(f.key, v)}
                     />
@@ -447,11 +455,10 @@ export default function OutlineDetail({
             </SectionCard>
           </div>
         </div>
-      )}
       </div>
 
       {/* 新增关联对话框（详情模式：源固定为本大纲节点，S12.2 扩展） */}
-      {relationDialogOpen && node !== null && (
+      {relationDialogOpen && (
         <CreateRelationDialog
           source={{ type: "outline_node", id: node.id, name: node.title, nodeType: node.type }}
           onCreated={() => setRelKey((k) => k + 1)}
