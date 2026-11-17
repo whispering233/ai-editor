@@ -25,7 +25,7 @@ import {
   updateRelationMetadata,
   wouldCreateSettingCycle,
 } from "@whispering233/ai-editor-db";
-import { HOOK_RELATION_TYPES } from "@whispering233/ai-editor-shared";
+import { HOOK_RELATION_TYPES, normalizeRelationMetadata } from "@whispering233/ai-editor-shared";
 import {
   relationCreateReqSchema,
   relationQuerySchema,
@@ -82,6 +82,8 @@ relationRoutes.get("/", (c) => {
 });
 
 // POST /api/v1/relation —— 创建（判重 409；端点存在性校验；201）
+// metadata 经 shared `normalizeRelationMetadata` 归一（label/description trim、空串删键、其余键保留）；
+// 与 PUT 同口径——归一只有这一处实现，路由内不手写 trim。
 relationRoutes.post("/", async (c) => {
   const project = requireCurrentProject();
   const raw = await c.req.json().catch(() => null);
@@ -124,7 +126,7 @@ relationRoutes.post("/", async (c) => {
         targetType: target_type,
         targetId: target_id,
         relationType: relation_type,
-        ...(metadata !== undefined ? { metadata } : {}),
+        ...(metadata !== undefined ? { metadata: normalizeRelationMetadata(metadata) } : {}),
       },
       project.root,
     );
@@ -160,7 +162,8 @@ relationRoutes.delete("/:id", (c) => {
 // PUT /api/v1/relation/:id —— 更新关系元数据（「PUT /relation/:id」：
 // metadata 整体替换（非浅合并），清空传 {}；三元组不可变——要改连接请删后重建。
 // 404 语义：不存在或已软删（软删关系不可编辑）；db 层 null → 404。
-// label 首尾 trim（与 POST 创建侧对称；trim 后为空串 → 删除该键，等价清空）
+// metadata 经 shared `normalizeRelationMetadata` 归一（label/description trim、空串删键、其余键保留）；
+// 与 POST 创建侧同一实现，整体替换非浅合并。
 relationRoutes.put("/:id", async (c) => {
   const project = requireCurrentProject();
   const id = c.req.param("id");
@@ -169,17 +172,7 @@ relationRoutes.put("/:id", async (c) => {
   if (!parsed.success) {
     throw parsed.error; // → 400 VALIDATION_ERROR（metadata 必填、strict 拒绝未知键）
   }
-  let metadata = parsed.data.metadata;
-  const rawLabel = metadata.label;
-  if (typeof rawLabel === "string") {
-    const trimmed = rawLabel.trim();
-    if (trimmed === "") {
- // 空串标签 → 移除 label 键（等价清空；请求内其余键保留——metadata 整体替换语义）
-      metadata = Object.fromEntries(Object.entries(metadata).filter(([key]) => key !== "label"));
-    } else {
-      metadata = { ...metadata, label: trimmed };
-    }
-  }
+  const metadata = normalizeRelationMetadata(parsed.data.metadata);
   const row = updateRelationMetadata(project.db, id, metadata, nowIso());
   if (row === null) {
     throw new HttpError(404, "RELATION_NOT_FOUND", `关系不存在: ${id}`);
