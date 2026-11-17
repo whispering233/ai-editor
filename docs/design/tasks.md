@@ -4,17 +4,6 @@
 
 ## 当前任务卡
 
-### C4 — 关系说明编辑（label + description 共用表单）
-
-#### 范围
-- `components/entity/relations-view.tsx` 行尾加「编辑」`icon-button`（`EditOutlined`，删除按钮左侧）→ 受控 Dialog（复用 `components/ui/dialog.tsx`）：`label`（`input`）+ `description`（`textarea`）→ `PUT /api/v1/relation/:id`（metadata 整体替换，关框不提交）；成功后重载列表 + toast。
-- 表单组件抽到可复用位置（画布抽屉复用同一表单），提交逻辑与校验单份。
-- 单测：提交 payload 形状；空串 → 键被删；失败保留输入并显示错误。
-
-#### 依赖
-C1、C2。#### 完成判据
-：`pnpm -r build` → `pnpm typecheck`/`lint` 绿；client 测试绿；浏览器实测两处入口（列表 / 画布在 C7 复验）；commit + 干净。
-
 ### C5 — AI 工具收窄 + description 透传
 
 #### 范围
