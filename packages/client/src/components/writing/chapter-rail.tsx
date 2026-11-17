@@ -3,14 +3,15 @@
 // **纯 presenter**：行数据由页面经 `lib/writing.ts` 派生，折叠 state 也由页面持有；本组件不发请求、
 // 不做结构编辑（无新建 / 改名 / 删除 / 拖拽 / 右键菜单——结构编辑唯一入口仍是大纲树）。
 // 宽度 / 收起态由页面持有（hooks/use-writing-rail）：本组件只消费 width；右侧拖拽手柄由页面作为
-// 兄弟渲染（不塞进 rail 宽度内），收起 / 展开入口在正文列页头（`PanelHeader` `leading`）——
-// 本栏内不放收起入口（rail header 也不放；见 DESIGN.md `writing-page`「宽度与收起」）。
+// 兄弟渲染（不塞进 rail 宽度内），左栏收起 / 展开入口在正文列页头（`PanelHeader` `leading`）。
+// 本栏 header 只放「右侧详情收起 / 展开」（`detailCollapsed` / `onToggleDetail`，页面只在桌面且 rail
+// 未收起时传；不传 = 不渲染），见 DESIGN.md `writing-page`「宽度与收起」。
 //
 // 行几何与大纲树同密度：32px 行高、24px 折叠箭头盒、编号徽标 `min-w-14`（对齐口径见 DESIGN.md
 // §大纲页「缩进列对齐」）；章行是 `<a href="#/writing/:id">`，点击直接进正文，不渲染「写正文」按钮。
 import { useEffect, useRef } from "react";
 import { Button } from "antd";
-import { RightOutlined } from "@ant-design/icons";
+import { LeftOutlined, RightOutlined } from "@ant-design/icons";
 import { formatTextLength } from "../../lib/manuscript";
 import { errorBannerClass, skeletonClass } from "../../lib/styles";
 import { cn } from "../../lib/utils";
@@ -34,8 +35,12 @@ export interface ChapterRailProps {
   onRetry?: () => void;
   /** 覆盖类（窄屏两级导航时全宽且不留右边线：`w-full border-r-0`——`cn` 用 twMerge，同属性后者胜） */
   className?: string;
-  /** 展开态宽度（px）；不传 = 不设内联宽（窄屏全宽走 className） */
+  /** 展开态宽度（px）；不传 = 不设内联宽（窄屏 / 右侧详情收起时全宽走 className） */
   width?: number;
+  /** 右侧详情当前是否收起（只驱动 header 按钮图标 / 无障碍状态；正文列由页面决定是否渲染） */
+  detailCollapsed?: boolean;
+  /** 切换右侧详情收起态；不传 = 不渲染该按钮（窄屏无相邻正文列） */
+  onToggleDetail?: () => void;
 }
 
 export function ChapterRail({
@@ -48,6 +53,8 @@ export function ChapterRail({
   onRetry,
   className,
   width,
+  detailCollapsed,
+  onToggleDetail,
 }: ChapterRailProps) {
   // 换章后把选中行滚进可视区（`nearest`：已在视野内则不跳）。SSR 不跑 effect。
   const selectedRef = useRef<HTMLAnchorElement | null>(null);
@@ -68,10 +75,34 @@ export function ChapterRail({
       //（DESIGN.md §Layout「分栏边线单所有权」——手柄不画线，只有面板边线能覆盖抽屉 / 窄屏 / 收起）
       className={cn("flex shrink-0 flex-col border-r border-border", className)}
     >
-      {/* 子栏页头（40 + 24 + 分割线；收起 / 展开入口在正文列页头，不在本栏）。
+      {/* 子栏页头（40 + 24 + 分割线；左栏收起 / 展开入口在正文列页头，不在本栏）。
           `mb-0`：行区紧随分割线（DESIGN.md §Layout「工作台子栏页头」内容起点口径）；
-          横向内距用默认 `px-3`（加在两行包装上，分割线仍全幅）。 */}
-      <PanelHeader title="卷章" className="mb-0" />
+          横向内距用默认 `px-3`（加在两行包装上，分割线仍全幅）。
+          右端组 = 仅「收起 / 展开右侧详情」（最右端，紧邻被收起的正文列）。 */}
+      <PanelHeader
+        title="卷章"
+        className="mb-0"
+        actions={
+          onToggleDetail === undefined ? undefined : (
+            <Button
+              color="default"
+              variant="text"
+              size="small"
+              title={detailCollapsed ? "展开右侧详情" : "收起右侧详情"}
+              aria-label={detailCollapsed ? "展开右侧详情" : "收起右侧详情"}
+              aria-expanded={!detailCollapsed}
+              onClick={onToggleDetail}
+              icon={
+                detailCollapsed ? (
+                  <LeftOutlined className="text-sm" />
+                ) : (
+                  <RightOutlined className="text-sm" />
+                )
+              }
+            />
+          )
+        }
+      />
 
       {/* 行区：独立纵向滚动；p-2 = 8px */}
       <div className="min-h-0 flex-1 overflow-y-auto p-2">

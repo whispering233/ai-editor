@@ -279,7 +279,11 @@ describe("写作页 · 窄屏两级互斥（<1024px）", () => {
 
 describe("写作页 · 卷章导航栏宽度与收起（2b）", () => {
   /** hook 初始 state 在 SSR 读一次 localStorage（`typeof window` 守卫）⇒ 用 window stub 预置 */
-  function stubRailStorage(layout: { width: number; collapsed: boolean }) {
+  function stubRailStorage(layout: {
+    width: number;
+    collapsed: boolean;
+    detailCollapsed?: boolean;
+  }) {
     vi.stubGlobal("window", {
       localStorage: {
         getItem: (key: string) =>
@@ -335,6 +339,101 @@ describe("写作页 · 卷章导航栏宽度与收起（2b）", () => {
     expect(html).not.toContain('aria-label="展开卷章导航栏"');
     expect(html).not.toContain('aria-label="收起卷章导航栏"');
     expect(html).not.toContain('aria-label="调整卷章导航栏宽度"');
+  });
+});
+
+describe("写作页 · 右侧详情收起（设计：`writing-page`「宽度与收起」）", () => {
+  /** 同上方：SSR 下 hook 的初始 state 从 localStorage 预置 */
+  function stubRailStorage(layout: {
+    width: number;
+    collapsed: boolean;
+    detailCollapsed?: boolean;
+  }) {
+    vi.stubGlobal("window", {
+      localStorage: {
+        getItem: (key: string) =>
+          key === "ai-editor:writing-rail" ? JSON.stringify(layout) : null,
+        setItem: () => {},
+      },
+    });
+  }
+
+  it("展开态：rail header 右端组 = 「收起右侧详情」（右箭头 + aria-expanded），正文列照常", () => {
+    stubRailStorage({ width: 333, collapsed: false, detailCollapsed: false });
+    const html = render({ chapterId: "ch-1" });
+    expect(html).toContain('aria-label="收起右侧详情"');
+    expect(html).toContain('aria-expanded="true"');
+    expect(html).not.toContain('aria-label="展开右侧详情"');
+    // 图标 = 当前点击动作（展开态收起 = 右箭头；不是圆钮 / 双箭头）
+    expect(html).toContain("anticon-right");
+    expect(html).not.toContain("ant-btn-circle");
+    // 位置 = rail header（在正文列页头「收起卷章导航栏」之前），且排在 rail 标题「卷章」之后
+    expect(html.indexOf('aria-label="收起右侧详情"')).toBeLessThan(
+      html.indexOf('aria-label="收起卷章导航栏"'),
+    );
+    expect(html.indexOf('aria-label="收起右侧详情"')).toBeGreaterThan(
+      html.indexOf(">卷章<"),
+    );
+    // 正常两栏：rail 像素宽 + 手柄 + 正文列
+    expect(html).toContain("width:333px");
+    expect(html).toContain("border-r border-border");
+    expect(html).toContain('aria-label="调整卷章导航栏宽度"');
+    expect(html).toContain('aria-label="上一章"');
+  });
+
+  it("收起态：正文列整列不渲染、rail 全宽（无内联宽 / 无右边线 / 无手柄）、按钮转为展开", () => {
+    stubRailStorage({ width: 333, collapsed: false, detailCollapsed: true });
+    const html = render({ chapterId: "ch-1" });
+    // 按钮：左箭头 + 「展开右侧详情」
+    expect(html).toContain('aria-label="展开右侧详情"');
+    expect(html).toContain('aria-expanded="false"');
+    expect(html).toContain("anticon-left");
+    expect(html).not.toContain('aria-label="收起右侧详情"');
+    // rail 吸收全宽：不传 width（无内联宽）+ `w-full border-r-0`（邻栏不在，不画分栏线）
+    expect(html).not.toContain("width:333px");
+    expect(html).toContain("w-full border-r-0");
+    expect(html).not.toContain("border-r border-border");
+    // 不渲染手柄（拖拽只在两栏展开态有意义）
+    expect(html).not.toContain('aria-label="调整卷章导航栏宽度"');
+    // 正文列（含页头 / 编辑器）整列卸载；rail 本身照常（选中行保留）
+    expect(html).not.toContain(">写作<");
+    expect(html).not.toContain('aria-label="上一章"');
+    expect(html).toContain('aria-current="page"');
+  });
+
+  it("无 id 时收起：不渲染正文列空态提示（只留 rail 全宽）", () => {
+    stubRailStorage({ width: 333, collapsed: false, detailCollapsed: true });
+    const html = render();
+    expect(html).not.toContain(">写作<");
+    expect(html).not.toContain("从左侧选择一章开始写作");
+    expect(html).not.toContain("还没有章节");
+    expect(html).toContain(">卷章<");
+    expect(html).toContain("w-full border-r-0");
+  });
+
+  it("rail 自身收起时详情列保留（两栏不会同时收起）：无详情钮、正文列照常", () => {
+    stubRailStorage({ width: 333, collapsed: true, detailCollapsed: true });
+    const html = render({ chapterId: "ch-1" });
+    expect(html).toContain('aria-label="展开卷章导航栏"');
+    expect(html).not.toContain('aria-label="展开右侧详情"');
+    expect(html).not.toContain('aria-label="收起右侧详情"');
+    expect(html).toContain('aria-label="上一章"');
+  });
+
+  it("专注模式：存储的 detailCollapsed 不生效，正文独占", () => {
+    stubRailStorage({ width: 333, collapsed: false, detailCollapsed: true });
+    const html = render({ chapterId: "ch-1", focusMode: true });
+    expect(html).toContain("h-5");
+    expect(html).not.toContain(">卷章<");
+  });
+
+  it("窄屏：不渲染右侧详情钮，存储的 detailCollapsed 不生效（正文列照常）", () => {
+    stubRailStorage({ width: 333, collapsed: false, detailCollapsed: true });
+    const html = render({ desktop: false, chapterId: "ch-1" });
+    expect(html).not.toContain('aria-label="展开右侧详情"');
+    expect(html).not.toContain('aria-label="收起右侧详情"');
+    expect(html).toContain("章节目录");
+    expect(html).toContain('aria-label="上一章"');
   });
 });
 

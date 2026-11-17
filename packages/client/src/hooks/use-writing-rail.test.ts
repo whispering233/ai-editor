@@ -1,5 +1,5 @@
 // use-writing-rail 纯函数测试：默认值、localStorage 防御解析（坏 JSON / 非对象 / 数组 / width
-// 缺失或非有限 → 整体回退默认）、宽度收敛、收起态仅严格 true。hook 本体依赖 window/localStorage
+// 缺失或非有限 → 整体回退默认）、宽度收敛、两档收起态仅严格 true。hook 本体依赖 window/localStorage
 // （含拖拽/持久化副作用），node 环境不渲染（仓库无 jsdom，同 use-panels.test.ts 约定）。
 import { describe, expect, it } from "vitest";
 import {
@@ -11,10 +11,11 @@ import {
 } from "./use-writing-rail";
 
 describe("defaultWritingRailLayout", () => {
-  it("默认 240px、未收起", () => {
+  it("默认 240px、两档均未收起", () => {
     expect(defaultWritingRailLayout()).toEqual({
       width: WRITING_RAIL_DEFAULT_WIDTH,
       collapsed: false,
+      detailCollapsed: false,
     });
   });
 });
@@ -54,5 +55,18 @@ describe("parseWritingRailLayout（防御解析）", () => {
     expect(parseWritingRailLayout('{"width":240,"collapsed":"yes"}').collapsed).toBe(false);
     expect(parseWritingRailLayout('{"width":240,"collapsed":1}').collapsed).toBe(false);
     expect(parseWritingRailLayout('{"width":240}').collapsed).toBe(false);
+  });
+
+  it("右侧详情收起仅严格 true 生效（旧存储缺字段 = false）", () => {
+    expect(
+      parseWritingRailLayout('{"width":240,"detailCollapsed":true}').detailCollapsed,
+    ).toBe(true);
+    expect(
+      parseWritingRailLayout('{"width":240,"detailCollapsed":"yes"}').detailCollapsed,
+    ).toBe(false);
+    expect(parseWritingRailLayout('{"width":240,"detailCollapsed":1}').detailCollapsed).toBe(
+      false,
+    );
+    expect(parseWritingRailLayout('{"width":240,"collapsed":true}').detailCollapsed).toBe(false);
   });
 });

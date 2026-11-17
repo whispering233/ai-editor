@@ -45,6 +45,7 @@ export default function Writing({ chapterId }: { chapterId?: string }) {
     moveResize,
     endResize,
     toggleCollapse: toggleRailCollapse,
+    toggleDetail: toggleRailDetail,
   } = useWritingRail(isDesktop);
 
   // 卷折叠 state = 页面 state（session；不写 localStorage，刷新复位、切章不重置）
@@ -100,6 +101,10 @@ export default function Writing({ chapterId }: { chapterId?: string }) {
   // rail：桌面展开态有；窄屏只在无 id（目录页）时有；桌面收起态 = 0px（不渲染 rail，正文列吸收宽度）。
   // 专注模式两者都不渲染。
   const railCollapsed = isDesktop && railLayout.collapsed;
+  // 右侧详情（正文列）收起（桌面态才生效）：正文列整列不渲染、rail 吸收全宽。
+  // rail 收起时正文列必须留着（两档收起各靠对侧那一栏的按钮，rail 不在时正文列保留）；
+  // 专注模式无 rail / 页头，正文列不被该偏好隐藏。
+  const detailHidden = isDesktop && !focusMode && !railCollapsed && railLayout.detailCollapsed;
   const rail =
     !focusMode && (isDesktop || chapterId === undefined) && !railCollapsed ? (
       <ChapterRail
@@ -112,8 +117,14 @@ export default function Writing({ chapterId }: { chapterId?: string }) {
         loading={outline === null}
         error={!isDesktop && outlineFailed ? "大纲加载失败，章节目录暂不可用" : null}
         onRetry={retry}
-        width={isDesktop ? railLayout.width : undefined}
-        className={isDesktop ? undefined : "w-full border-r-0"}
+        // 右侧详情收起 = rail 吸收全宽（不写 layout.width）；窄屏全宽同此口径
+        width={isDesktop && !detailHidden ? railLayout.width : undefined}
+        // 无邻栏时抹掉 rail 自带的右边线（DESIGN.md §Layout「分栏边线单所有权」）；
+        // 右侧详情收起时邻栏不在，同窄屏
+        className={isDesktop && !detailHidden ? undefined : "w-full border-r-0"}
+        // 详情收起按钮只在桌面态传给 rail（窄屏无相邻正文列）
+        detailCollapsed={isDesktop ? railLayout.detailCollapsed : undefined}
+        onToggleDetail={isDesktop ? toggleRailDetail : undefined}
       />
     ) : null;
 
@@ -255,8 +266,8 @@ export default function Writing({ chapterId }: { chapterId?: string }) {
       )}
     >
       {rail}
-      {/* 桌面展开态右边界 6px 拖拽手柄；收起态不渲染（拖拽与收起互斥） */}
-      {!focusMode && isDesktop && !railCollapsed && (
+      {/* 桌面展开态右边界 6px 拖拽手柄；收起态 / 右侧详情收起（rail 全宽）不渲染 */}
+      {!focusMode && isDesktop && !railCollapsed && !detailHidden && (
         <ResizeHandle
           label="调整卷章导航栏宽度"
           active={resizing}
@@ -266,8 +277,9 @@ export default function Writing({ chapterId }: { chapterId?: string }) {
         />
       )}
       {/* 桌面端 `pt-0`：页头 `-mx-6` 穿透列内边距后分割线全幅（DESIGN.md §Layout「工作台子栏页头」）；
-          窄屏保留 p-6（返回条与内边距不变） */}
-      {bodyContent !== null && (
+          窄屏保留 p-6（返回条与内边距不变）。右侧详情收起时正文列（含 bodyContent）整列不渲染
+          （自动保存生命周期在编辑器自身，不在此改；宽度保留在存储里，展开恢复原宽）。 */}
+      {bodyContent !== null && !detailHidden && (
         <div className={cn("flex min-h-0 min-w-0 flex-1 flex-col p-6", isDesktop && "pt-0")}>
           {/* 窄屏「章节目录」返回条（32px，滚动区之外；专注模式不渲染） */}
           {!isDesktop && chapterId !== undefined && !focusMode && (

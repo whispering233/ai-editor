@@ -1,6 +1,7 @@
 // 写作页卷章导航栏宽度与收起态 hook（DESIGN.md `writing-page`「宽度与收起」）：
 // - 桌面态（≥1024px）宽度为像素（默认 240，拖拽区间 200–480），可收起为 0px；宽度保留、展开恢复原宽
-// - 宽度与收起态持久化 localStorage（key ai-editor:writing-rail，全局一份、不随书；不进项目文件）
+// - 右侧详情收起（detailCollapsed）= 详情列不渲染、rail 吸收全宽、不改存宽度、不自动展开
+// - 宽度 / 两档收起态持久化 localStorage（key ai-editor:writing-rail，全局一份、不随书；不进项目文件）
 // - 拖拽期间（moveResize）只更新内存态，结束（endResize）时一次写入 localStorage
 // - 纯函数（defaultWritingRailLayout / parseWritingRailLayout）从 hook 抽出供测试；hook 本体依赖 window，node 环境不渲染
 import { useEffect, useRef, useState } from "react";
@@ -17,18 +18,21 @@ export const WRITING_RAIL_MAX_WIDTH = 480;
 
 export interface WritingRailLayout {
   width: number;
+  /** 卷章导航栏（左栏）收起：整栏不渲染，正文列吸收宽度 */
   collapsed: boolean;
+  /** 右侧详情收起：正文列不渲染、rail 吸收全宽（URL 选中保留，不自动展开） */
+  detailCollapsed: boolean;
 }
 
 /** 默认布局（无持久化 / 解析失败时） */
 export function defaultWritingRailLayout(): WritingRailLayout {
-  return { width: WRITING_RAIL_DEFAULT_WIDTH, collapsed: false };
+  return { width: WRITING_RAIL_DEFAULT_WIDTH, collapsed: false, detailCollapsed: false };
 }
 
 /**
  * 解析持久化 JSON（localStorage 防御）：
  * - null / 空串 / 非法 JSON / 非对象 / 数组 / width 缺失或非有限数值 → 整体回退默认
- * - 宽度按 [min, max] 静态收敛（越界取整收敛）；收起态仅严格 true 生效（其他值按 false）
+ * - 宽度按 [min, max] 静态收敛（越界取整收敛）；两档收起态仅严格 true 生效（其他值 / 缺字段按 false）
  */
 export function parseWritingRailLayout(raw: string | null): WritingRailLayout {
   if (!raw) return defaultWritingRailLayout();
@@ -46,6 +50,7 @@ export function parseWritingRailLayout(raw: string | null): WritingRailLayout {
   return {
     width: clampPanelWidth(width, WRITING_RAIL_MIN_WIDTH, WRITING_RAIL_MAX_WIDTH),
     collapsed: rec.collapsed === true,
+    detailCollapsed: rec.detailCollapsed === true,
   };
 }
 
@@ -69,7 +74,7 @@ function writeStorage(layout: WritingRailLayout): void {
 }
 
 /**
- * 卷章导航栏状态 hook：宽度（像素）+ 收起态，localStorage 持久化。
+ * 卷章导航栏状态 hook：宽度（像素）+ 两档收起态，localStorage 持久化。
  * 拖拽采用「起始快照 + 增量」模型：startResize 记录起点与起始宽，moveResize 每帧只更新内存态，
  * endResize 用 dragRef 的 lastX 算最终宽度并一次写入存储（不依赖可能尚未渲染的 state）。
  * desktop 仅用于跨断点兜底：拖拽中视口缩到 <1024px 时手柄卸载、pointerup 不再到达它。
@@ -138,5 +143,14 @@ export function useWritingRail(desktop: boolean) {
     });
   }
 
-  return { layout, resizing, startResize, moveResize, endResize, toggleCollapse };
+  /** 切换右侧详情收起态（正文列不渲染、rail 吸收全宽、不改存宽度）；立即持久化 */
+  function toggleDetail() {
+    setLayout((prev) => {
+      const next = { ...prev, detailCollapsed: !prev.detailCollapsed };
+      writeStorage(next);
+      return next;
+    });
+  }
+
+  return { layout, resizing, startResize, moveResize, endResize, toggleCollapse, toggleDetail };
 }
