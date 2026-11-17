@@ -88,10 +88,10 @@ import {
   findNode,
   findNodeChildren,
   findNodePath,
-  findParentIdOf,
   isNoopDrop,
   numberOutline,
   ROOT_NODE_ID,
+  resolveDropPlan,
   sameDragTarget,
   shouldCommitSummary,
   shouldCommitTitle,
@@ -794,7 +794,9 @@ function OutlineRail({
 
   // ============ 拖拽移动（S13.1：原生 HTML5 DnD，上下半判定 + 插入指示线，同级排序可用） ============
   // 语义：拖到目标行上半 = 插到该节点前（该行上边缘指示线）、下半 = 插到该节点后（下边缘指示线）；
-  // 目标父 = 目标行的父（canMoveTo 过滤：层级约束 + 不自挂/子树）；顶层空白区 = 排 root 末尾（保留原语义）
+  // 目标父 = 目标行的父；目标行的父不合法但目标行自身可承载（空卷 / 折叠卷 / 空章，也含展开的非空卷 /
+  // 非空章）⇒ 整行 = 落为该行子级末尾（行体高亮）；顶层空白区 = 排 root 末尾（保留原语义）。
+  // 判定单源 = resolveDropPlan。
 
   function handleDragStart(e: DragEvent, node: OutlineNode) {
     e.dataTransfer.setData("text/plain", node.id);
@@ -814,20 +816,19 @@ function OutlineRail({
     return e.clientY < rect.top + rect.height / 2 ? "before" : "after";
   }
 
-  /** 行 dragover：canMoveTo 过滤（**目标父 = 目标行的父**）→ 设置插入目标（去重防高频重渲染） */
+  /** 行 dragover：resolveDropPlan 判定（父合法 → 同级前后；目标行可承载 → 落为子级）→
+   * 设置落点（去重防高频重渲染） */
   function handleDragOver(e: DragEvent, targetNodeId: string) {
     e.stopPropagation(); // 行内事件不冒泡到顶层容器（避免目标高亮错乱）
-    const dragNode = dragNodeId ? findNode(outline?.children ?? [], dragNodeId) : null;
+    const nodes = outline?.children ?? [];
+    const dragNode = dragNodeId ? findNode(nodes, dragNodeId) : null;
     if (!dragNode) return;
-    // 目标父 = 目标行的父（root 下的行 → ROOT_NODE_ID）——插到该行前/后 = 作为该行父的子节点；
-    // 注意不能检查 canMoveTo(dragNode, targetNodeId)：那会让 scene 拖到 chapter 行通过（scene 可挂
-    // chapter）但实际插入目标父是 volume（400 INVALID_HIERARCHY）
-    const targetParentId = findParentIdOf(outline?.children ?? [], targetNodeId) ?? ROOT_NODE_ID;
-    if (!canMoveTo(dragNode, targetParentId, outline?.children ?? [])) return;
+    // 上下半要先从事件取（currentTarget 只在事件回调里有效）；合法性交给 resolveDropPlan
+    const plan = resolveDropPlan(nodes, dragNode.id, targetNodeId, insertSideFromEvent(e));
+    if (plan === null) return;
     e.preventDefault(); // 允许 drop
     e.dataTransfer.dropEffect = "move";
-    const next: DragTarget = { kind: insertSideFromEvent(e), nodeId: targetNodeId };
-    setDragTarget((prev) => (sameDragTarget(prev, next) ? prev : next));
+    setDragTarget((prev) => (sameDragTarget(prev, plan.target) ? prev : plan.target));
   }
 
   /** 行 dragleave：仅真正离开该行才清除该行的插入目标（子元素间移动不触发） */
@@ -839,40 +840,37 @@ function OutlineRail({
     }
   }
 
-  /** 行 drop：按插入位置计算 order → PUT /move（原地放置不发请求） */
+  /** 行 drop：resolveDropPlan → order → PUT /move（原地放置不发请求） */
   async function handleDrop(e: DragEvent, targetNodeId: string) {
     e.stopPropagation();
     e.preventDefault();
     if (!dragNodeId) return;
-    const dragNode = findNode(outline?.children ?? [], dragNodeId);
+    const nodes = outline?.children ?? [];
+    const dragNode = findNode(nodes, dragNodeId);
     if (!dragNode) return;
-    const parentId = findParentIdOf(outline?.children ?? [], targetNodeId) ?? ROOT_NODE_ID;
-    if (!canMoveTo(dragNode, parentId, outline?.children ?? [])) return;
+    // order 按 drop 瞬间的上下半重新判定（与 dragover 同一条判定，防异步渲染滞后）
+    const plan = resolveDropPlan(nodes, dragNode.id, targetNodeId, insertSideFromEvent(e));
+    if (plan === null) return;
     // 锚点 = 拖拽节点自身：插到自己前/后 = 原地放置（剔除后锚点消失会误回退末尾，需提前拦截）
-    if (targetNodeId === dragNode.id) {
+    if (plan.insert.kind !== "end" && plan.insert.nodeId === dragNode.id) {
       setDragNodeId(null);
       setDragTarget(null);
       return;
     }
-    // order 按 drop 瞬间的上下半重新判定（防异步渲染滞后）；剔除拖拽节点后计算（oracle M1 方案 B——
-    // 同父重排锚点在下方时 pre-removal 数组会错位 1 位）
-    const parentChildren = findNodeChildren(outline?.children ?? [], parentId) ?? [];
-    const order = dropInsertOrder(
-      parentChildren,
-      { kind: insertSideFromEvent(e), nodeId: targetNodeId },
-      dragNode.id,
-    );
+    // 剔除拖拽节点后计算（oracle M1 方案 B——同父重排锚点在下方时 pre-removal 数组会错位 1 位）
+    const parentChildren = findNodeChildren(nodes, plan.parentId) ?? [];
+    const order = dropInsertOrder(parentChildren, plan.insert, dragNode.id);
     // 原地放置（父不变且移动后位置不变）：不发请求，直接清理拖拽态（避免误导 toast「已移动」）
-    if (isNoopDrop(outline?.children ?? [], dragNode.id, parentId, order)) {
+    if (isNoopDrop(nodes, dragNode.id, plan.parentId, order)) {
       setDragNodeId(null);
       setDragTarget(null);
       return;
     }
     setBusy(true);
     try {
-      await moveOutlineNode(dragNode.id, { parent_id: parentId, order });
+      await moveOutlineNode(dragNode.id, { parent_id: plan.parentId, order });
       useUiStore.getState().showToast(`已移动《${dragNode.title}》`);
-      await afterTreeChanged(parentId);
+      await afterTreeChanged(plan.parentId);
     } catch (err) {
       setError(describeOutlineError(errorCode(err)));
     } finally {
@@ -1012,6 +1010,8 @@ function OutlineRail({
       const editingSummary = editing?.nodeId === node.id && editing.field === "summary";
       const insertBefore = dragTarget?.kind === "before" && dragTarget.nodeId === node.id;
       const insertAfter = dragTarget?.kind === "after" && dragTarget.nodeId === node.id;
+      // 整行落为子级（空卷 / 折叠卷 / 空章）：行体淡染 + 描边，不画插入线
+      const dropInside = dragTarget?.kind === "inside" && dragTarget.nodeId === node.id;
       const isDragging = dragNodeId === node.id;
       const creatingHere = creatingAt?.parentId === node.id;
       const focused = node.id === focusedNodeId;
@@ -1040,9 +1040,11 @@ function OutlineRail({
           focused && "bg-primary/10 ring-1 ring-primary/30 ring-inset", // 新建/定位临时高亮（3s 消失）
           isDragging && "opacity-50",
           selected && "bg-accent", // 选中（URL）= surface-muted 灰面 + 文字不变色（同左栏导航）
+          // 落为子级的行体高亮（拖拽态临时反馈，压在选中面之上才能看见）
+          dropInside && "bg-primary/10 ring-1 ring-primary/30 ring-inset",
         ),
         style: { paddingLeft: depth * 20 + 8 },
-        title: "拖动到目标行即可移动（上半=插前、下半=插后）",
+        title: "拖动到目标行即可移动（上半=插前、下半=插后；目标行可承载时整行=落为子级）",
       };
       // 行内容（第一行 + 摘要第二行 + 插入指示线）
       const rowChildren = (

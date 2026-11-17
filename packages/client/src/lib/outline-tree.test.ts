@@ -18,6 +18,7 @@ import {
   isNoopDrop,
   numberOutline,
   parentOptionsForType,
+  resolveDropPlan,
   ROOT_NODE_ID,
   ROOT_PARENT_OPTION,
   sameDragTarget,
@@ -278,9 +279,16 @@ describe("sameDragTarget（dragover 高频去重，S13.1）", () => {
       sameDragTarget({ kind: "after", nodeId: "ch-1" }, { kind: "after", nodeId: "ch-1" }),
     ).toBe(true);
     expect(sameDragTarget({ kind: "root-end" }, { kind: "root-end" })).toBe(true);
+    expect(
+      sameDragTarget({ kind: "inside", nodeId: "vol-1" }, { kind: "inside", nodeId: "vol-1" }),
+    ).toBe(true);
     expect(sameDragTarget(null, { kind: "before", nodeId: "ch-1" })).toBe(false);
     expect(
       sameDragTarget({ kind: "before", nodeId: "ch-1" }, { kind: "after", nodeId: "ch-1" }),
+    ).toBe(false);
+    // 同一行：同级前后 ≠ 落为子级（三种落点互不等价）
+    expect(
+      sameDragTarget({ kind: "before", nodeId: "ch-1" }, { kind: "inside", nodeId: "ch-1" }),
     ).toBe(false);
     expect(
       sameDragTarget({ kind: "before", nodeId: "ch-1" }, { kind: "before", nodeId: "ch-2" }),
@@ -337,6 +345,86 @@ describe("isNoopDrop（原地放置判定，S13.1 oracle M1 方案 B 修订）",
 
   it("节点不存在 → false（无当前位置可判定）", () => {
     expect(isNoopDrop(tree, "ghost", "vol-1", 0)).toBe(false);
+  });
+});
+
+/** 造树（拖拽落点）：卷1（章1（场1）、空章）、空卷、卷3（章3） */
+const dropTree: OutlineNode[] = [
+  {
+    id: "vol-1",
+    type: "volume",
+    title: "第一卷",
+    updatedAt: "t0",
+    children: [
+      {
+        id: "ch-1",
+        type: "chapter",
+        title: "第一章",
+        updatedAt: "t0",
+        children: [{ id: "sc-1", type: "scene", title: "场景一", updatedAt: "t0" }],
+      },
+      { id: "ch-empty", type: "chapter", title: "空章", updatedAt: "t0" },
+    ],
+  },
+  { id: "vol-empty", type: "volume", title: "空卷", updatedAt: "t0" },
+  {
+    id: "vol-3",
+    type: "volume",
+    title: "第三卷",
+    updatedAt: "t0",
+    children: [{ id: "ch-3", type: "chapter", title: "第三章", updatedAt: "t0" }],
+  },
+];
+
+describe("resolveDropPlan（拖拽落点：父不合法 → 落为目标行子级末尾，2026-11）", () => {
+  it("章 → 空卷：整行 = 追加为该卷子级末尾（上下半同判、行体不分区）", () => {
+    const plan = {
+      parentId: "vol-empty",
+      insert: { kind: "end" },
+      target: { kind: "inside", nodeId: "vol-empty" },
+    };
+    expect(resolveDropPlan(dropTree, "ch-1", "vol-empty", "before")).toEqual(plan);
+    expect(resolveDropPlan(dropTree, "ch-1", "vol-empty", "after")).toEqual(plan);
+  });
+
+  it("章 → 折叠卷 / 非空卷：父（root）不合法 → 同样落为子级末尾（折叠只是 UI 态，父 id 能承载即可）", () => {
+    expect(resolveDropPlan(dropTree, "ch-1", "vol-3", "before")).toEqual({
+      parentId: "vol-3",
+      insert: { kind: "end" },
+      target: { kind: "inside", nodeId: "vol-3" },
+    });
+  });
+
+  it("场 → 空章：落为章的子级末尾", () => {
+    expect(resolveDropPlan(dropTree, "sc-1", "ch-empty", "after")).toEqual({
+      parentId: "ch-empty",
+      insert: { kind: "end" },
+      target: { kind: "inside", nodeId: "ch-empty" },
+    });
+  });
+
+  it("章 → 章行（跨卷）：走目标卷的同级前后（非 inside 后备）", () => {
+    expect(resolveDropPlan(dropTree, "ch-1", "ch-3", "before")).toEqual({
+      parentId: "vol-3",
+      insert: { kind: "before", nodeId: "ch-3" },
+      target: { kind: "before", nodeId: "ch-3" },
+    });
+  });
+
+  it("卷 → 卷仍是同级前后（父 root 合法，不走 inside 后备）", () => {
+    expect(resolveDropPlan(dropTree, "vol-3", "vol-1", "after")).toEqual({
+      parentId: ROOT_NODE_ID,
+      insert: { kind: "after", nodeId: "vol-1" },
+      target: { kind: "after", nodeId: "vol-1" },
+    });
+  });
+
+  it("非法落点 → null（场不能进卷、卷不能进章、目标 / 拖拽节点不在树、拖进自己子树）", () => {
+    expect(resolveDropPlan(dropTree, "sc-1", "vol-empty", "before")).toBe(null);
+    expect(resolveDropPlan(dropTree, "vol-3", "ch-1", "before")).toBe(null);
+    expect(resolveDropPlan(dropTree, "ch-1", "ghost", "before")).toBe(null);
+    expect(resolveDropPlan(dropTree, "ghost", "vol-empty", "before")).toBe(null);
+    expect(resolveDropPlan(dropTree, "vol-1", "ch-1", "before")).toBe(null);
   });
 });
 

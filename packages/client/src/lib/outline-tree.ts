@@ -179,10 +179,11 @@ export function findNodeChildren(nodes: OutlineNode[], nodeId: string): OutlineN
 
 // ============ 拖拽插入位置（S13.1：上下半判定 + 插入指示线，同级排序可用） ============
 
-/** 拖拽插入目标（行锚点前后 / 顶层空白区末尾）；null = 无有效目标 */
+/** 拖拽插入目标（行锚点前后 / 整行落为子级 / 顶层空白区末尾）；null = 无有效目标 */
 export type DragTarget =
   | { kind: "before"; nodeId: string } // 插到该节点前（该行上边缘指示线）
   | { kind: "after"; nodeId: string } // 插到该节点后（该行下边缘指示线）
+  | { kind: "inside"; nodeId: string } // 整行 = 追加为该节点子级末尾（行体高亮，无插入线）
   | { kind: "root-end" } // 顶层空白区：排 root 末尾
   | null;
 
@@ -245,6 +246,50 @@ export function findNodePosition(
   const children = findNodeChildren(nodes, parentId) ?? [];
   const index = children.findIndex((n) => n.id === nodeId);
   return index === -1 ? null : { parentId, index };
+}
+
+/** 拖拽落点判定结果：目标父 + 插入位置 + 行指示形态（`inside` = 整行高亮，不画插入线） */
+export interface DropPlan {
+  parentId: string;
+  insert: DropInsert;
+  target: NonNullable<DragTarget>;
+}
+
+/**
+ * 拖拽落点判定（handleDragOver / handleDrop 共用），按优先级：
+ * 1. 目标行的**父**可承载拖拽节点 → 该行上 / 下半 = 同级插前 / 插后（卷 → 卷仍是同级前后）
+ * 2. 否则目标行**自身**可承载（空卷 / 折叠卷 / 空章，也含展开的非空卷 / 非空章）→
+ *    整行 = 追加为该行子级末尾（`inside`）
+ * 3. 都不合法 → null（不显示落点指示、不发 move）
+ *
+ * 为什么不能只按「目标行自身可承载」判定同级插入：scene 可挂 chapter，但插到章行前 / 后 = 插进
+ * 卷 = 400 INVALID_HIERARCHY。回退只解「目标父不合法」这一种情况。
+ */
+export function resolveDropPlan(
+  nodes: OutlineNode[],
+  dragNodeId: string,
+  targetNodeId: string,
+  side: "before" | "after",
+): DropPlan | null {
+  const dragNode = findNode(nodes, dragNodeId);
+  if (dragNode === null) return null;
+  const parentId = findParentIdOf(nodes, targetNodeId);
+  if (parentId !== null && canMoveTo(dragNode, parentId, nodes)) {
+    return {
+      parentId,
+      insert: { kind: side, nodeId: targetNodeId },
+      target: { kind: side, nodeId: targetNodeId },
+    };
+  }
+  const targetNode = findNode(nodes, targetNodeId);
+  if (targetNode !== null && canMoveTo(dragNode, targetNode.id, nodes)) {
+    return {
+      parentId: targetNode.id,
+      insert: { kind: "end" },
+      target: { kind: "inside", nodeId: targetNode.id },
+    };
+  }
+  return null;
 }
 
 /**
