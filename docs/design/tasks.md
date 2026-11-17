@@ -12,11 +12,17 @@
 - `components/entity/relations-view.tsx` 的**筛选行不改**：它过滤的是存量关系（当前实体可能是目标端），按矩阵收窄会把合法行藏掉。
 - 单测：地点→人物 不含 `ally`/`kills`；人物→人物 不含 `belongs_to`/`plants`；章→伏笔 含 `plants`/`advances`/`resolves`；卷→伏笔 不含；`nodeType` 缺失的 outline_node 源不含伏笔三类；`mount` 组恒不进对话框；提交 guard 对非法组合返回错误文案。
 
+#### 追加项（`15430a7e` 后 oracle 打回，本卡未完成）
+- **guard 漏 mount 组**：自由输入「发生于」+ 大纲节点源 + 地点目标可通过提交 guard（下拉已排除，guard 没排）。把「对话框基集」判定抽出成单一函数（mount 组 + 层级缺失 fail-closed + 矩阵），`dialogRelationTypeOptions` 与 `relationEndpointError` 都调它，注释与实现一致；补一条 `occurs_at` 自由输入用例。
+- **目标端缺层级**：目标选大纲节点时 `endpointTo` 只带 `{type:"outline_node"}`，导致 `plot_edge` 在「章 → 卷」也对用户可见并可提交（C7 假定章→章）。已选节点时用 `findNode(outline.children, otherId)?.type` 补 `nodeType`（未选则保持通配）。
+- **提交判定纯函数化**（补 HIGH 覆盖缺口）：`relationSubmitError(type, from, to)` = 语法校验 → 基集/矩阵 guard；对话框 submit 只调它；单测锁「`盟友` 地点→人物 → 非空」「`发生于` 章→地点 → 非空」「合法组合 → null」。组件级「不发请求」在无 jsdom 前提下不可测（仓内不引新依赖），浏览器证据由 ui-verifier 提供。
+- **通配侧**（与 `schema.md` 端点列对齐）：`RelationEndpointRef.type` 支持 `"*"`，`appears_in` = 任意实体 → `outline_node`、`involves` = `hook` → 任意实体（此前留空导致「出现于」出现在所有组合里）。shared 补两条正反例。
+
 #### 依赖
 C1。
 
 #### 完成判据
-`pnpm -r build` → `pnpm typecheck` / `pnpm lint` 绿；`pnpm --filter @whispering233/ai-editor-client test` 绿；浏览器实测一次（地点源 + 人物目标，下拉里没有「盟友」）；一卡一 commit，`git status` 干净。
+`pnpm -r build` → `pnpm typecheck` / `pnpm lint` 绿；`pnpm --filter @whispering233/ai-editor-client test` 与 `--filter @whispering233/ai-editor-shared test` 绿；浏览器实测一次（地点源 + 人物目标，下拉里没有「盟友」）；`git status` 干净。
 
 ### C4 — 关系说明编辑（label + description 共用表单）
 
