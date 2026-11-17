@@ -51,6 +51,9 @@ const NODE_TYPES: NodeTypes = { chapter: ChapterCard };
 /** 本页不渲染边（连线属后续卡片；常量空数组避免每次渲染换引用） */
 const EMPTY_EDGES: Edge[] = [];
 
+/** 首帧 fitView 的上界：小书（1–2 章）不放大到满屏，`maxZoom: 1` 保持不变即可 */
+const FIT_VIEW_OPTIONS = { padding: 0.1, maxZoom: 1 } as const;
+
 interface CanvasFlowProps {
   projectId: string | null;
   cards: readonly CanvasChapterCard[];
@@ -112,6 +115,7 @@ function CanvasFlow({ projectId, cards, marks }: CanvasFlowProps) {
         onMoveEnd={handleMoveEnd}
         defaultViewport={initialViewport}
         fitView={initialViewport === undefined}
+        fitViewOptions={FIT_VIEW_OPTIONS}
         minZoom={CANVAS_MIN_ZOOM}
         maxZoom={CANVAS_MAX_ZOOM}
         nodesConnectable={false}
@@ -121,7 +125,7 @@ function CanvasFlow({ projectId, cards, marks }: CanvasFlowProps) {
         attributionPosition="bottom-left"
       >
         <Controls showInteractive={false} position="top-left" />
-        <MiniMap position="bottom-right" pannable zoomable ariaLabel="章节缩略图" />
+        <MiniMap position="top-right" pannable zoomable ariaLabel="章节缩略图" />
       </ReactFlow>
     </div>
   );
@@ -202,7 +206,7 @@ export default function OutlineCanvas() {
     );
   } else if (cards.length === 0) {
     body = (
-      <div className="flex-1 overflow-y-auto p-6">
+      <div className="flex min-h-0 flex-1 items-center justify-center p-6">
         <EmptyState
           padding="sm"
           action={
