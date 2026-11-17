@@ -95,7 +95,7 @@
 - 新增练习页 = 三处同改：`components/nav/nav-items.tsx` 项集 / `lib/workspace-route-guard.ts` 的练习首段常量 / 「练习区无回收站、无概览」前提。
 - 文本文件导入（范文等）必须走 `readTextFile`（UTF-8 → GB18030 回落，禁 `file.text()`）。
 - 桌面能力检测唯一入口 = `client/src/lib/desktop.ts` 的 `desktopBridge()`（浏览器形态 / SSR 返回 null）；禁止在组件里直接摸 `window.aiEditorDesktop`。
-- 泛型 `EntityList` / `EntityDetail` 只服务 setting / location，**已冻结**：不再承载新能力（人物页是自有工作台，见 `DESIGN.md`）。
+- 泛型 `EntityList` / `EntityDetail` **已冻结**：不再承载新能力——列表只服务 location / relations，详情只服务 location / hook / timepoint 详情段与设定详情（由 `SettingWorkbench` 壳承载）；人物 / 设定 / 大纲页是自有工作台，见 `DESIGN.md`。
 - 品牌与图标资产：`packages/client/public/provider-icons.svg`（供应商 logo）与 `client/public/brand-icon.svg`（系统面负形版，兼 favicon 与桌面图标源）的用法见 `DESIGN.md` / `50-desktop.md` §5.3；不要引入 `@lobehub/icons`，也不要另存图标副本。
 
 ### 桌面版

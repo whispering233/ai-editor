@@ -284,7 +284,7 @@
   - 触发条件：antd minor 升级时（测试会提醒，届时对齐 `w-6` 或改成 token 驱动的宽度）。
 
 - **客户端 `SettingTreeNode.category` 是死键**（2026-09 发布前审计发现）
-  - 现状：`client/src/lib/setting-tree.ts` 的树节点带 `category`，只写不读（旧分类徐标残留；`components/entity/setting-rail.tsx:806` 注释已说明改用 tags）；注意 **`EntitySummary.summary.category` 仍是活字段**（`parent-setting-select.tsx` 在渲染），不能一并删。
+  - 现状：`client/src/lib/setting-tree.ts` 的树节点带 `category`，只写不读（旧分类字段残留；`components/entity/setting-rail.tsx:808` 注释已说明改用 tags）；注意 **`EntitySummary.summary.category` 仍是活字段**（`parent-setting-select.tsx` 在渲染），不能一并删。
   - 触发条件：下次触碰设定树数据派生时。
   - 最小修法：删 `SettingTreeNode.category` + 输入映射 + `setting-tree.test.ts` 对应断言。
 
