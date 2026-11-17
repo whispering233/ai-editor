@@ -16,13 +16,14 @@ export function stringEnum<const T extends readonly string[]>(values: T) {
   return Type.Unsafe<T[number]>({ type: "string", enum: [...values] });
 }
 
-/** 自由形态对象（data / patches / metadata）：任意字符串键 + 任意值；可选 `minProperties`（拒绝空对象） */
-export function freeFormObject(options: { minProperties?: number } = {}) {
+/** 自由形态对象（data / patches / metadata）：任意字符串键 + 任意值；可选 `minProperties`（拒绝空对象）、`description`（模型可见说明） */
+export function freeFormObject(options: { minProperties?: number; description?: string } = {}) {
   const schema: Record<string, unknown> = {
     type: "object",
     additionalProperties: {},
     propertyNames: { type: "string" },
   };
   if (options.minProperties !== undefined) schema.minProperties = options.minProperties;
+  if (options.description !== undefined) schema.description = options.description;
   return Type.Unsafe<Record<string, unknown>>(schema);
 }

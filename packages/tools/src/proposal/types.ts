@@ -29,7 +29,7 @@
 import { getEntity } from "@whispering233/ai-editor-db";
 import { nowIso } from "@whispering233/ai-editor-db";
 import { generateRuntimeId } from "@whispering233/ai-editor-shared";
-import type { EntityRow, OutlineFileNode, RelationRow } from "@whispering233/ai-editor-shared";
+import type { EntityRow, OutlineFileNode, OutlineNodeType, RelationRow } from "@whispering233/ai-editor-shared";
 import { findOutlineNode, readOutlineFile } from "@whispering233/ai-editor-db";
 import type { ToolContext } from "../context.js";
 import { throwIfAborted } from "../analysis/utils.js";
@@ -141,11 +141,12 @@ export function refOutlineNodeExists(node: OutlineFileNode): ProposalReference {
  * 判定顺序：实体表优先（getEntity 已过滤软删），其次大纲树（存在且未软删）；
  * 两者皆不命中抛错（工具执行「抛错即失败」，executor 转结构化结果喂回 LLM 自纠）。
  * root 是树根而非端点，直接拒绝。
+ * `nodeType` 仅大纲节点侧给出（关系矩阵收窄用：卷/章/场景区分）；实体侧不填。
  */
 export function resolveEndpoint(
   ctx: ToolContext,
   id: string,
-): { type: string; ref: ProposalReference } {
+): { type: string; nodeType?: OutlineNodeType; ref: ProposalReference } {
   if (id === "root") {
     throw new Error(`端点不存在或已软删: ${id}`);
   }
@@ -155,7 +156,7 @@ export function resolveEndpoint(
   }
   const node = findOutlineNode(readOutlineFile(ctx.outlineDir), id);
   if (node !== undefined && node.deleted !== true) {
-    return { type: "outline_node", ref: refOutlineNode(node) };
+    return { type: "outline_node", nodeType: node.type, ref: refOutlineNode(node) };
   }
   throw new Error(`端点不存在或已软删: ${id}`);
 }
