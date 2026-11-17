@@ -4,16 +4,6 @@
 
 ## 当前任务卡
 
-### C2 — 服务端 metadata 归一（POST / PUT 同口径）
-
-#### 范围
-- `packages/server/src/routes/relation.ts`：POST 与 PUT 都经 `normalizeRelationMetadata`；PUT 现有的手写 trim（:175 附近）删除；`description` 同样 trim / 空串删键。
-- 单测：POST 带 `{label:"  x  ", description:"  y  "}` 落库为 trim 后；空串删键；非字符串被丢弃；PUT 清空传 `{}`。
-
-#### 依赖
-C1。#### 完成判据
-：`pnpm -r build` → `pnpm typecheck` 绿；`pnpm --filter @whispering233/ai-editor-server test` 绿；commit + 干净。
-
 ### C3 — 客户端关系类型谓词收窄（删硬编码特例）
 
 #### 范围
