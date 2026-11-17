@@ -79,6 +79,7 @@
 - 开机直达书籍只在 `hooks/use-enter-last-book.ts` 做首帧一次；勿在 Dashboard / AppShell 加常驻重定向（会把「回书架」弹回去）。
 - **改色唯一入口** = `AntdProvider.tsx`（同步 `DESIGN.md` 登记表）；块编辑器 `--bn-*` 映射唯一入口 = `components/blocknote/blocknote.css`；守卫 = `design-discipline.test.ts` + `components/antd-tokens.test.ts`，新增 antd 组件先扩 token 守卫。
 - antd 组件会给 `.ant-btn` 注入 `position: relative`（与 Tailwind `.absolute` 同特异性、antd 注入更晚）⇒ 定位一律挂外层包装 `div`，不写在 antd 组件 `className` 上；危险色图标按钮写 `color="danger" variant="text"`。
+- antd `Input` 会给 `.ant-input-affix-wrapper` 注入 `min-width: 0`（同样后注入、覆盖 Tailwind `min-w-*`）⇒ 弹性最小宽一律挂外层包装 `div`，直接写在 `Input` 的 `className` 上会被压成 0 宽。
 - 缩进列几何依赖 antd `controlHeightSM`：占位 / 摘要 / 就地新建行复用同一条占位链（不手写 `pl-*` 像素），折叠箭头恒 `RightOutlined` + `!collapsed && "rotate-90"`（`antd-tokens.test.ts` 有该值断言）。
 - 块编辑器升级 = 显式 commit + 全量测 + 浏览器像素核对；禁 `@blocknote/xl-*`；`server` / `tools` / `db` / `agent` 不得依赖 `@blocknote/*`（服务端不解析块结构）。
 - `Ctrl/Cmd + S` = 保存当前内容 + 生成本地存档：键位常量 = `client/src/lib/save-shortcut.ts`；动作走 `registerSaveHandler` 注册栈（后注册者优先）；存档唯一注册者 = `AppShell` 的 `useSaveArchive`；页面保存失败必须 `return false`（阻断存档）。
