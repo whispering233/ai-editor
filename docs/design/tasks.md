@@ -4,19 +4,6 @@
 
 ## 当前任务卡
 
-### C1 — shared 关系契约：端点适用性 + metadata 归一
-
-#### 范围
-- `packages/shared/src/constants/entity.ts`：`RELATION_TYPE_META` 增可选字段 `endpoints?: readonly { from: EndpointRef; to: EndpointRef }[]`（`EndpointRef = { type: EntityType | "outline_node"; nodeType?: OutlineNodeType }`），按 `docs/db/schema.md` 预定义关系类型表的「端点」列逐条填；举证不足者（`appears_in` / `involves`）保持不写（= 通配）。
-- `packages/shared/src/utils/relation-type.ts`：`RelationEndpointRef` 类型 + `relationTypeAllowedFor(type: string, from: RelationEndpointRef, to: RelationEndpointRef): boolean`（未知 / 自定义类型 = true；成对匹配，`nodeType` 只在声明侧与传入侧都给出时比较）+ `allowedRelationTypes(from, to): RelationType[]`（= `RELATION_TYPES.filter(...)`，供对话框与关联页筛选一次取全）。`RelationEndpointRef` 的实体侧用既有实体类型（`ENTITY_TYPES` 元素类型），不新建重复枚举。
-- `packages/shared/src/types/api.ts` 关系 schema 段：`RelationMetadata = { label?: string; description?: string }` + `normalizeRelationMetadata(input: unknown): Record<string, unknown>`（`trim`、空串删键、非字符串丢弃、其余键原样保留）；经 shared 根入口导出。
-- 单测：矩阵正反例（`character→character` 的 `ally` 通过、`location→character` 拒绝；`occurs_at` 的 `timepoint→location` 拒绝；`plot_edge` 仅章→章；自定义类型恒 true）；归一（trim / 空串 / 非字符串 / 保留别的键）。
-
-#### 完成判据
-
-- `pnpm -r build` → `pnpm typecheck` 绿；`pnpm --filter @whispering233/ai-editor-shared test` 绿。
-- `git log -1` 是新 commit 且 `git status` 干净（无 commit 不许报 PASS）。
-
 ### C2 — 服务端 metadata 归一（POST / PUT 同口径）
 
 #### 范围
