@@ -129,11 +129,21 @@ describe("relationTypeAllowedFor（端点适用性）", () => {
     expect(relationTypeAllowedFor("occurs_in", event, character)).toBe(false);
   });
 
-  it("通配：appears_in 任意实体→outline_node、involves 任意两端均通过", () => {
+  it("通配侧：appears_in 任意实体→outline_node、involves hook→任意实体；方向不符拒绝", () => {
     expect(relationTypeAllowedFor("appears_in", character, node)).toBe(true);
     expect(relationTypeAllowedFor("appears_in", location, chapter)).toBe(true);
+    expect(relationTypeAllowedFor("appears_in", character, character)).toBe(false);
+    expect(relationTypeAllowedFor("appears_in", character, setting)).toBe(false);
     expect(relationTypeAllowedFor("involves", hook, location)).toBe(true);
     expect(relationTypeAllowedFor("involves", hook, chapter)).toBe(true);
+    expect(relationTypeAllowedFor("involves", character, location)).toBe(false);
+  });
+
+  it("声明侧 `*` 不看层级：appears_in 任意实体→章/卷/场景均通过", () => {
+    expect(relationTypeAllowedFor("appears_in", character, chapter)).toBe(true);
+    expect(relationTypeAllowedFor("appears_in", character, volume)).toBe(true);
+    expect(relationTypeAllowedFor("appears_in", character, { type: "outline_node", nodeType: "scene" })).toBe(true);
+    expect(relationTypeAllowedFor("involves", hook, volume)).toBe(true);
   });
 
   it("未知 / 自定义类型恒通过（含原型链键名）", () => {
@@ -145,19 +155,20 @@ describe("relationTypeAllowedFor（端点适用性）", () => {
 });
 
 describe("allowedRelationTypes（一次取全）", () => {
-  it("character→character 只含人↔人类型 + 通配类", () => {
+  it("character→character 只含人↔人类型（通配类型方向不符被排除）", () => {
     const allowed = allowedRelationTypes(character, character);
-    expect(allowed).toEqual(["ally", "rival", "mentor", "family", "kills", "appears_in", "involves"]);
+    expect(allowed).toEqual(["ally", "rival", "mentor", "family", "kills"]);
   });
 
-  it("character→outline_node 含 appears_in，但不含 occurs_in / plot_edge", () => {
+  it("character→outline_node 含 appears_in，但不含 involves / occurs_in / plot_edge", () => {
     const allowed = allowedRelationTypes(character, chapter);
     expect(allowed).toContain("appears_in");
+    expect(allowed).not.toContain("involves");
     expect(allowed).not.toContain("occurs_in");
     expect(allowed).not.toContain("plot_edge");
   });
 
-  it("章→章 = plot_edge + 通配", () => {
-    expect(allowedRelationTypes(chapter, chapter)).toEqual(["appears_in", "plot_edge", "involves"]);
+  it("章→章 = plot_edge + appears_in（involves 源端仅 hook）", () => {
+    expect(allowedRelationTypes(chapter, chapter)).toEqual(["appears_in", "plot_edge"]);
   });
 });

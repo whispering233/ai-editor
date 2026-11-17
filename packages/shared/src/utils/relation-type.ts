@@ -15,14 +15,15 @@ import {
 } from "../constants/entity.js";
 import type { OutlineNodeType } from "../types/outline.js";
 
-/** 关系端点：实体侧 = 已有实体类型；`outline_node` 侧可带 `nodeType`（章/卷/场景）收窄 */
+/** 关系端点：实体侧 = 已有实体类型；`outline_node` 侧可带 `nodeType`（章/卷/场景）收窄；`"*"` = 任一端点类型 */
 export type RelationEndpointRef = {
-  type: EntityTypeValue | "outline_node";
+  type: EntityTypeValue | "outline_node" | "*";
   nodeType?: OutlineNodeType;
 };
 
-/** 端点对匹配：`nodeType` 只在声明侧与传入侧都给出时比较（未给 = 通配） */
+/** 端点对匹配：声明侧 `"*"` 通配任意类型；`nodeType` 只在两侧都给出时比较（未给 = 通配） */
 function endpointMatches(declared: RelationEndpointRef, actual: RelationEndpointRef): boolean {
+  if (declared.type === "*") return true;
   return (
     declared.type === actual.type &&
     (declared.nodeType === undefined || actual.nodeType === undefined || declared.nodeType === actual.nodeType)

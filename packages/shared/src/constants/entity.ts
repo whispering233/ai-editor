@@ -92,7 +92,7 @@ export const RELATION_TYPE_META: Record<
   mentor: { label: "师徒", group: "character", endpoints: [{ from: { type: "character" }, to: { type: "character" } }] },
   family: { label: "家族", group: "character", symmetric: true, endpoints: [{ from: { type: "character" }, to: { type: "character" } }] },
   kills: { label: "击杀", group: "character", endpoints: [{ from: { type: "character" }, to: { type: "character" } }] },
-  appears_in: { label: "出现于", group: "anchor" },
+  appears_in: { label: "出现于", group: "anchor", endpoints: [{ from: { type: "*" }, to: { type: "outline_node" } }] },
   occurs_at: {
     label: "发生于",
     group: "mount",
@@ -124,7 +124,7 @@ export const RELATION_TYPE_META: Record<
     endpoints: [{ from: { type: "outline_node", nodeType: "chapter" }, to: { type: "hook" } }],
   },
   depends_on: { label: "依赖", group: "hook", endpoints: [{ from: { type: "hook" }, to: { type: "hook" } }] },
-  involves: { label: "涉及", group: "hook" },
+  involves: { label: "涉及", group: "hook", endpoints: [{ from: { type: "hook" }, to: { type: "*" } }] },
   occurs_in: { label: "锚定于", group: "anchor", endpoints: [{ from: { type: "event" }, to: { type: "outline_node" } }] },
 };
 
