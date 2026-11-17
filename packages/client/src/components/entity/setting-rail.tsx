@@ -97,6 +97,7 @@ export function SettingRail({
   className,
   detailCollapsed,
   onToggleDetail,
+  onMutated,
 }: {
   /** 壳要量当前渲染宽（默认宽度是 CSS 值）作拖拽起点 */
   railRef?: Ref<HTMLElement>;
@@ -114,6 +115,8 @@ export function SettingRail({
   detailCollapsed?: boolean;
   /** 切换右侧详情收起态（壳做未保存守卫）；不传 = 不渲染该按钮（窄屏无相邻详情列） */
   onToggleDetail?: () => void;
+  /** 写操作成功（改名 / 新建 / 删除 / 移动）后通知宿主刷新外部视图（如已打开的详情页头） */
+  onMutated?: () => void;
 }) {
   const [roots, setRoots] = useState<SettingTreeNode[] | null>(null);
   const [truncated, setTruncated] = useState(false);
@@ -155,6 +158,7 @@ export function SettingRail({
   /** 操作成功后刷新（tick +1 触发加载 effect；保留旧数据渲染，避免骨架闪烁） */
   function reload() {
     setTick((t) => t + 1);
+    onMutated?.();
   }
 
   // 数据加载：全量 setting + 全量 belongs_to 层级边 → buildSettingTree 组装树；
@@ -1097,15 +1101,18 @@ export function SettingRail({
 
       {/* 常驻控件行（不随行区滚动）：搜索 + 标签 + 排序 + 描述开关；窄 rail 按 flex-wrap 折行 */}
       <div className="flex shrink-0 flex-wrap items-center gap-2 px-3 py-2">
-        <Input
-          size="small"
-          className="min-w-40 flex-1"
-          prefix={<SearchOutlined />}
-          allowClear
-          value={qInput}
-          onChange={(e) => setQInput(e.target.value)}
-          placeholder="搜索设定名称…"
-        />
+        {/* 外层 div 承担 flex-1 / 最小宽：antd 输入框自带 `min-width: 0` 且样式后注入，
+            直接挂 `min-w-40` 会被压成 0px（2026-11 实测，窄 rail 只剩放大镜） */}
+        <div className="min-w-40 flex-1">
+          <Input
+            size="small"
+            prefix={<SearchOutlined />}
+            allowClear
+            value={qInput}
+            onChange={(e) => setQInput(e.target.value)}
+            placeholder="搜索设定名称…"
+          />
+        </div>
         <span className="flex items-center gap-1 text-xs text-muted-foreground">
           标签
           <SearchableSelect

@@ -156,6 +156,11 @@ export default function SettingWorkbench({ id }: { id?: string }) {
           nodeId={id ?? null}
           reloadKey={tick}
           onSelect={selectNode}
+          // 树内写操作（改名 / 新建 / 删除 / 移动）后，已打开的详情可能是旧值（页头名字 / 上级）：
+          // 无未保存修改时走全局数据版本信号让详情就地重载；dirty 时保留表单，避免静默丢弃输入
+          onMutated={() => {
+            if (!detailDirty) useUiStore.getState().notifyDataChanged();
+          }}
           // 右侧详情收起 = rail 吸收全宽（不写 layout.width）；窄屏全宽同此口径
           width={
             isDesktop && !detailHidden
