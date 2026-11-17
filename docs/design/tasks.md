@@ -4,14 +4,6 @@
 
 ## 当前任务卡
 
-### 卡 3：详情接入、单一数据源与未保存守卫
-
-- **目标**：`OutlineDetail` 接受 `node`（壳 `findNode` 派生）/ `nodeId` / `reload` / `leading`（收起钮）/ `onDirtyChange`，移除自身 `useOutlineLoader`；`useDataRefresh` 只刷关系 / 变更记录，**不再 `reload()` 整树**；保存成功后由壳 `reload()` 收敛并重置表单；dirty 时 rail 切换（含新建 / 链式新建）/ 空白区清选中 / 窄屏返回条先 `confirm`；`Ctrl/Cmd + S` 在行内编辑与详情表单间正确分层；`notFound` / 空态也保留页头与收起钮；窄屏 390 详情页头三个动作不得被 `overflow-hidden` 裁切（`PageHeader` 已允许换行；若仍裁切，在本卡把节点动作压缩为 `icon-button` + `title` / `aria-label`）；删除在途切节点竞态：先判后删的 `clearsSelection` 不得在 reload 后误清已切换到的新节点（删除完成后仅当 URL 仍指向被删子树才 replace）。
-- **允许改**：`packages/client/src/pages/OutlineDetail.tsx`、`packages/client/src/pages/Outline.tsx`（host / 回调）、`outline.test.tsx`。
-- **不做**：不新增 API / DB / 工具；不改详情字段与保存 payload；不拦浏览器后退 / 「写正文」外链（登记 `backlog.md`）；不把详情改成自动保存。
-- **验收**：打开详情只发一次大纲 GET（壳持有）；保存后 rail 标题 / 摘要即时更新且表单不闪回旧值；切换节点 / 新建导航 / 空白区 / 窄屏返回在 dirty 时弹确认，取消留在原处；`Ctrl+S` 在行内编辑时保存行内、否则保存详情；坏 id / 无节点页头常驻且有返回入口；`pnpm --filter @whispering233/ai-editor-client test` 绿。
-- **完成判据（硬）**：同上。oracle：reviewer 独立复跑 + 浏览器核「保存 → 切换 → 再打开」与 409 / 保存失败路径。
-
 ### 卡 4：跨页定位与边角收敛
 
 - **目标**：`focusOutlineNodeId`（概览开场跳转）在树就绪后展开祖先、3s 高亮并 `location.replace("#/outline/:id")`；深链 `#/outline/:id` 直接选中；删除当前节点 / 祖先 / 全部折叠 / 刷新后的选中与详情保持；空树 CTA「新建第一卷」；无项目 / 加载失败 / 坏 id 的文案与返回路径统一；坏 id 空态按钮在窄详情列 `flex-wrap` + `whitespace-nowrap`（文字不竖排，必要时上下排）。
