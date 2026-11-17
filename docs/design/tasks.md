@@ -18,13 +18,17 @@ C1、C2。#### 完成判据
 ### C5 — AI 工具收窄 + description 透传
 
 #### 范围
-- `packages/tools/src/proposal/relation.ts`：生成提案前用 shared `relationTypeAllowedFor(resolveEndpoint(source), resolveEndpoint(target))` 校验，不合法抛错（工具失败，不生成提案）；`metadata` 经 `normalizeRelationMetadata` 后写入提案。
-- `packages/tools/src/schemas/proposal.ts`：`metadata` 描述改为 `{ label?, description? }`（数字 / 阈值不写在描述里；如有上限由常量插值）。
-- 单测：`ally` 指向地点 → 抛错；章→章 `plot_edge` + `description` → 提案 metadata 归一；`appears_in` 任意实体仍通过。
+- `packages/tools/src/proposal/types.ts`：`resolveEndpoint` 返回值补 `nodeType?: OutlineNodeType`（大纲节点侧 = `node.type`；实体侧不填）。**不改其它调用方的行为**。
+- `packages/tools/src/proposal/relation.ts`：`buildProposeAddRelation` 在既有伏笔校验之后加端点矩阵校验——`relationTypeAllowedFor(args.type, from, to)`，不合法抛错（工具失败、不生成提案），文案带关系类型中文名与两端中文类型（`relationTypeLabel` 不可用则用 shared 标签表）。既有「伏笔源端仅章」保留在前（文案更具体）。
+- **执行侧漏了归一（卡外发现，必须一起修）**：`packages/tools/src/executor/relation.ts` 的 `add_relation` **直连 db `createRelation`**，不经过 REST，所以 C2 的 normalizer 在 AI 路径上不生效。改为 `metadata` 存在时先过 shared `normalizeRelationMetadata` 再写库（不存在则不传键）。
+- `packages/tools/src/schemas/proposal.ts`：`propose_add_relation` 的模型可见说明补「`metadata` 可传 `{ label, description }`（短标签 / 说明）」，**不写具体数字上限**（上限单源在 client `lib/relation-metadata.ts`，跨包复述会漂）。
+- 单测：`ally` 地点→人物 抛错；`kills` 人物→人物 通过；章→章 `plot_edge` 通过、章→卷 `plot_edge` 抛错；`appears_in` 人物→章 通过、人物→人物 抛错；`occurs_at` 时间点→事件 通过；`add_relation` 执行把 `{label:" x ", description:"  ", extra:1}` 归一成 `{label:"x", extra:1}`（查 db 落库值）。
 
 #### 依赖
-C1。#### 完成判据
-：`pnpm -r build` → `pnpm typecheck` 绿；`pnpm --filter @whispering233/ai-editor-tools test` 绿（filter 名以 package.json 为准）；commit + 干净。
+C1、C2。
+
+#### 完成判据
+`pnpm -r build` → `pnpm typecheck` / `pnpm lint` 绿；`pnpm --filter @whispering233/ai-editor-tools test` 绿（filter 名以 package.json 的 `name` 为准，逐字一致）；一卡一 commit；`git status` 干净。
 
 ### C6 — 大纲画布骨架（只读呈现 + 摆位）
 
