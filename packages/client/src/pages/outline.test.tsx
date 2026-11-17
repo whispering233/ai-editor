@@ -327,6 +327,9 @@ describe("大纲页 · 桌面分栏壳", () => {
     // 坏 id 空态两个出口（DESIGN.md `outline-page`）：去回收站 / 返回大纲
     expect(missing).toContain('href="#/trash"');
     expect(missing).toContain("去回收站");
+    // 390px 窄屏：容器换行 + 两个出口不竖排（DESIGN.md `outline-page` 坏 id 空态）
+    expect(missing).toContain("flex flex-wrap justify-center");
+    expect(missing).toContain("whitespace-nowrap");
     // 每种形态都保留页头与收起钮
     for (const html of [
       render({ config: null }),

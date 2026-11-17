@@ -199,6 +199,13 @@ export default function Outline({ nodeId }: { nodeId?: string }) {
   } = useOutlineRail(isDesktop);
 
   const railCollapsed = isDesktop && railLayout.collapsed;
+  // 跨页定位目标在树内、桌面收起态：先展开 rail——消费 effect 在 rail 内，不挂载则 URL/高亮都不发生
+  const focusTarget = useUiStore((s) => s.focusOutlineNodeId);
+  useEffect(() => {
+    if (focusTarget === null || outline === null || !railCollapsed) return;
+    if (findNodePath(outline.children, focusTarget) === null) return;
+    toggleRailCollapse();
+  }, [focusTarget, outline, railCollapsed, toggleRailCollapse]);
   const noProject = config === null && !configLoading;
   // 切节点（含回 `#/outline`）清零 dirty：新节点尚未编辑
   useEffect(() => setDetailDirty(false), [nodeId]);
@@ -309,14 +316,16 @@ export default function Outline({ nodeId }: { nodeId?: string }) {
             padding="sm"
             action={
               // 同 OutlineDetail 的 notFound 文案与目标（DESIGN.md `outline-page` 坏 id 空态）
-              <div className="flex justify-center gap-2">
+              <div className="flex flex-wrap justify-center gap-2">
                 <a
                   href="#/trash"
-                  className="rounded-md border border-border px-4 py-1.5 text-sm text-muted-foreground hover:bg-muted"
+                  className="whitespace-nowrap rounded-md border border-border px-4 py-1.5 text-sm text-muted-foreground hover:bg-muted"
                 >
                   去回收站
                 </a>
-                <Button href="#/outline">返回大纲</Button>
+                <Button href="#/outline" className="whitespace-nowrap">
+                  返回大纲
+                </Button>
               </div>
             }
           >
@@ -542,6 +551,8 @@ function OutlineRail({
     });
     // 展开是异步状态更新：等本轮渲染完成后再设聚焦目标（滚动 + 聚焦由下方 focusedNodeId effect 执行）
     const t = setTimeout(() => {
+      // URL 收敛到目标节点（replace 不留历史）：否则从概览点阅读进度只高亮，URL 仍无 id、详情列空着
+      window.location.replace(`#/outline/${targetId}`);
       setFocusedNodeId(targetId);
       clearFocusOutlineNode();
     }, 0);
