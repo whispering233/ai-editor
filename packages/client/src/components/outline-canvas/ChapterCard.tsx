@@ -4,7 +4,9 @@
 // （复用 `hook-mark`，可点跳伏笔详情）+ `N 场`（无场景不渲染）。
 // **位置不表达结构**：卷不画成列 / 框 / 泳道，层级只由编号徽标承载；卡片尺寸来自
 // `lib/outline-canvas-layout` 的常量（由页面写进 node.style，几何单源在那一处），本组件只管排内部。
-import type { Node, NodeProps } from "@xyflow/react";
+// 左右两个 handle 是连线的落点（source 在右、target 在左，与卡片从左到右的网格顺向一致）：
+// 尺寸 / 配色只在 canvas-theme.css 映射，本组件不写色值。
+import { Handle, Position, type Node, type NodeProps } from "@xyflow/react";
 import type { CanvasChapterCard } from "../../lib/outline-canvas-layout";
 import type { NodeHookMark } from "../../lib/outline-hooks";
 import { NodeHookMarkBadge } from "../outline/node-hook-badge";
@@ -17,7 +19,7 @@ export type ChapterCardData = {
 
 export type ChapterCardNode = Node<ChapterCardData, "chapter">;
 
-/** 章卡片（只读：无 handle、不可连、不可选；拖动只改坐标，不改层级） */
+/** 章卡片（内容只读：拖动只改坐标、不改层级；连线走两侧 handle） */
 export function ChapterCard({ data }: NodeProps<ChapterCardNode>) {
   const { card, marks } = data;
   return (
@@ -25,6 +27,8 @@ export function ChapterCard({ data }: NodeProps<ChapterCardNode>) {
       className="flex h-full w-full flex-col gap-1 rounded-md border border-border bg-card px-3 py-2"
       title={`${card.volumeLabel === "" ? "" : `${card.volumeLabel}·`}${card.chapterLabel} ${card.title}`}
     >
+      <Handle type="target" position={Position.Left} />
+      <Handle type="source" position={Position.Right} />
       <span className="flex min-w-0 items-center gap-1">
         {/* 存量直挂 root 的章没有卷号（volumeLabel 空串）⇒ 只渲染章徽标 */}
         {card.volumeLabel !== "" && (

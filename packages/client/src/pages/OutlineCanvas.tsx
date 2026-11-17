@@ -2,22 +2,32 @@
 //
 // 画布是**观察面**，不是第二个大纲页：结构与顺序的唯一编辑入口仍是大纲树——本页拖动卡片
 // **只改坐标**（`localStorage` `ai-editor:canvas:{projectId}`，不进 outline.json / 备份 / 云端包），
-// 不改父子 / 章序 / 卷归属，也不做连线（连线卡另开）。
+// 不改父子 / 章序 / 卷归属。
 // 节点 = 章（唯一）：卷与场景不上画布，层级由卡片上的卷号徽标表达（components/outline-canvas/ChapterCard）。
 // 摆位 = 确定性网格（lib/outline-canvas-layout 纯函数）：缺坐标的章按可见章序每行 8 张补位、
 // 已有手工坐标不动、新章落网格末尾；首次进入（无存量视口）→ fitView，有存量视口则恢复。
+//
+// 连线 = `plot_edge`（章 → 章）：关系的列表是唯一事实源（`listRelations`），边每次从它派生
+// （lib/outline-canvas-edges）；建边 / 删边 / 改标签成功后**重拉列表**，不手工 push 平行状态。
+// 拖出即连（自连 / 落空静默取消、重复 409 → toast）；点边开右侧抽屉；`Delete` 键先过
+// ConfirmDialog 才真删（React Flow 的删除变更被 onEdgesChange 拦下，见 handleEdgesChange）。
+// 单击卡片 = 选中并聚焦其邻边（其余边降透明）；点空白取消；双击卡片 = `#/outline/:id`。
 //
 // 高度链：外壳抵消中栏 p-6 后铺满（`-m-6` + `h-[calc(100%+3rem)]`，同写作页 / 人物工作台），
 // 画布容器 `flex-1 min-h-0` 一路到 ReactFlow（`h-full w-full`）——本页不自任滚动容器。
 import "@xyflow/react/dist/base.css";
 import "../components/outline-canvas/canvas-theme.css";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Controls,
   MiniMap,
   ReactFlow,
+  useEdgesState,
   useNodesState,
   type Edge,
+  type EdgeChange,
+  type NodeChange,
+  type OnConnect,
   type OnNodeDrag,
   type NodeTypes,
   type Viewport,
@@ -25,8 +35,17 @@ import {
 import { Button, ConfigProvider } from "antd";
 import { EmptyState } from "../components/ui/empty-state";
 import { ChapterCard, type ChapterCardNode } from "../components/outline-canvas/ChapterCard";
+import { PlotEdgeDrawer } from "../components/outline-canvas/PlotEdgeDrawer";
+import { ConfirmDialog } from "../components/outline/dialogs";
 import { useOutlineLoader } from "../hooks/use-outline-loader";
-import { listRelations } from "../lib/api";
+import { navigate } from "../hooks/use-route";
+import {
+  ApiError,
+  createRelation,
+  deleteRelation,
+  listRelations,
+  type RelationSummaryItem,
+} from "../lib/api";
 import {
   CANVAS_CARD_HEIGHT,
   CANVAS_CARD_WIDTH,
@@ -41,15 +60,21 @@ import {
   type CanvasSavedState,
 } from "../lib/outline-canvas-layout";
 import { buildNodeHookMarks, HOOK_MARK_TYPES, type NodeHookMark } from "../lib/outline-hooks";
+import {
+  adjacentPlotEdgeIds,
+  canvasPlotEdges,
+  plotEdgeCreatePayload,
+  plotEdgeDeleteTargets,
+  PLOT_EDGE_DIM_OPACITY,
+  PLOT_EDGE_RELATION_TYPE,
+} from "../lib/outline-canvas-edges";
 import { errorBannerClass, skeletonClass } from "../lib/styles";
 import { cn } from "../lib/utils";
 import { useProjectStore } from "../stores/project";
+import { useUiStore } from "../stores/ui";
 
 /** 节点类型表（模块级常量：每次渲染新建对象会让 React Flow 重挂全部节点） */
 const NODE_TYPES: NodeTypes = { chapter: ChapterCard };
-
-/** 本页不渲染边（连线属后续卡片；常量空数组避免每次渲染换引用） */
-const EMPTY_EDGES: Edge[] = [];
 
 /** 首帧 fitView 的上界：小书（1–2 章）不放大到满屏，`maxZoom: 1` 保持不变即可 */
 const FIT_VIEW_OPTIONS = { padding: 0.1, maxZoom: 1 } as const;
@@ -86,6 +111,116 @@ function CanvasFlow({ projectId, cards, marks }: CanvasFlowProps) {
     setNodes(flowNodes);
   }, [flowNodes, setNodes]);
 
+  /** 只放行拖动 / 选中：**节点不可删**（结构只在大纲树里改）——`Delete` 键的删除变更在这里掉 */
+  const handleNodesChange = useCallback(
+    (changes: NodeChange<ChapterCardNode>[]) =>
+      onNodesChange(changes.filter((change) => change.type !== "remove")),
+    [onNodesChange],
+  );
+
+  // ===== 连线（plot_edge）=====
+  // 关系列表是唯一事实源：建边 / 删边 / 改标签成功后一律重拉，边从列表派生（不手工 push）
+  const [relations, setRelations] = useState<RelationSummaryItem[] | null>(null);
+  const loadPlotEdges = useCallback(async () => {
+    try {
+      const res = await listRelations({ relation_type: PLOT_EDGE_RELATION_TYPE, depth: 1 });
+      setRelations(res.relations);
+    } catch {
+      // 连线是观察面的增强：拉不到就按「还没有连线」渲染，不阻塞画布、不出错误条
+      setRelations([]);
+    }
+  }, []);
+  useEffect(() => {
+    void loadPlotEdges();
+  }, [loadPlotEdges]);
+
+  /** 获焦章（单击卡片；`null` = 没有聚焦，所有边原样） */
+  const [focusedNodeId, setFocusedNodeId] = useState<string | null>(null);
+  /** 抽屉里正在编辑的边（= 关系 id） */
+  const [editingEdgeId, setEditingEdgeId] = useState<string | null>(null);
+  /** 待二次确认的边 id（`null` = 没有删除请求） */
+  const [pendingDeleteIds, setPendingDeleteIds] = useState<string[] | null>(null);
+
+  const visibleChapterIds = useMemo(() => new Set(cards.map((card) => card.id)), [cards]);
+  const plotEdges = useMemo(
+    () => canvasPlotEdges(relations, visibleChapterIds),
+    [relations, visibleChapterIds],
+  );
+  const adjacentEdgeIds = useMemo(
+    () => adjacentPlotEdgeIds(plotEdges, focusedNodeId),
+    [plotEdges, focusedNodeId],
+  );
+  const flowEdges = useMemo<Edge[]>(
+    () =>
+      plotEdges.map((edge) => ({
+        id: edge.id,
+        source: edge.source,
+        target: edge.target,
+        // 空标签不传：React Flow 收到 `undefined` 才不画文字（空串会留一个空文本框）
+        label: edge.label === "" ? undefined : edge.label,
+        style:
+          focusedNodeId === null || adjacentEdgeIds.has(edge.id)
+            ? undefined
+            : { opacity: PLOT_EDGE_DIM_OPACITY },
+      })),
+    [plotEdges, focusedNodeId, adjacentEdgeIds],
+  );
+  const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>(flowEdges);
+  // 关系列表 / 聚焦章变化 → 收敛到 flowEdges（选中态由 onEdgesChange 维护）
+  useEffect(() => {
+    setEdges(flowEdges);
+  }, [flowEdges, setEdges]);
+
+  /** 只放行选中态：**删除变更在这里被拦住**——边归服务端，必须过了 ConfirmDialog 才真删 */
+  const handleEdgesChange = useCallback(
+    (changes: EdgeChange<Edge>[]) =>
+      onEdgesChange(changes.filter((change) => change.type !== "remove")),
+    [onEdgesChange],
+  );
+
+  /** 拖出即连：自连 / 落空静默取消（不发请求）；重复 409 只提示、不重复加边 */
+  const handleConnect = useCallback<OnConnect>(
+    (connection) => {
+      const payload = plotEdgeCreatePayload(connection.source, connection.target);
+      if (payload === null) return;
+      void createRelation(payload)
+        .then(() => loadPlotEdges())
+        .catch((err: unknown) => {
+          if (err instanceof ApiError && err.code === "RELATION_EXISTS") {
+            useUiStore.getState().showToast("这条连线已存在", "error");
+            return;
+          }
+          useUiStore
+            .getState()
+            .showToast(err instanceof ApiError ? err.message : "连线失败，请重试", "error");
+        });
+    },
+    [loadPlotEdges],
+  );
+
+  /** `Delete` 键 / 抽屉按钮 → 先收集待确认的边（未知 id 丢弃），确认后才真删 */
+  const handleEdgesDelete = useCallback(
+    (deleted: Edge[]) => {
+      const targets = plotEdgeDeleteTargets(
+        plotEdges,
+        deleted.map((edge) => edge.id),
+      );
+      if (targets.length === 0) return;
+      setPendingDeleteIds(targets.map((target) => target.id));
+    },
+    [plotEdges],
+  );
+
+  /** 确认删边：物理删（不可恢复）→ 重拉列表；取消则什么都不做（边从未被移除） */
+  async function handleConfirmEdgeDelete(): Promise<void> {
+    for (const edge of plotEdgeDeleteTargets(plotEdges, pendingDeleteIds ?? [])) {
+      await deleteRelation(edge.id);
+    }
+    await loadPlotEdges();
+    setEditingEdgeId(null);
+    useUiStore.getState().showToast("已删除连线");
+  }
+
   /** 拖动结束 = 手工坐标落盘（只存这一张；其余章继续按可见章序网格补位） */
   const handleNodeDragStop: OnNodeDrag<ChapterCardNode> = (_event, node) => {
     const next: CanvasSavedState = {
@@ -103,30 +238,70 @@ function CanvasFlow({ projectId, cards, marks }: CanvasFlowProps) {
     writeCanvasState(projectId, next);
   }
 
+  const editingRelation =
+    editingEdgeId === null ? undefined : relations?.find((relation) => relation.id === editingEdgeId);
+  /** 端点说明的卡片文案（`第N章 章名`；两端都在 visibleChapterIds 内，必命中） */
+  const edgeHeadline =
+    editingRelation === undefined
+      ? ""
+      : [editingRelation.sourceId, editingRelation.targetId]
+          .map((id) => {
+            const card = cards.find((candidate) => candidate.id === id);
+            return card === undefined ? id : `${card.chapterLabel} ${card.title}`;
+          })
+          .join(" → ");
+
   return (
     <div className="min-h-0 flex-1">
       <ReactFlow
         className="h-full w-full"
         nodes={nodes}
-        edges={EMPTY_EDGES}
+        edges={edges}
         nodeTypes={NODE_TYPES}
-        onNodesChange={onNodesChange}
+        onNodesChange={handleNodesChange}
+        onEdgesChange={handleEdgesChange}
         onNodeDragStop={handleNodeDragStop}
         onMoveEnd={handleMoveEnd}
+        onConnect={handleConnect}
+        onEdgesDelete={handleEdgesDelete}
+        onEdgeClick={(_event, edge) => setEditingEdgeId(edge.id)}
+        // 单击卡片 = 选中并聚焦邻边；点空白取消；双击 = 跳大纲节点（所以双击不缩放）
+        onNodeClick={(_event, node) => setFocusedNodeId(node.id)}
+        onPaneClick={() => setFocusedNodeId(null)}
+        onNodeDoubleClick={(_event, node) => navigate(`#/outline/${node.id}`)}
+        deleteKeyCode="Delete"
         defaultViewport={initialViewport}
         fitView={initialViewport === undefined}
         fitViewOptions={FIT_VIEW_OPTIONS}
         minZoom={CANVAS_MIN_ZOOM}
         maxZoom={CANVAS_MAX_ZOOM}
-        nodesConnectable={false}
-        elementsSelectable={false}
-        // 双击留给后续卡片的「跳大纲节点」手势，本卡不缩放
         zoomOnDoubleClick={false}
         attributionPosition="bottom-left"
       >
         <Controls showInteractive={false} position="top-left" />
         <MiniMap position="top-right" pannable zoomable ariaLabel="章节缩略图" />
       </ReactFlow>
+      {editingRelation !== undefined && (
+        // key = 边 id：换边就重挂，草稿即该边的当前值（同 EditRelationDialog 的「挂载时取初值」）
+        <PlotEdgeDrawer
+          key={editingRelation.id}
+          relation={editingRelation}
+          headline={edgeHeadline}
+          onSaved={loadPlotEdges}
+          onRequestDelete={() => setPendingDeleteIds([editingRelation.id])}
+          onClose={() => setEditingEdgeId(null)}
+        />
+      )}
+      {pendingDeleteIds !== null && (
+        <ConfirmDialog
+          title="删除连线"
+          description={`将删除 ${pendingDeleteIds.length} 条连线，删除后无法恢复。`}
+          confirmLabel="删除"
+          danger
+          onConfirm={handleConfirmEdgeDelete}
+          onClose={() => setPendingDeleteIds(null)}
+        />
+      )}
     </div>
   );
 }
