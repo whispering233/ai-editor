@@ -4,18 +4,6 @@
 
 ## 当前任务卡
 
-### U3 设定页：rail 按钮右移 + 详情紧凑页头 + 图标操作
-
-状态：待办
-
-- 契约：`docs/ui/DESIGN.md` `setting-page`「工作台 rail 头」「详情页头」两条与「panel-header 操作口径」。
-- `packages/client/src/components/entity/setting-rail.tsx`：标题条换 `PanelHeader`（`className="mb-0"`，默认 12px 内距；常驻控件行紧随分割线）；右侧组顺序改为 `[全部折叠/展开][+新建][收起/展开右侧详情]`（详情钮最右端；图标 = `RightOutlined` 收起 / `LeftOutlined` 展开），行为不变。
-- `packages/client/src/pages/SettingWorkbench.tsx`：详情列桌面端 `p-6` → `pt-0`；空态 `PageHeader` → `PanelHeader`（标题「详情」、`className="-mx-6" insetClassName="px-6"`）；向 `EntityDetail` 传 `compact`。
-- `packages/client/src/pages/EntityDetail.tsx`：新增 `compact?: boolean`；`compact` 时页头用 `PanelHeader`（`className="-mx-6" insetClassName="px-6"`，标题 16px），操作 = 保存（`type="primary" size="small"` 图标、`loading`、`aria-label="保存"`）+ 移入回收站（`DeleteOutlined`、`color="default" variant="text" size="small"`、`aria-label="移入回收站"`）；元信息单行 `创建于 {formatMonthDay} · 更新于 {formatMonthDay}`（`title` 放完整时间）+「变更记录 N 条」按钮 `shrink-0`。非 `compact`（地点/伏笔/时间轴）保持 `PageHeader` 原样。
-- 非目标：不加设定页右侧详情收起（已有，仅调按钮位置）、不动写作 / 大纲。
-- 测试：`setting.test.tsx` 断按钮顺序、`aria-label`、元信息单行文本。
-- 完成判据（硬）：`pnpm --filter @whispering233/ai-editor-client test`、`pnpm typecheck`、`pnpm lint` 全绿；`git log --oneline -1` 为本卡 commit；`git status --short` 为空；汇报附 commit hash 与命令输出末尾。
-
 ### U4 写作页：右侧详情收起
 
 状态：待办
