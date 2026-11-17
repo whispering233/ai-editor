@@ -8,6 +8,7 @@
 // 边界：custom_fields 仅在响应 data 已有该键时显示（MVP 无法新增键）；「问 AI」入口待 chat store
 // 就绪后补（带上下文进聊天）
 import { useEffect, useRef, useState } from "react";
+import type { ReactNode } from "react";
 import { HolderOutlined } from "@ant-design/icons";
 import { formatTimestamp, MAX_ENTITY_LIST_LIMIT } from "@whispering233/ai-editor-shared";
 import type { EntityType } from "@whispering233/ai-editor-shared";
@@ -244,13 +245,19 @@ function CustomFieldsEditor({
 export default function EntityDetail({
   type,
   id,
+  leading,
   onSaved,
+  onDirtyChange,
 }: {
   type: string;
   id: string;
+  /** 标题行前置元素（透传 `PageHeader` 的 `leading`；设定工作台放「设定树」收起按钮） */
+  leading?: ReactNode;
   /** 保存成功回调（可选，附加）：人物工作台用它刷新左栏列表的姓名/角色定位——
    * 不传则行为与本卡前完全一致（其他宿主无感） */
   onSaved?: () => void;
+  /** 未保存状态上报宿主（可选）：detail 与表单有差异即为 dirty；宿主据此做切行 / 导航守卫 */
+  onDirtyChange?: (dirty: boolean) => void;
 }) {
   const entityType = type as EntityType;
 
@@ -341,6 +348,27 @@ export default function EntityDetail({
   // 表单以服务端权威为准整体重置（AI 改动的字段随之同步，本地未保存编辑被覆盖属预期语义）
   useDataRefresh(() => void loadDetail());
 
+  // 未保存状态上报宿主（设定工作台：切行 / 返回条 / 新建导航前确认）；
+  // 只在值真正变化时回调（不要让每次渲染都通知宿主），卸载时清掉宿主标记（含 StrictMode 重挂）
+  const dirty = detail !== null && form !== null && diffData(detail.data, form) !== null;
+  const lastDirtyRef = useRef<boolean | null>(null);
+  const onDirtyChangeRef = useRef(onDirtyChange);
+  useEffect(() => {
+    onDirtyChangeRef.current = onDirtyChange;
+  }, [onDirtyChange]);
+  useEffect(() => {
+    if (lastDirtyRef.current === dirty) return;
+    lastDirtyRef.current = dirty;
+    onDirtyChangeRef.current?.(dirty);
+  }, [dirty]);
+  useEffect(
+    () => () => {
+      lastDirtyRef.current = null;
+      onDirtyChangeRef.current?.(false);
+    },
+    [],
+  );
+
   /** 保存：diffData 只提交变更字段（partial 浅合并）；成功后重拉（服务端权威） */
   async function handleSave() {
     if (!detail || !form || saving) return;
@@ -405,6 +433,7 @@ export default function EntityDetail({
       useUiStore.getState().showToast("已删除关系");
       setDeleteRelationTarget(null);
       await loadDetail();
+      onSaved?.();
     } catch (err) {
       throw err;
     }
@@ -431,6 +460,7 @@ export default function EntityDetail({
       if (current) await deleteRelation(current.relationId); // 先建后删
       useUiStore.getState().showToast(current ? "已修改上级设定" : "已设置上级设定");
       await loadDetail();
+      onSaved?.();
     } catch (err) {
       setHierarchyError(err instanceof ApiError ? err.message : "修改上级失败，请重试");
     } finally {
@@ -449,11 +479,18 @@ export default function EntityDetail({
       await deleteRelation(current.relationId);
       useUiStore.getState().showToast("已清除上级设定");
       await loadDetail();
+      onSaved?.();
     } catch (err) {
       setHierarchyError(err instanceof ApiError ? err.message : "清除上级失败，请重试");
     } finally {
       setHierarchySaving(false);
     }
+  }
+
+  /** 新增关联成功：重拉详情（服务端权威）+ 通知宿主刷新外列表（层级边也走这条） */
+  async function handleRelationCreated() {
+    await loadDetail();
+    onSaved?.();
   }
 
   /** 关系行端点名称（本实体端用名称，另一端优先联表名称，缺省 id） */
@@ -495,6 +532,7 @@ export default function EntityDetail({
     <section>
       {/* 页头（统一壳）：标题 + 操作 + 元信息行 + 分割线 */}
       <PageHeader
+        leading={leading}
         title={detail?.name ?? "…"}
         truncateTitle
         action={
@@ -730,7 +768,7 @@ export default function EntityDetail({
       {relationDialogOpen && (
         <CreateRelationDialog
           source={{ type: entityType, id, name: detail?.name ?? "" }}
-          onCreated={loadDetail}
+          onCreated={handleRelationCreated}
           onClose={() => setRelationDialogOpen(false)}
         />
       )}
