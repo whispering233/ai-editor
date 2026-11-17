@@ -53,6 +53,7 @@ function seedOutlineTree(): OutlineFileTree {
               { id: "sc-1", type: "scene", title: "场景一", updated_at: T0 },
             ],
           },
+          { id: "ch-2", type: "chapter", title: "第二章", updated_at: T0 },
         ],
       },
     ],
@@ -120,6 +121,32 @@ describe("propose_add_relation", () => {
  // 非伏笔关系不受影响（人物 → 人物）
     const other = createEntity(db, { type: "character", name: "乙" });
     expect(runProposeAddRelation(makeCtx(), { source: char.id, target: other.id, type: "ally" }).proposal_id).toMatch(/^prop_/);
+  });
+
+  it("端点矩阵（shared relationTypeAllowedFor）：非法组合工具层直接失败，不生成提案", () => {
+    writeOutlineFile(dir, seedOutlineTree());
+    const location = createEntity(db, { type: "location", name: "客栈" });
+    const char = createEntity(db, { type: "character", name: "阿强" });
+    const other = createEntity(db, { type: "character", name: "乙" });
+    const timepoint = createEntity(db, { type: "timepoint", name: "黄昏" });
+    const event = createEntity(db, { type: "event", name: "火并" });
+ // 「盟友」仅人物↔人物：地点 → 人物 拒，文案带关系类型与两端中文类型
+    expect(() => runProposeAddRelation(makeCtx(), { source: location.id, target: char.id, type: "ally" })).toThrow(
+      /「盟友」不能用于 地点 → 人物/,
+    );
+    expect(runProposeAddRelation(makeCtx(), { source: char.id, target: other.id, type: "kills" }).proposal_id).toMatch(/^prop_/);
+ // 剧情连线仅 章 → 章
+    expect(runProposeAddRelation(makeCtx(), { source: "ch-1", target: "ch-2", type: "plot_edge" }).proposal_id).toMatch(/^prop_/);
+    expect(() => runProposeAddRelation(makeCtx(), { source: "ch-1", target: "vol-1", type: "plot_edge" })).toThrow(
+      /「剧情连线」不能用于 章 → 卷/,
+    );
+ // 出现于：任意 → 大纲节点；人物 → 人物 拒
+    expect(runProposeAddRelation(makeCtx(), { source: char.id, target: "ch-1", type: "appears_in" }).proposal_id).toMatch(/^prop_/);
+    expect(() => runProposeAddRelation(makeCtx(), { source: char.id, target: other.id, type: "appears_in" })).toThrow(
+      /「出现于」不能用于 人物 → 人物/,
+    );
+ // 发生于：时间点 → 事件
+    expect(runProposeAddRelation(makeCtx(), { source: timepoint.id, target: event.id, type: "occurs_at" }).proposal_id).toMatch(/^prop_/);
   });
 
   it("metadata 透传进执行参数", () => {

@@ -158,6 +158,7 @@ shared（纯类型/常量/工具，零 Node 依赖，可被 client 安全 tree-s
     "@blocknote/core": "0.54.2",              // 块文档模型/编辑器内核（exact pin）
     "@blocknote/react": "0.54.2",             // React 绑定（useCreateBlockNote / BlockNoteView）
     "@blocknote/ariakit": "0.54.2",           // 表皮变体（自带 54KB CSS；无额外 UI 库 peer）
+    "@xyflow/react": "12.12.1",               // 大纲画布（exact pin；只引 dist/base.css，--xy-* 映射见 DESIGN.md `outline-canvas`）
     "clsx": "^2.1.1",                          // 类名拼接（cn = clsx + tailwind-merge）
     "tailwind-merge": "^3.6.0",
     "tw-animate-css": "^1.4.0",                // Tailwind 4 动画工具类（index.css 引入）

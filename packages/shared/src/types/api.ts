@@ -463,6 +463,10 @@ export type ProjectImportRes = z.infer<typeof projectImportResSchema>;
 
 // ============ entity 端点（「实体 CRUD」） ============
 
+// 关系 metadata 归一（定义在 utils，根入口需 zod-free；服务端从 /schemas 或根即可取）
+export { normalizeRelationMetadata } from "../utils/relation-metadata.js";
+export type { RelationMetadata } from "../utils/relation-metadata.js";
+
 /**
  * 关系（GET /api/v1/relation depth=1 项；与 types/entity.ts RelationRecord 对齐）
  * 定义于此处供 entity 详情响应（relations: RelationSummary[]，形状同 RelationRecord，

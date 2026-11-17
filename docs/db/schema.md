@@ -154,20 +154,24 @@ CREATE INDEX idx_relation_type   ON relation_records(relation_type) WHERE delete
 
 预定义关系类型：
 
-| 关系类型 | 说明 | 示例 |
-|---------|------|------|
-| `belongs_to` | 所属（**层级语义**：setting→setting 表达设定父子，子 belongs_to 父；防自指/成环由 POST /relation 校验） | 人物→设定；子设定→父设定 |
-| `owns` | 拥有 | 人物→物品 |
-| `masters` | 掌握 | 人物→能力 |
-| `ally` / `rival` / `mentor` / `family` | 人物间关系 | 人物→人物 |
-| `kills` | 击杀 | 人物→人物 |
-| `appears_in` | 出现于大纲节点 | 实体→大纲节点 |
-| `occurs_in` | 发生于大纲节点（事件锚定） | event→大纲节点（多对多：一个事件可关联多个场景/章节，一个场景可被多个事件引用；**锚定 = 关系，无独立 chapter_anchor 字段**） |
-| `occurs_at` | 发生在地点 / 挂载时间点 | 大纲节点→地点（废弃语义）**＋ timepoint → event（1:n 挂载，G2 现行主用途）** |
-| `plot_edge` | 剧情连线（画布推演） | 大纲节点→大纲节点，`metadata` 存连线标签 |
-| `plants` / `advances` / `resolves` | 伏笔管理（**源端仅章**：仅有 `chapter` 节点可作为伏笔锚点，`POST /relation` 校验 400——伏笔是章级叙事事件） | 章节点→hook |
-| `depends_on` | 伏笔依赖 | hook→hook |
-| `involves` | 涉及 | hook→实体 |
+| 关系类型 | 说明 | 端点（源 → 目标） | 示例 |
+|---------|------|------|------|
+| `belongs_to` | 所属（**层级语义**：setting→setting 表达设定父子，子 belongs_to 父；防自指/成环由 POST /relation 校验） | `character → setting`；`setting → setting` | 人物→设定；子设定→父设定 |
+| `owns` | 拥有 | `character → setting` | 人物→物品 |
+| `masters` | 掌握 | `character → setting` | 人物→能力 |
+| `ally` / `rival` / `mentor` / `family` | 人物间关系 | `character → character` | 人物→人物 |
+| `kills` | 击杀 | `character → character` | 人物→人物 |
+| `appears_in` | 出现于大纲节点 | 任意实体 → `outline_node` | 实体→大纲节点 |
+| `occurs_in` | 发生于大纲节点（事件锚定） | `event → outline_node` | event→大纲节点（多对多：一个事件可关联多个场景/章节，一个场景可被多个事件引用；**锚定 = 关系，无独立 chapter_anchor 字段**） |
+| `occurs_at` | 发生在地点 / 挂载时间点 | `timepoint → event`；`outline_node → location` | 大纲节点→地点（废弃语义）**＋ timepoint → event（1:n 挂载，G2 现行主用途）** |
+| `plot_edge` | 剧情连线（画布推演） | `outline_node(chapter) → outline_node(chapter)` | 章→章，`metadata` 存连线标签 / 说明 |
+| `plants` / `advances` / `resolves` | 伏笔管理（**源端仅章**：仅有 `chapter` 节点可作为伏笔锚点，`POST /relation` 校验 400——伏笔是章级叙事事件） | `outline_node(chapter) → hook` | 章节点→hook |
+| `depends_on` | 伏笔依赖 | `hook → hook` | hook→hook |
+| `involves` | 涉及 | `hook → 任意实体` | hook→实体 |
+
+> **端点适用性（2026-11）**：上表「端点」列 = shared `RELATION_TYPE_META[*].endpoints` 的**成对声明**（`{ from, to }[]`；缺省 = 通配）。它**只收窄 UI 选单与 AI 工具白名单**（画布 / 关联页下拉不出现「地点被击杀」这类组合），**服务端不新增校验**（保留既有三条：伏笔源端仅章、`belongs_to` 防环、`occurs_at` 1:n）。写成对而不是独立的 from/to 集合，是因为后者会推出 `timepoint → location` 这种不存在的关系。`appears_in` / `involves` 的宽松侧按同表端点列声明为 `"*"`（`appears_in` = 任意实体 → 大纲节点，`involves` = 伏笔 → 任意实体）；`"*"` 只表示**声明侧**通配，实际端点带 `"*"` 一律不匹配。
+>
+> **关系说明（2026-11）**：`metadata` 约定 `{ label?: string; description?: string }`——`label` = 短标签（画布连线上显示），`description` = 长说明（只在抽屉 / 关联页展示）。空串 = 删除该键；整对象替换、字段归一单一实现 = shared `normalizeRelationMetadata`（POST / PUT / AI 工具共用）。**其余键保留不报错**（自由袋未被收走），但 UI 与 AI 不再写。
 
 > **对称关系（2026-09）**：`ally` / `rival` / `family` 语义对等——展示层合并为一行 + 「双向」徽标（不自动建反边）、AI 冲突检测把「单向存在」报为数据缺口；两者共用同一属性（shared `RELATION_TYPE_META[*].symmetric`）。其余类型（含 `mentor`）有向，**自定义类型一律有向**。
 
@@ -441,4 +445,4 @@ CREATE TABLE IF NOT EXISTS practice_style_packs (
 
 **随包搬运（2026-11）**：存在时进备份 / 导出 / 云端包（包内条目 3 或 4 个）；恢复 / 导入 / 云端拉取按**严格镜像**——包内无该条目即删除本机规则文件（覆盖前自动快照保留旧规则）。外部删除规则文件不触发变更判定（ENOENT = 未变更，否则从未有规则的项目会每 tick 都备份）；app 内清空规则写空文件、不删除。
 
-**画布视图（UI 已移除，数据能力保留）**：大纲中的节点通过 `relation_records` 中的关系形成有向图，支持多线推演和路径分析（参见 [`../api/tool-calling.md`](../api/tool-calling.md) 中的分析类工具）。连线通过 `relation_records` 的 `plot_edge` 类型存储，不进入 outline.json；**画布页与节点坐标/缩放存储已随 UI 一并移除**（纯数据能力保留）。
+**画布视图（2026-11 回归，见 `../ui/DESIGN.md` `outline-canvas`）**：章节之间的关系（因果、伏笔回收、并行……）用 `plot_edge` 表达，端点固定为章→章；`metadata` 存 `label` / `description`（见 relation_records 的关系说明约定）。**坐标与视口不入库**：它们是展示层偏好（`localStorage` 按书，key 见 `../design/config.md`），不进 `outline.json`、不进备份 / 云端包。层级结构（卷 / 章 / 场）仍只在 `outline.json`，画布不写结构。

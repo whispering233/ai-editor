@@ -5,18 +5,18 @@
 // - 列表模式（source 为 null）：暴露源实体选择（类型下拉默认 character + 实体下拉 listEntities limit 100），方向「源 → 目标」
 // 目标端类型支持四类实体 + 大纲节点（outline store 树，无需请求）；409 RELATION_EXISTS → 内联「这条关系已经存在」；
 // 成功 → toast「已建立关系」→ onCreated → onClose。样式 token 类。
-// 关系类型下拉口径（含伏笔锚点仅章的源端过滤）见 lib/relation-types.ts（卡片 1.6）——
+// 关系类型下拉口径（双端端点矩阵 + 伏笔 fail-closed）见 lib/relation-types.ts——
 // 源端点层级由调用点显式传入（nodeType），不靠 store 反查。
 // 关系类型下拉 = `select-free-input`（DESIGN.md）：选项 = 调用方预定义子集 ∪ 本项目已用**自定义**类型
 // （挂载时一次 `GET /relation?depth=1` 派生，失败静默降级为只有预定义子集），无匹配给「将新建『X』」；
-// 提交前用 shared 语法函数预校验（非法值内联报错且不发请求）。
+// 提交前先过 shared 语法函数、再过端点 guard（非法值内联报错且不发请求）。
 // 布局：左右三段式「源 -关系-> 目标」——grid-cols-[1fr_auto_1fr]（sm 起），窄屏垂直堆叠；
 // 中列关系类型下拉 + 「→」箭头（mt-auto 沉底对齐两端实体下拉），三列各有小标题（源实体/关系类型/目标实体）。
 import { useEffect, useState } from "react";
 import type { FormEvent } from "react";
 import { AutoComplete, Button, Select } from "antd";
-import { ENTITY_TYPES, relationTypeSyntaxError } from "@whispering233/ai-editor-shared";
-import type { EntitySummary, EntityType } from "@whispering233/ai-editor-shared";
+import { ENTITY_TYPES } from "@whispering233/ai-editor-shared";
+import type { EntitySummary, EntityType, RelationEndpointRef } from "@whispering233/ai-editor-shared";
 import {
   ApiError,
   createRelation,
@@ -25,10 +25,12 @@ import {
   type CreateRelationBody,
   type OutlineNodeType,
 } from "../../lib/api";
-import { flattenTree } from "../../lib/outline-tree";
+import { findNode, flattenTree } from "../../lib/outline-tree";
 import {
   customRelationTypeUsages,
   dialogRelationTypeOptions,
+  relationEndpointError,
+  relationSubmitError,
   relationTypeInputOptions,
   resolveRelationTypeInput,
 } from "../../lib/relation-types";
@@ -89,7 +91,7 @@ export function CreateRelationDialog({
    */
   lockTargetType?: EntityType;
   /**
-   * 关系类型下拉覆盖（省略 = `dialogRelationTypeOptions(source)` 基集）；
+   * 关系类型下拉覆盖（省略 = `dialogRelationTypeOptions(from, to)` 双端收窄）；
    * 人物关系网传人↔人 5 类（`lib/character-relations.ts`）——**入口收窄**，其他关系类型走「其他关联」入口。
    * 调用方保证传入值非空（空数组会让默认值 undefined）；本组件不做静态校验。
    */
@@ -98,8 +100,6 @@ export function CreateRelationDialog({
   onClose: () => void;
 }) {
   const outline = useProjectStore((s) => s.outline);
-  // 关系类型选项（本组件内只读：挂载后不变，对话框开/关即重挂）
-  const typeOptions = relationTypes ?? dialogRelationTypeOptions(source);
   // 本项目已用自定义类型（挂载时拉一次全量关系派生；失败静默降级为只有预定义子集，不阻断建关系）
   const [customUsages, setCustomUsages] = useState<RelationTypeUsage[]>([]);
   // 列表模式源端（详情模式不用）
@@ -112,11 +112,39 @@ export function CreateRelationDialog({
   );
   const [otherEntities, setOtherEntities] = useState<EntitySummary[] | null>(null);
   const [otherId, setOtherId] = useState("");
-  // 默认关系类型文本 = 当前源端可选集的首项（保证默认值 ⊆ 选项集，源端过滤后仍成立）；
+  // 端点 ref（下拉收窄 + 提交 guard 共用）：详情模式源固定；列表模式源取当前选中的源类型
+  const endpointFrom: RelationEndpointRef =
+    source === null
+      ? { type: sourceType }
+      : source.type === "outline_node"
+        ? { type: "outline_node", nodeType: source.nodeType }
+        : { type: source.type };
+  // 目标端端点：选了大纲节点且已选 id 时补层级（`plot_edge` 仅章→章，章→卷 不可见 / 不可提交）；未选 id = 通配
+  const otherNode = otherType === "outline_node" && otherId !== ""
+    ? findNode(outline?.children ?? [], otherId)
+    : null;
+  const endpointTo: RelationEndpointRef = otherNode
+    ? { type: "outline_node", nodeType: otherNode.type }
+    : { type: otherType };
+  // 关系类型选项：调用方覆写优先，否则按双端端点派生（目标类型 / 源类型变化即重算）
+  const typeOptions = relationTypes ?? dialogRelationTypeOptions(endpointFrom, endpointTo);
+  // 默认关系类型文本 = 当前端点可选集的首项（保证默认值 ⊆ 选项集）；
   // **存的是展示文本**（自由输入控件里预定义 = 中文标签、自定义 = 原名），提交前反解回落库取值
   const [relationTypeText, setRelationTypeText] = useState<string>(
     () => relationTypeInputOptions(typeOptions, [])[0]?.value ?? "",
   );
+  // 端点变化（含目标节点层级）→ 当前输入不再合法则清空（自定义类型不在选项集里，但按 guard 合法时保留）
+  const endpointKey = `${endpointFrom.type}:${endpointFrom.nodeType ?? ""}→${endpointTo.type}:${endpointTo.nodeType ?? ""}`;
+  useEffect(() => {
+    setError(null); // 端点变了，上一次提交的红字已不适用
+    setRelationTypeText((current) =>
+      current !== "" &&
+      relationEndpointError(resolveRelationTypeInput(current), endpointFrom, endpointTo) !== null
+        ? ""
+        : current,
+    );
+    // 依赖按端点为键：端点 ref 每次渲染重建（本仓库未启用 exhaustive-deps 规则）
+  }, [endpointKey]);
   // 搜索词（combobox 受控）：null = 不在搜索（输入框显示已选文本）。
   // 打开下拉即清空搜索词——否则预填的选中值会被当成搜索词，下拉只剩它一项（无法浏览其它类型）；
   // 关闭时把已输入的文本提交为选中值（自由输入不能被“点别处”丢掉）
@@ -179,10 +207,10 @@ export function CreateRelationDialog({
       setError("请选择关联对象");
       return;
     }
-    // 语法预校验（shared 纯函数，与 REST schema / db 守卫同源）：非法值内联报错且不发请求
-    const relationTypeError = relationTypeSyntaxError(relationType);
-    if (relationTypeError !== null) {
-      setError(relationTypeError);
+    // 提交判定纯函数（语法校验优先，再基集 / 矩阵 guard）：非法值内联报错且不发请求
+    const submitError = relationSubmitError(relationType, endpointFrom, endpointTo);
+    if (submitError !== null) {
+      setError(submitError);
       return;
     }
     setSubmitting(true);

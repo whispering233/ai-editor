@@ -3,6 +3,8 @@
 //
 // - add_relation：端点类型（source_type/target_type）已由 S6.6 提案层派生规范化到 args，
 // 此处直接透传 db createRelation（判重 RELATION_EXISTS / 端点存在性校验 db 层负责）；
+// **metadata 直写 db 绕过 REST，故在此过 shared `normalizeRelationMetadata`**（与 POST / PUT 同一实现：
+// label/description trim、空串删键、其余键保留）——不存在则不传键
 // 重复确认同一 add_relation 提案 → RELATION_EXISTS 抛错（幂等只保证 hook 复合写）
 // - **伏笔关系源端仅章（卡片 1.3 + 5.2）**：executor **直写 db 绕过 REST 校验**，此处再拦一道
 // （与 `executor/delta.ts` 的 requireChapterNode 同模式）——plants/advances/resolves 无条件要求
@@ -11,7 +13,7 @@
 // 0 行影响（关系不存在）→ 抛错（fail-fast，S7.5 转错误响应）
 
 import { createRelation, deleteRelation } from "@whispering233/ai-editor-db";
-import { HOOK_RELATION_TYPES } from "@whispering233/ai-editor-shared";
+import { HOOK_RELATION_TYPES, normalizeRelationMetadata } from "@whispering233/ai-editor-shared";
 import { requireChapterNode } from "../proposal/types.js";
 import { optionalRecord, requireString, type ExecutorFn } from "./types.js";
 
@@ -28,6 +30,7 @@ export const executeAddRelation: ExecutorFn = (ctx, proposal) => {
     }
     requireChapterNode(ctx, sourceId);
   }
+  const metadata = optionalRecord(args, "metadata");
   const row = createRelation(
     ctx.db,
     {
@@ -36,7 +39,7 @@ export const executeAddRelation: ExecutorFn = (ctx, proposal) => {
       targetType: requireString(args, "target_type"),
       targetId: requireString(args, "target_id"),
       relationType,
-      metadata: optionalRecord(args, "metadata"),
+      ...(metadata === undefined ? {} : { metadata: normalizeRelationMetadata(metadata) }),
     },
     ctx.outlineDir,
   );

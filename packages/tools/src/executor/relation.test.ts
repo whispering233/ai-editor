@@ -99,6 +99,23 @@ describe("add_relation", () => {
     expect(getRelation(db, result.id as string, dir)!.metadata).toEqual({ chapter: 1 });
   });
 
+  it("metadata 归一（shared normalizeRelationMetadata）：label/description trim、空串删键、其余键保留", () => {
+    const a = createEntity(db, { type: "character", name: "甲" });
+    const b = createEntity(db, { type: "character", name: "乙" });
+    const result = executeAddRelation(
+      makeCtx(),
+      makeProposal("propose_add_relation", {
+        source_type: "character",
+        source_id: a.id,
+        target_type: "character",
+        target_id: b.id,
+        relation_type: "ally",
+        metadata: { label: " x ", description: "  ", extra: 1 },
+      }),
+    );
+    expect(getRelation(db, result.id as string, dir)!.metadata).toEqual({ label: "x", extra: 1 });
+  });
+
   it("伏笔关系源端仅章（卡片 1.3 + 5.2）：executor 直写 db 也拦——非章节点/实体源端均拒", () => {
     writeOutlineFile(dir, seedOutlineTree());
     const hook = createEntity(db, { type: "hook", name: "身世之谜" });

@@ -63,6 +63,7 @@
 ### API / 工具 / SSE
 
 - 导出出口契约见 `docs/api/10-api-project.md`。实现侧单源：卷号 / 章号 / 文件名 / TXT 组装一律消费 shared（`outline-numbering.ts` 的 `numberVisibleOutline`、`orderVisibleChapters`、`sanitizeDocumentFileName`、`novel-export.ts`），服务端与客户端不得复刻；与服务端 `deriveChapterOrder`（含软删、保引用稳定）不是同一口径，不得互为替代。
+- 关系端点适用性与说明的单源：`RELATION_TYPE_META[*].endpoints`（成对 `{from,to}`，缺省 = 通配，`"*"` 只在声明侧生效）与 shared `relationTypeAllowedFor` / `allowedRelationTypes`；它只收窄 UI 选单与 AI 提案，**服务端不新增端点校验**。`metadata` 归一一处 = shared `normalizeRelationMetadata`（POST / PUT / 工具执行侧共用，客户端不得手抄 trim / 删键）；客户端提交判定单源 = `lib/relation-types.ts` 的 `dialogRelationTypeAllowed` / `relationSubmitError`（`relation-submit-wiring.test.ts` 守接线）。
 - 工具参数 schema 用 TypeBox，放 `packages/tools`（**不放 `shared`**：client 不打包 schema）；`execute` 抛错即失败；`propose_*` 的预览细节**只走 `details`**（随 `tool_execution_end` 帧下发），`content` 只给 `proposal_id` + 一句话摘要。
 - 工作区类型（`kind`）的能力收窄与覆盖类写包入口校验见 `docs/design/60-practice.md` / `architecture.md`；实现上是 `ToolDefinition.scope` + 装配过滤（结构性边界，不靠提示词）。
 - SSE 帧集与字段以 `docs/api/80-api-chat.md` 为准；唯一实现点 = `packages/agent/src/runtime/events.ts`，不得回退旧事件名。
@@ -84,6 +85,7 @@
 - 块编辑器升级 = 显式 commit + 全量测 + 浏览器像素核对；禁 `@blocknote/xl-*`；`server` / `tools` / `db` / `agent` 不得依赖 `@blocknote/*`（服务端不解析块结构）。
 - `Ctrl/Cmd + S` = 保存当前内容 + 生成本地存档：键位常量 = `client/src/lib/save-shortcut.ts`；动作走 `registerSaveHandler` 注册栈（后注册者优先）；存档唯一注册者 = `AppShell` 的 `useSaveArchive`；页面保存失败必须 `return false`（阻断存档）。
 - **大纲页（master-detail）实现侧**：大纲只拉一次（页面壳持有 `useOutlineLoader`，`OutlineDetail` 不自拉，`node` 由壳 `findNode` 派生传入）；选中唯一来源 = URL `#/outline/:nodeId`（`#/outline` 无选中）；detail 的 `useDataRefresh` 只刷关系 / 变更记录，**不得再 `reload()` 整树**；未保存守卫 = rail / 空白区 / 窄屏返回条 / 详情页头「写正文」外链（普通左键走 `onNavigate` → 壳 `confirmDiscard`；修饰键 / 中键保留浏览器原生新标签页），**浏览器后退仍不拦**（见 `backlog.md`）；拖拽落点单源 = `lib/outline-tree.ts` 的 `resolveDropPlan`（目标行父合法 → 同级前后；父不合法但目标行自身可承载 → `inside` + 子级末尾，覆盖空 / 折叠 / 非空卷章；卷 → 卷仍同级），页面不得另起判定；rail 宽度 / 收起态 key `ai-editor:outline-rail`。契约见 `DESIGN.md` `outline-page`。
+- **大纲画布实现侧**：拖动只改坐标，不改父子 / 章序 / 卷归属（结构编辑唯一入口仍是大纲树）；坐标与视口只存本机 `ai-editor:canvas:{projectId}`（展示层偏好，不进项目文件 / 备份 / 云端，key 与形状见 `config.md`）；缺失坐标的补位布局单源 = `lib/outline-canvas-layout.ts`（页面不得另起摆位）；只引 `@xyflow/react/dist/base.css`，`--xy-*` 唯一映射 = `components/outline-canvas/canvas-theme.css`。契约见 `DESIGN.md` `outline-canvas`。
 - **设定页（master-detail）实现侧**：壳 = `pages/SettingWorkbench`，`SettingRail` 不自持选中（`nodeId` prop + `onSelect`，**选中唯一来源 = URL**）；树内写操作成功后经 `onMutated` 通知宿主走 `notifyDataChanged()`，**详情 dirty 时不发**（不得静默重置表单）；详情收起 = 整列不渲染且不改存宽度、点行不自动展开；rail 默认宽 / 边界 / 持久化 key 只在 `hooks/use-setting-rail.ts` 定义（窄屏两级互斥）。契约见 `DESIGN.md` `setting-page`。
 - 聊天链路：SSE 解析唯一实现 = `hooks/use-sse.ts`；store 的 loadSeq / msgSeq 竞态、事件级流身份守卫、中止在途 SSE 的约定不得回退；工具行归一唯一入口 = `ChatPanel` 的 `asToolCall`。
 - 提案 UI：`PROPOSAL_TYPE_LABELS` 必须覆盖 `PROPOSAL_TOOLS` 全集；历史只读卡从 `toolCalls` 重建并按 `toolCallId` 与 live 去重，不新增表 / API。

@@ -224,6 +224,43 @@ describe("POST /relation 创建", () => {
     expect(body.data.relation.sourceType).toBe("outline_node");
   });
 
+  it("metadata 归一（shared normalizeRelationMetadata）：label/description trim，其余键原样保留", async () => {
+    const { app, charA, charB } = await seed();
+    const { status } = await createRel(app, {
+      source_type: "character",
+      source_id: charA,
+      target_type: "character",
+      target_id: charB,
+      relation_type: "ally",
+      metadata: { label: "  盟友  ", description: "  长期合作  ", extra: 1 },
+    });
+    expect(status).toBe(201);
+    const list = await app.request("/api/v1/relation?depth=1", { headers: HOST_HEADERS });
+    expect((await list.json()).data.relations[0].metadata).toEqual({
+      label: "盟友",
+      description: "长期合作",
+      extra: 1, // 自由袋未被收走
+    });
+  });
+
+  it("metadata 空串 → label/description 键都不落库", async () => {
+    const { app, charA, charB } = await seed();
+    const { status } = await createRel(app, {
+      source_type: "character",
+      source_id: charA,
+      target_type: "character",
+      target_id: charB,
+      relation_type: "ally",
+      metadata: { label: "   ", description: "  " },
+    });
+    expect(status).toBe(201);
+    const list = await app.request("/api/v1/relation?depth=1", { headers: HOST_HEADERS });
+    const meta = (await list.json()).data.relations[0].metadata as Record<string, unknown>;
+    expect(meta).toEqual({});
+    expect(meta.label).toBeUndefined();
+    expect(meta.description).toBeUndefined();
+  });
+
   it("反向伏笔关系收口（卡片 5.2）：源端非章大纲节点（实体 → 节点 / 实体 → hook）一律 400", async () => {
     const { app, sc1 } = await seed();
     const project = getCurrentProject()!;
@@ -573,6 +610,29 @@ describe("PUT /relation/:id 更新元数据", () => {
     const meta = (await list.json()).data.relations[0].metadata as Record<string, unknown> | undefined;
     expect(meta).toEqual({});
     expect(meta?.label).toBeUndefined();
+  });
+
+  it("description 同样归一：label trim + description 空串删键", async () => {
+    const { app, charA, charB } = await seed();
+    const created = await createRel(app, {
+      source_type: "character", source_id: charA, target_type: "character", target_id: charB, relation_type: "ally",
+    });
+    const res = await putRel(app, created.body.data.id!, { metadata: { label: "  A  ", description: "  " } });
+    expect(res.status).toBe(200);
+    const list = await app.request("/api/v1/relation?depth=1", { headers: HOST_HEADERS });
+    expect((await list.json()).data.relations[0].metadata).toEqual({ label: "A" });
+  });
+
+  it("整体替换（非浅合并）：只传 description 时原 label 被清掉", async () => {
+    const { app, charA, charB } = await seed();
+    const created = await createRel(app, {
+      source_type: "character", source_id: charA, target_type: "character", target_id: charB, relation_type: "ally",
+      metadata: { label: "x" },
+    });
+    const res = await putRel(app, created.body.data.id!, { metadata: { description: "  新说明  " } });
+    expect(res.status).toBe(200);
+    const list = await app.request("/api/v1/relation?depth=1", { headers: HOST_HEADERS });
+    expect((await list.json()).data.relations[0].metadata).toEqual({ description: "新说明" });
   });
 
   it("label 首尾 trim（与 POST 创建侧对称）", async () => {

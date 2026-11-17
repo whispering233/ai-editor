@@ -1,57 +1,154 @@
-// 建立关联对话框关系类型选项测试（卡片 1.6：伏笔锚点仅章——非章大纲节点源排除伏笔三类）
-// 服务端契约（非章 → 400）由 packages/server/src/routes/relation.test.ts 覆盖，
-// 本测试锁 UI 侧同向收窄：不留必定 400 的死胡同。
+// 建立关联对话框的关系类型下拉 + 提交 guard 测试
+// 端点谓词单一实现 = shared `relationTypeAllowedFor`（矩阵本身由 packages/shared/src/utils/relation-type.test.ts 锁），
+// 本测试锁客户端派生：双端收窄 + 两条非矩阵口径（mount 组不进对话框、层级未知的节点源 fail-closed）。
 import { describe, expect, it } from "vitest";
-import { RELATION_TYPE_META } from "@whispering233/ai-editor-shared";
+import {
+  HOOK_RELATION_TYPES,
+  RELATION_TYPES,
+  RELATION_TYPE_META,
+  relationTypeAllowedFor,
+} from "@whispering233/ai-editor-shared";
 import {
   customRelationTypeUsages,
   dialogRelationTypeOptions,
+  relationEndpointError,
+  relationSubmitError,
   relationTypeInputOptions,
   relationTypeSelectOptions,
   resolveRelationTypeInput,
 } from "./relation-types";
 
-const HOOK_TYPES = ["plants", "advances", "resolves"];
+const HOOK_TYPES = HOOK_RELATION_TYPES;
+const MOUNT_TYPES = RELATION_TYPES.filter((t) => RELATION_TYPE_META[t].group === "mount");
 
-describe("dialogRelationTypeOptions（源端层级过滤）", () => {
-  it("章节点源 → 伏笔三类全可选（与基集一致）", () => {
-    const options = dialogRelationTypeOptions({ type: "outline_node", nodeType: "chapter" });
+describe("dialogRelationTypeOptions（双端端点收窄）", () => {
+  it("地点 → 人物：不含 ally / kills", () => {
+    const options = dialogRelationTypeOptions({ type: "location" }, { type: "character" });
+    expect(options).not.toContain("ally");
+    expect(options).not.toContain("kills");
+  });
+
+  it("人物 → 人物：不含 belongs_to / plants", () => {
+    const options = dialogRelationTypeOptions({ type: "character" }, { type: "character" });
+    expect(options).not.toContain("belongs_to");
+    expect(options).not.toContain("plants");
+    expect(options).toContain("ally");
+  });
+
+  it("章 → 伏笔：含伏笔三类", () => {
+    const options = dialogRelationTypeOptions(
+      { type: "outline_node", nodeType: "chapter" },
+      { type: "hook" },
+    );
     for (const t of HOOK_TYPES) expect(options).toContain(t);
+  });
+
+  it("卷 → 伏笔：不含伏笔三类（矩阵 + fail-closed 双重保证）", () => {
+    const options = dialogRelationTypeOptions(
+      { type: "outline_node", nodeType: "volume" },
+      { type: "hook" },
+    );
+    for (const t of HOOK_TYPES) expect(options).not.toContain(t);
   });
 
   it("卷 / 场景节点源 → 排除伏笔三类（服务端 400，UI 不给入口）", () => {
     for (const nodeType of ["volume", "scene"] as const) {
-      const options = dialogRelationTypeOptions({ type: "outline_node", nodeType });
-      for (const t of HOOK_TYPES) expect(options).not.toContain(t);
+      const options = dialogRelationTypeOptions({ type: "outline_node", nodeType }, { type: "hook" });
+      for (const t of HOOK_TYPES) expect(options, `${nodeType}/${t}`).not.toContain(t);
     }
   });
 
-  it("nodeType 缺失 → 按非章处理（fail-closed，少一个选项而非留死入口）", () => {
-    const options = dialogRelationTypeOptions({ type: "outline_node" });
+  it("nodeType 缺失 → 不含伏笔三类（fail-closed；shared 谓词此时通配）", () => {
+    const options = dialogRelationTypeOptions({ type: "outline_node" }, { type: "hook" });
     for (const t of HOOK_TYPES) expect(options).not.toContain(t);
+    // 反向对照：同端点对上 shared 谓词是通配（客户端更严的理由）
+    expect(relationTypeAllowedFor("plants", { type: "outline_node" }, { type: "hook" })).toBe(true);
   });
 
-  it("实体源（人物 / 参考资料）→ 不受限（含伏笔三类）", () => {
-    for (const type of ["character", "reference"]) {
-      const options = dialogRelationTypeOptions({ type });
-      for (const t of HOOK_TYPES) expect(options).toContain(t);
+  it("章 → 卷：不含 plot_edge；章 → 章：含（目标层级参与收窄）", () => {
+    expect(
+      dialogRelationTypeOptions(
+        { type: "outline_node", nodeType: "chapter" },
+        { type: "outline_node", nodeType: "volume" },
+      ),
+    ).not.toContain("plot_edge");
+    expect(
+      dialogRelationTypeOptions(
+        { type: "outline_node", nodeType: "chapter" },
+        { type: "outline_node", nodeType: "chapter" },
+      ),
+    ).toContain("plot_edge");
+  });
+
+  it("mount 组恒不进对话框（挂载只由时间轴 UI 建）", () => {
+    const pairs = [
+      [null, undefined],
+      [{ type: "character" } as const, { type: "character" } as const],
+      [{ type: "outline_node", nodeType: "chapter" } as const, { type: "hook" } as const],
+      [{ type: "outline_node", nodeType: "chapter" } as const, { type: "location" } as const],
+    ] as const;
+    for (const [from, to] of pairs) {
+      const options = dialogRelationTypeOptions(from, to);
+      for (const t of MOUNT_TYPES) expect(options).not.toContain(t);
     }
   });
 
-  it("列表模式（source 为 null）→ 不受限（源端下拉只有实体类型，不产生该组合）", () => {
-    const options = dialogRelationTypeOptions(null);
-    for (const t of HOOK_TYPES) expect(options).toContain(t);
+  it("from === null（未定源）→ 只给基集，不由矩阵收窄", () => {
+    const base = dialogRelationTypeOptions(null);
+    expect(base).toEqual(
+      RELATION_TYPES.filter((t) => RELATION_TYPE_META[t].group !== "mount"),
+    );
+    for (const t of HOOK_TYPES) expect(base).toContain(t);
+  });
+});
+
+describe("relationEndpointError（提交 guard）", () => {
+  it("非法组合 → 中文文案（中文类型名 + 双端标签）", () => {
+    expect(relationEndpointError("ally", { type: "location" }, { type: "character" })).toBe(
+      "「盟友」不能用于 地点 → 人物",
+    );
   });
 
-  it("基集恒排除 occurs_at（挂载由时间轴 UI 专管）", () => {
-    const sources = [
-      null,
-      { type: "character" },
-      { type: "outline_node", nodeType: "chapter" as const },
-      { type: "outline_node", nodeType: "volume" as const },
-    ];
-    for (const source of sources)
-      expect(dialogRelationTypeOptions(source)).not.toContain("occurs_at");
+  it("合法组合 / 自定义类型 → null", () => {
+    expect(relationEndpointError("ally", { type: "character" }, { type: "character" })).toBeNull();
+    expect(relationEndpointError("宿敌", { type: "location" }, { type: "character" })).toBeNull();
+    expect(
+      relationEndpointError("plants", { type: "outline_node", nodeType: "chapter" }, { type: "hook" }),
+    ).toBeNull();
+  });
+
+  it("层级未知的节点源 + 伏笔三类 → 拦下（fail-closed，与下拉同口径）", () => {
+    expect(relationEndpointError("plants", { type: "outline_node" }, { type: "hook" })).toBe(
+      "「埋设」不能用于 大纲节点 → 伏笔",
+    );
+  });
+
+  it("occurs_at 自由输入（大纲节点 → 地点）→ 拦下（mount 组不进对话框）", () => {
+    expect(relationEndpointError("occurs_at", { type: "outline_node" }, { type: "location" })).toBe(
+      "「发生于」不能用于 大纲节点 → 地点",
+    );
+  });
+});
+
+describe("relationSubmitError（提交判定纯函数）", () => {
+  it("盟友（地点 → 人物）→ 非空", () => {
+    expect(
+      relationSubmitError(resolveRelationTypeInput("盟友"), { type: "location" }, { type: "character" }),
+    ).not.toBeNull();
+  });
+
+  it("发生于（章 → 地点）→ 非空", () => {
+    expect(
+      relationSubmitError(
+        resolveRelationTypeInput("发生于"),
+        { type: "outline_node", nodeType: "chapter" },
+        { type: "location" },
+      ),
+    ).not.toBeNull();
+  });
+
+  it("ally（人物 → 人物）→ null", () => {
+    expect(relationSubmitError("ally", { type: "character" }, { type: "character" })).toBeNull();
   });
 });
 

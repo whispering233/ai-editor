@@ -19,6 +19,7 @@
     "@blocknote/core": "0.54.2",
     "@blocknote/react": "0.54.2",
     "@whispering233/ai-editor-shared": "workspace:*",
+    "@xyflow/react": "12.12.1",
     "antd": "^6.6.2",
     "clsx": "^2.1.1",
     "react": "^19.0.0",

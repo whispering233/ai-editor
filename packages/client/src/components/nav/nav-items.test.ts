@@ -17,11 +17,12 @@ describe("NAV_RAIL_BY_KIND（kind → 左栏形态的唯一定义处）", () => 
     expect(Object.keys(NAV_RAIL_BY_KIND).sort()).toEqual([...WORKSPACE_KINDS].sort());
   });
 
-  it("小说：十项一级导航 + 回收站 + 书名按钮（「写作」在「大纲」之前，「码字统计」在参考资料之后）", () => {
+  it("小说：十一项一级导航 + 回收站 + 书名按钮（「写作」在「大纲」之前、「画布」在大纲之后，「码字统计」在参考资料之后）", () => {
     const novel = NAV_RAIL_BY_KIND.novel;
     expect(novel.items.map((item) => item.key)).toEqual([
       "/writing",
       "/outline",
+      "/canvas",
       "/characters",
       "/setting",
       "/locations",

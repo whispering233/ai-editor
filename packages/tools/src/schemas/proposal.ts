@@ -56,14 +56,17 @@ export type ProposeDeleteEntityArgs = Static<typeof proposeDeleteEntityArgsSchem
 /**
  * propose_add_relation 入参：source/target 为端点 id（实体 id 或大纲节点 id，类型生成时自动识别）；
  * type 白名单（预定义全集 = `RELATION_TYPES`，含 plot_edge/plants/advances/resolves…；
- * **作者在界面自定义的类型 AI 不可创建**）；metadata 可选
+ * **作者在界面自定义的类型 AI 不可创建**）；metadata 可选——可传 `{ label, description }`
+ * （短标签 / 说明；与关系说明同一字段语义，字长上限单源在 client，此处不复述）
  */
 export const proposeAddRelationArgsSchema = Type.Object(
   {
     source: Type.String(),
     target: Type.String(),
     type: relationTypeSchema,
-    metadata: Type.Optional(dataRecordSchema),
+    metadata: Type.Optional(
+      freeFormObject({ description: "可选关系说明，可传 { label, description }（短标签 / 说明）" }),
+    ),
   },
   { additionalProperties: false },
 );

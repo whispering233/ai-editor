@@ -280,7 +280,7 @@ propose_delete_entity(entity_id)
   → { proposal_id, cascade_warning }
 
 propose_add_relation(source, target, type, metadata?)
-  注：type **仅预定义 17 类**（工具 schema = enum，2026-09）——自定义关系类型由作者在 UI 建立，AI 只能看到、不能创建（有意分层；语法与存储口径见 [40-api-relation.md](./40-api-relation.md)）
+  注：type **仅预定义 17 类**（工具 schema = enum，2026-09）——自定义关系类型由作者在 UI 建立，AI 只能看到、不能创建（有意分层；语法与存储口径见 [40-api-relation.md](./40-api-relation.md)）。**端点对不在该类型的适用矩阵内 → 工具层直接失败**（不生成提案；矩阵单源 = shared `RELATION_TYPE_META[*].endpoints`，与服务端不校验的取舍见 40-api-relation.md）。`metadata` 只写 `{ label?, description? }`（归一函数与服务端同一实现，见 `../db/schema.md` 关系说明）
 propose_remove_relation(relation_id)
   → 同上，展示 diff
 

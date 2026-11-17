@@ -15,10 +15,31 @@
 // 采集关系自身 updated_at 快照
 
 import { getRelation } from "@whispering233/ai-editor-db";
-import { HOOK_RELATION_TYPES } from "@whispering233/ai-editor-shared";
+import {
+  ENTITY_TYPE_LABELS,
+  HOOK_RELATION_TYPES,
+  OUTLINE_NODE_TYPE_LABELS,
+  RELATION_TYPE_META,
+  relationTypeAllowedFor,
+} from "@whispering233/ai-editor-shared";
+import type { RelationEndpointRef, RelationType } from "@whispering233/ai-editor-shared";
 import type { ProposeAddRelationArgs, ProposeRemoveRelationArgs } from "../schemas/index.js";
 import type { ToolContext } from "../context.js";
 import { buildProposal, checkProposalAborted, refRelation, requireChapterNode, resolveEndpoint, type Proposal, type ToolProposalResult } from "./types.js";
+
+/** 端点中文标签（错误文案用；实体取实体类型标签，大纲节点取层级标签，未知类型回退原值） */
+function endpointLabel(endpoint: RelationEndpointRef): string {
+  if (endpoint.type === "*") return "任意端点";
+  if (endpoint.type !== "outline_node") return ENTITY_TYPE_LABELS[endpoint.type] ?? endpoint.type;
+  return endpoint.nodeType === undefined
+    ? "大纲节点"
+    : (OUTLINE_NODE_TYPE_LABELS[endpoint.nodeType as keyof typeof OUTLINE_NODE_TYPE_LABELS] ?? "大纲节点");
+}
+
+/** 关系类型中文（预定义取 shared 注册表，未知回退原文） */
+function relationLabel(type: string): string {
+  return RELATION_TYPE_META[type as RelationType]?.label ?? type;
+}
 
 /** 产出新增关系提案（端点类型生成时自动识别，执行形态规范化到 args） */
 export function buildProposeAddRelation(ctx: ToolContext, args: ProposeAddRelationArgs): Proposal {
@@ -31,6 +52,13 @@ export function buildProposeAddRelation(ctx: ToolContext, args: ProposeAddRelati
       throw new Error(`伏笔关系（${args.type}）的源端须为章大纲节点，当前为 ${source.type}: ${args.source}`);
     }
     requireChapterNode(ctx, args.source);
+  }
+ // 端点适用矩阵（单一实现 = shared `relationTypeAllowedFor`，与客户端选单同源）：
+ // 不在矩阵内的组合工具层直接失败（不生成提案，LLM 自纠）；未知/自定义类型恒通过
+  const from: RelationEndpointRef = { type: source.type as RelationEndpointRef["type"], nodeType: source.nodeType };
+  const to: RelationEndpointRef = { type: target.type as RelationEndpointRef["type"], nodeType: target.nodeType };
+  if (!relationTypeAllowedFor(args.type, from, to)) {
+    throw new Error(`「${relationLabel(args.type)}」不能用于 ${endpointLabel(from)} → ${endpointLabel(to)}`);
   }
  // 执行信息：派生端点类型 + 原样透传 relation_type/metadata（S6.7 add_relation 直接消费）
   const executeArgs: Record<string, unknown> = {
