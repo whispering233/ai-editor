@@ -76,8 +76,13 @@ import { useUiStore } from "../stores/ui";
 /** 节点类型表（模块级常量：每次渲染新建对象会让 React Flow 重挂全部节点） */
 const NODE_TYPES: NodeTypes = { chapter: ChapterCard };
 
-/** 首帧 fitView 的上界：小书（1–2 章）不放大到满屏，`maxZoom: 1` 保持不变即可 */
-const FIT_VIEW_OPTIONS = { padding: 0.1, maxZoom: 1 } as const;
+/**
+ * 首帧 fitView 的缩放区间：
+ * - 上界 1 —— 小书（1–2 章）不放大到满屏；
+ * - 下界 0.5 —— 大书不缩成「一条不可读的窄带」（24 章在 692px 画布内原本会到 0.33），
+ *   装不下时靠平移 / MiniMap，与手动缩放的下限（0.25）是两件事。
+ */
+const FIT_VIEW_OPTIONS = { padding: 0.1, minZoom: 0.5, maxZoom: 1 } as const;
 
 interface CanvasFlowProps {
   projectId: string | null;
