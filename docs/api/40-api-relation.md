@@ -91,7 +91,7 @@ id: string;
 
 // Req（shared: relationUpdateMetaReqSchema）
 {
-  metadata: Record<string, unknown>;   // 整体替换 metadata（含清空：传 {} 或 null）
+  metadata: Record<string, unknown>;   // 整体替换 metadata（清空传 {}；必填，传 null 为 400）
 }
 
 // Res: 200
