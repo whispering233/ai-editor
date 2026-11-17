@@ -78,11 +78,12 @@
 > **层级校验（2026-08）**：`relation_type=belongs_to` 且两端均为 `setting` 时（设定层级：子设定 → 父设定）——禁自指（target ≠ source）、**防环**（新父的祖先链不得含该子设定，沿 belongs_to 边向上遍历，db 层全量边邻接表构建）——违规 → 400 `VALIDATION_ERROR` + 中文信息。其余 belongs_to（如人物→设定）与其它关系类型不受影响。
 > **伏笔锚点仅章（2026-09）**：`relation_type ∈ {plants, advances, resolves}` 且 `source_type=outline_node` 时，源节点必须为 `chapter`——卷/场景 → 400 `VALIDATION_ERROR`（伏笔是章级叙事事件，与 Delta 锚点同口径；AI 提案通道 `propose_add_relation` 在 tools 层同步拒绝）。
 > **关系类型自由化（2026-09）**：`relation_type` 为**自由字符串**（不再枚举校验）= 预定义 17 类 ∪ 自定义类型；语法 = `trim` 后非空、长度 ≤ 32、禁控制字符——违规 → 400 `VALIDATION_ERROR`（校验单一来源 = shared 纯函数，db `createRelation` 守卫同口径）。预定义专属校验（伏笔仅章 / `belongs_to` 防环 / `occurs_at` 挂载）按类型名判断，**自定义类型天然不触发**。属性（展示名 / 分组 / 对称）见 `../db/schema.md` 预定义关系类型表；**AI 提案通道仍限预定义 17 类**（见 [tool-calling.md](./tool-calling.md)）。
+> **端点适用性只收窄选单（2026-11）**：`RELATION_TYPE_META[*].endpoints` 的成对矩阵（见 `../db/schema.md` 预定义关系类型表）只被 **UI 下拉与 AI 工具白名单**消费；`POST /relation` **不因端点对不匹配而拒绝**（除既有三条专属校验外）。新增矩阵条目不会让存量数据变成「不可再编辑」，自定义类型同样保持有向自由。
 > **父子查询约定**：查「X 的父」= `GET /relation?target_type=setting&target_id=X&relation_type=belongs_to&depth=1`（来源端）；查「X 的子」= `GET /relation?source_type=setting&source_id=X&relation_type=belongs_to&depth=1`（目标端）。
 
 ### PUT /api/v1/relation/:id
 
-更新关系元数据（2026-08 交互优化 I1：连线标签线上编辑）。**仅支持 `metadata` 字段 patch**（端点保留；画布 UI 已移除 ⇒ **当前无 UI 消费方**，仅 API 可用）；关系三元组（source/target/relation_type）不可变——要改连接请删后重建。
+更新关系元数据（2026-08 交互优化 I1：连线标签线上编辑）。**仅支持 `metadata` 字段 patch**（消费方 = 画布连线抽屉 / 关联页行内编辑，见 `../ui/DESIGN.md` `outline-canvas` / `relations-view`；端点保留）；关系三元组（source/target/relation_type）不可变——要改连接请删后重建。
 
 ```typescript
 // Path
@@ -102,7 +103,7 @@ id: string;
 { error: { code: "RELATION_NOT_FOUND" } }   // 不存在（含已软删——软删关系不可编辑）
 ```
 
-**语义**：metadata 整体替换（非浅合并）——清空传 `{}`；与 POST 创建侧的 trim 对称，服务端对 label 做首尾空格去除。
+**语义**：metadata 整体替换（非浅合并）——清空传 `{}`；字段归一单一实现 = shared `normalizeRelationMetadata`（POST / PUT / `propose_add_relation` 共用）：只认 `label` / `description` 两键，各自 `trim`、空串删键；其余键原样保留（自由袋未被收走，但 UI 与 AI 不再写）。
 
 ### DELETE /api/v1/relation/:id
 
