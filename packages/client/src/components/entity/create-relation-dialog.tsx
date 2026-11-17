@@ -15,7 +15,7 @@
 import { useEffect, useState } from "react";
 import type { FormEvent } from "react";
 import { AutoComplete, Button, Select } from "antd";
-import { ENTITY_TYPES, relationTypeSyntaxError } from "@whispering233/ai-editor-shared";
+import { ENTITY_TYPES } from "@whispering233/ai-editor-shared";
 import type { EntitySummary, EntityType, RelationEndpointRef } from "@whispering233/ai-editor-shared";
 import {
   ApiError,
@@ -25,11 +25,12 @@ import {
   type CreateRelationBody,
   type OutlineNodeType,
 } from "../../lib/api";
-import { flattenTree } from "../../lib/outline-tree";
+import { findNode, flattenTree } from "../../lib/outline-tree";
 import {
   customRelationTypeUsages,
   dialogRelationTypeOptions,
   relationEndpointError,
+  relationSubmitError,
   relationTypeInputOptions,
   resolveRelationTypeInput,
 } from "../../lib/relation-types";
@@ -118,7 +119,13 @@ export function CreateRelationDialog({
       : source.type === "outline_node"
         ? { type: "outline_node", nodeType: source.nodeType }
         : { type: source.type };
-  const endpointTo: RelationEndpointRef = { type: otherType };
+  // 目标端端点：选了大纲节点且已选 id 时补层级（`plot_edge` 仅章→章，章→卷 不可见 / 不可提交）；未选 id = 通配
+  const otherNode = otherType === "outline_node" && otherId !== ""
+    ? findNode(outline?.children ?? [], otherId)
+    : null;
+  const endpointTo: RelationEndpointRef = otherNode
+    ? { type: "outline_node", nodeType: otherNode.type }
+    : { type: otherType };
   // 关系类型选项：调用方覆写优先，否则按双端端点派生（目标类型 / 源类型变化即重算）
   const typeOptions = relationTypes ?? dialogRelationTypeOptions(endpointFrom, endpointTo);
   // 默认关系类型文本 = 当前端点可选集的首项（保证默认值 ⊆ 选项集）；
@@ -126,8 +133,8 @@ export function CreateRelationDialog({
   const [relationTypeText, setRelationTypeText] = useState<string>(
     () => relationTypeInputOptions(typeOptions, [])[0]?.value ?? "",
   );
-  // 端点变化 → 当前输入不再合法则清空（自定义类型不在选项集里，但按 guard 合法时保留）
-  const endpointKey = `${endpointFrom.type}:${endpointFrom.nodeType ?? ""}→${endpointTo.type}`;
+  // 端点变化（含目标节点层级）→ 当前输入不再合法则清空（自定义类型不在选项集里，但按 guard 合法时保留）
+  const endpointKey = `${endpointFrom.type}:${endpointFrom.nodeType ?? ""}→${endpointTo.type}:${endpointTo.nodeType ?? ""}`;
   useEffect(() => {
     setRelationTypeText((current) =>
       current !== "" &&
@@ -199,16 +206,10 @@ export function CreateRelationDialog({
       setError("请选择关联对象");
       return;
     }
-    // 语法预校验（shared 纯函数，与 REST schema / db 守卫同源）：非法值内联报错且不发请求
-    const relationTypeError = relationTypeSyntaxError(relationType);
-    if (relationTypeError !== null) {
-      setError(relationTypeError);
-      return;
-    }
-    // 端点 guard：类型输入是自由文本（下拉只是建议），非法组合在提交前拦下（字段级报错、不发请求）
-    const endpointError = relationEndpointError(relationType, endpointFrom, endpointTo);
-    if (endpointError !== null) {
-      setError(endpointError);
+    // 提交判定纯函数（语法校验优先，再基集 / 矩阵 guard）：非法值内联报错且不发请求
+    const submitError = relationSubmitError(relationType, endpointFrom, endpointTo);
+    if (submitError !== null) {
+      setError(submitError);
       return;
     }
     setSubmitting(true);

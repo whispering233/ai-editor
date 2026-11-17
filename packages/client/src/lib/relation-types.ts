@@ -14,7 +14,9 @@ import {
   RELATION_TYPES,
   RELATION_TYPE_META,
   relationTypeAllowedFor,
+  relationTypeSyntaxError,
   type RelationEndpointRef,
+  type RelationType,
 } from "@whispering233/ai-editor-shared";
 import { relationTypeLabel } from "./entity-detail";
 
@@ -30,6 +32,24 @@ function unknownLevelHook(type: string, from: RelationEndpointRef): boolean {
 }
 
 /**
+ * 对话框基集判定（**单一实现**）：① `group === "mount"` 排除；② 层级未知的节点源排除伏笔三类（fail-closed）；
+ * ③ 目标端给出时再按 shared 矩阵收窄。`dialogRelationTypeOptions` 与 `relationEndpointError` 都调此函数。
+ * `from === null`（调用方尚未定源）只排除 mount 组，不做矩阵收窄。
+ */
+function dialogRelationTypeAllowed(
+  type: string,
+  from: RelationEndpointRef | null,
+  to?: RelationEndpointRef,
+): boolean {
+  if (Object.hasOwn(RELATION_TYPE_META, type) && RELATION_TYPE_META[type as RelationType].group === "mount") {
+    return false;
+  }
+  if (from === null) return true;
+  if (unknownLevelHook(type, from)) return false;
+  return to === undefined || relationTypeAllowedFor(type, from, to);
+}
+
+/**
  * 关系类型下拉选项（按「源端点 + 目标端点」收窄）：
  * `from === null`（调用方尚未定源）或 `to` 缺省时只保留基集，不由矩阵收窄。
  */
@@ -37,16 +57,12 @@ export function dialogRelationTypeOptions(
   from: RelationTypeSource | null,
   to?: RelationEndpointRef,
 ): string[] {
-  const base = RELATION_TYPES.filter((t) => RELATION_TYPE_META[t].group !== "mount");
-  const narrowed = from?.type === "outline_node" && from.nodeType === undefined
-    ? base.filter((t) => !HOOK_TYPES.includes(t))
-    : base;
-  if (from === null || to === undefined) return narrowed;
-  return narrowed.filter((t) => relationTypeAllowedFor(t, from, to));
+  return RELATION_TYPES.filter((t) => dialogRelationTypeAllowed(t, from, to));
 }
 
 /** 端点中文标签（错误文案用）：实体取 shared 实体标签，节点层级取卷/章/场景 */
 function endpointLabel(endpoint: RelationEndpointRef): string {
+  if (endpoint.type === "*") return "任意端点";
   if (endpoint.type !== "outline_node") return ENTITY_TYPE_LABELS[endpoint.type];
   if (endpoint.nodeType === undefined) return "大纲节点";
   return OUTLINE_NODE_TYPE_LABELS[endpoint.nodeType as keyof typeof OUTLINE_NODE_TYPE_LABELS] ?? "大纲节点";
@@ -54,15 +70,26 @@ function endpointLabel(endpoint: RelationEndpointRef): string {
 
 /**
  * 提交前 guard（类型输入是自由文本 AutoComplete，下拉只是建议）：非法组合 → 中文文案，合法 / 自定义类型 → null。
- * 与 `dialogRelationTypeOptions` 同口径：矩阵谓词 + fail-closed（层级未知的节点源不进伏笔）。
+ * 与 `dialogRelationTypeOptions` 同口径（同一基集判定 + 矩阵）。
  */
 export function relationEndpointError(
   type: string,
   from: RelationEndpointRef,
   to: RelationEndpointRef,
 ): string | null {
-  if (!unknownLevelHook(type, from) && relationTypeAllowedFor(type, from, to)) return null;
+  if (dialogRelationTypeAllowed(type, from, to)) return null;
   return `「${relationTypeLabel(type)}」不能用于 ${endpointLabel(from)} → ${endpointLabel(to)}`;
+}
+
+/**
+ * 提交判定（纯函数，对话框 submit 唯一入口）：语法校验优先，再基集 / 矩阵 guard。合法 → null。
+ */
+export function relationSubmitError(
+  type: string,
+  from: RelationEndpointRef,
+  to: RelationEndpointRef,
+): string | null {
+  return relationTypeSyntaxError(type) ?? relationEndpointError(type, from, to);
 }
 
 // ============ 已用自定义类型派生（卡片 8.2） ============

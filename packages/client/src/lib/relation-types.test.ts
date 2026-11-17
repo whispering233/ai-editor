@@ -12,6 +12,7 @@ import {
   customRelationTypeUsages,
   dialogRelationTypeOptions,
   relationEndpointError,
+  relationSubmitError,
   relationTypeInputOptions,
   relationTypeSelectOptions,
   resolveRelationTypeInput,
@@ -105,6 +106,34 @@ describe("relationEndpointError（提交 guard）", () => {
     expect(relationEndpointError("plants", { type: "outline_node" }, { type: "hook" })).toBe(
       "「埋设」不能用于 大纲节点 → 伏笔",
     );
+  });
+
+  it("occurs_at 自由输入（大纲节点 → 地点）→ 拦下（mount 组不进对话框）", () => {
+    expect(relationEndpointError("occurs_at", { type: "outline_node" }, { type: "location" })).toBe(
+      "「发生于」不能用于 大纲节点 → 地点",
+    );
+  });
+});
+
+describe("relationSubmitError（提交判定纯函数）", () => {
+  it("盟友（地点 → 人物）→ 非空", () => {
+    expect(
+      relationSubmitError(resolveRelationTypeInput("盟友"), { type: "location" }, { type: "character" }),
+    ).not.toBeNull();
+  });
+
+  it("发生于（章 → 地点）→ 非空", () => {
+    expect(
+      relationSubmitError(
+        resolveRelationTypeInput("发生于"),
+        { type: "outline_node", nodeType: "chapter" },
+        { type: "location" },
+      ),
+    ).not.toBeNull();
+  });
+
+  it("ally（人物 → 人物）→ null", () => {
+    expect(relationSubmitError("ally", { type: "character" }, { type: "character" })).toBeNull();
   });
 });
 
