@@ -17,13 +17,16 @@ C1。#### 完成判据
 ### C3 — 客户端关系类型谓词收窄（删硬编码特例）
 
 #### 范围
-- `packages/client/src/lib/relation-types.ts`：删除 `DIALOG_RELATION_TYPES` 的手写类型清单与 `hookAnchorAllowed` 的手写判断，改为经 shared `allowedRelationTypes` / `relationTypeAllowedFor` 派生（对话框选源 / 目标类型时收窄类型下拉；「关联」页筛选行同步）。**保留「`group === "mount"` 不进通用对话框」这条分组规则**（它由 group 派生、不列类型名；矩阵已覆盖 `occurs_at` 的两种端点组合，但挂载仍只由时间轴 UI 建）。
-- `components/entity/create-relation-dialog.tsx` / `relations-view.tsx` 消费新谓词；端点类型变化时若当前关系类型不再合法 → 清空类型选择。
-- 单测：选「地点」源 + 「人物」目标时下拉不含 `ally` / `kills`；选章 + 伏笔时仍仅 `plants` / `advances` / `resolves`。
+- `packages/client/src/lib/relation-types.ts`：删除 `DIALOG_RELATION_TYPES` 的类型清单与 `hookAnchorAllowed` 的判断，改为经 shared `allowedRelationTypes` / `relationTypeAllowedFor` 派生（端点 = 源 `{type, nodeType?}` + 目标 `{type}`）；**保留两条非矩阵口径**：①「`group === "mount"` 不进通用对话框」（由 group 派生、不列类型名；挂载仍只由时间轴 UI 建）；② 源为 `outline_node` 但 `nodeType` 缺失时，伏笔三类（`HOOK_RELATION_TYPES`）fail-closed 排除——shared 谓词对缺失 `nodeType` 是通配，客户端此处要比它更严，否则会造出服务端必定 400 的入口。
+- `components/entity/create-relation-dialog.tsx`：关系类型下拉按「源端点 + 目标端点」双端收窄（目标类型变化要重算；详情模式源固定、列表模式源类型可选）；**提交前再校验一次** `relationTypeAllowedFor`——类型输入是自由文本 `AutoComplete`，下拉只是建议，不加这道 guard 就仍能提交 `ally`(location→character)。
+- `components/entity/relations-view.tsx` 的**筛选行不改**：它过滤的是存量关系（当前实体可能是目标端），按矩阵收窄会把合法行藏掉。
+- 单测：地点→人物 不含 `ally`/`kills`；人物→人物 不含 `belongs_to`/`plants`；章→伏笔 含 `plants`/`advances`/`resolves`；卷→伏笔 不含；`nodeType` 缺失的 outline_node 源不含伏笔三类；`mount` 组恒不进对话框；提交 guard 对非法组合返回错误文案。
 
 #### 依赖
-C1。#### 完成判据
-：`pnpm -r build` → `pnpm typecheck` / `pnpm lint` 绿；`pnpm --filter @whispering233/ai-editor-client test` 绿；commit + 干净。
+C1。
+
+#### 完成判据
+`pnpm -r build` → `pnpm typecheck` / `pnpm lint` 绿；`pnpm --filter @whispering233/ai-editor-client test` 绿；浏览器实测一次（地点源 + 人物目标，下拉里没有「盟友」）；一卡一 commit，`git status` 干净。
 
 ### C4 — 关系说明编辑（label + description 共用表单）
 
