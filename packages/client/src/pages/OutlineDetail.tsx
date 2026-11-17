@@ -287,8 +287,9 @@ export default function OutlineDetail({
         truncateTitle
         action={
           <>
-            {/* 写正文（卡 12.5）：仅章节点（正文只挂章，卷/场景 → 端点 400，不留必定失败的入口）；
-                入口指向写作页 #/writing/:id，`Button href` 渲染成 `<a>` ⇒ 保住导航链接语义（同大纲树写作入口的链接写法） */}
+            {/* 写正文：仅章节点（正文只挂章，卷/场景 → 端点 400，不留必定失败的入口）；
+                入口指向写作页 #/writing/:id，`Button href` 渲染成 `<a>` ⇒ 保住导航链接语义；
+                普通左键经 onNavigate 走未保存确认，修饰键 / 非主键保留浏览器原生新标签页 */}
             {node.type === "chapter" && (
               <Button
                 color="default"

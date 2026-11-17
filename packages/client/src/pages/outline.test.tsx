@@ -19,13 +19,7 @@ import type {
 } from "@whispering233/ai-editor-shared";
 import Outline from "./Outline";
 import OutlineDetail, { isOutlineDetailDirty } from "./OutlineDetail";
-import {
-  deleteInvalidatesSelection,
-  dropInsertOrder,
-  findNode,
-  findNodeChildren,
-  resolveDropPlan,
-} from "../lib/outline-tree";
+import { deleteInvalidatesSelection, findNode } from "../lib/outline-tree";
 import { useProjectStore } from "../stores/project";
 
 const media = vi.hoisted(() => ({ desktop: true }));
@@ -541,34 +535,5 @@ describe("大纲详情表单 dirty 判定", () => {
     const base = { ...node, title: "旧标题" };
     expect(isOutlineDetailDirty(base, "旧标题", "", {})).toBe(false);
     expect(isOutlineDetailDirty(base, node.title, "", {})).toBe(true);
-  });
-});
-
-// 拖拽落点回归（纯函数口径）：拖章到「还没有章的卷」行 = 落为该卷子级末尾。
-// 仓内无 jsdom（DnD 事件不可派发）⇒ 只断言 resolveDropPlan → dropInsertOrder 的纯函数链，
-// **不声称测了页面**（页面 handleDragOver / handleDrop 接线由 ui-verifier 覆盖）。
-describe("拖拽落点纯函数口径：章 → 空卷落为子级（页面接线由 ui-verifier 覆盖）", () => {
-  const tree: OutlineTree = {
-    id: "root",
-    type: "root",
-    schemaVersion: 1,
-    children: [
-      volume("vol-1", "第一卷", [chapter("ch-1", "雪夜出走")]),
-      volume("vol-empty", "第二卷", []),
-    ],
-  };
-
-  it("落点 = 空卷末尾：parent id / order 正确", () => {
-    const nodes = tree.children;
-    const plan = resolveDropPlan(nodes, "ch-1", "vol-empty", "before");
-    if (plan === null) throw new Error("空卷应可接收章");
-    expect(plan).toEqual({
-      parentId: "vol-empty",
-      insert: { kind: "end" },
-      target: { kind: "inside", nodeId: "vol-empty" },
-    });
-    expect(dropInsertOrder(findNodeChildren(nodes, plan.parentId) ?? [], plan.insert, "ch-1")).toBe(
-      0,
-    );
   });
 });

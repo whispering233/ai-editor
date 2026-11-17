@@ -1013,7 +1013,7 @@ function OutlineRail({
       const editingSummary = editing?.nodeId === node.id && editing.field === "summary";
       const insertBefore = dragTarget?.kind === "before" && dragTarget.nodeId === node.id;
       const insertAfter = dragTarget?.kind === "after" && dragTarget.nodeId === node.id;
-      // 整行落为子级（空卷 / 折叠卷 / 空章）：行体淡染 + 描边，不画插入线
+      // 整行落为子级（目标行父不合法、目标行自身可承载）：行体淡染 + 描边，不画插入线
       const dropInside = dragTarget?.kind === "inside" && dragTarget.nodeId === node.id;
       const isDragging = dragNodeId === node.id;
       const creatingHere = creatingAt?.parentId === node.id;
