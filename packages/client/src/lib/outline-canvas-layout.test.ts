@@ -180,6 +180,13 @@ describe("readCanvasState / writeCanvasState（localStorage 按书隔离）", ()
     expect(readCanvasState(null)).toEqual({ nodes: {} });
   });
 
+  it("项目 id 为 null 时读侧也不碰存储（不是靠空存储兜底）", () => {
+    const getItem = vi.fn(() => '{"nodes":{"ch-0":{"x":9,"y":9}}}');
+    vi.stubGlobal("localStorage", { getItem, setItem: () => {} });
+    expect(readCanvasState(null)).toEqual({ nodes: {} });
+    expect(getItem).not.toHaveBeenCalled();
+  });
+
   it("按书写读同一个 key", () => {
     fakeStorage();
     const saved = { nodes: { "ch-0": { x: 1, y: 2 } }, viewport: { x: 0, y: 0, zoom: 1 } };
