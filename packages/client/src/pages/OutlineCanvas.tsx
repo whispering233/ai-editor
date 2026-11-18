@@ -321,6 +321,9 @@ function CanvasFlow({ projectId, cards, marks, readingId, deductionIds }: Canvas
           zoomOnDoubleClick={false}
           attributionPosition="bottom-left"
           ariaLabelConfig={ARIA_LABEL_CONFIG}
+          // 箭头色：库把 `#b1b1b7` 写成 marker 的**内联** fill/stroke，base.css 的 `--xy-edge-stroke` 抢不过
+          // ⇒ 只能从这里传（值仍是变量引用，调色板单源留在 canvas-theme.css）
+          defaultMarkerColor="var(--xy-edge-stroke-default)"
         >
           {/* 点阵底纹：不传 color ⇒ `--xy-background-pattern-dots-color-default`（canvas-theme.css） */}
           <Background variant={BackgroundVariant.Dots} gap={24} size={1} />
