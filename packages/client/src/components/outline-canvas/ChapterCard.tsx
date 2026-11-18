@@ -12,6 +12,8 @@
 // 左右两个 handle 是连线的落点（source 在右、target 在左，与卡片从左到右的网格顺向一致）：
 // 尺寸 / 配色只在 canvas-theme.css 映射，本组件不写色值。
 // 选中态只换描边：选中 / 聚焦 = primary，否则 hairline + hover hairline-strong（不填充、不加阴影）。
+// far 档（容器类 `lod-far`）另在左上角常显纯数字章号（`data-lod="far-number"`，只给数值不给「第/章」；
+// 显隐与配色全在 canvas-theme.css）。
 import { Handle, Position, type Node, type NodeProps } from "@xyflow/react";
 import { OUTLINE_STATUS_LABEL } from "@whispering233/ai-editor-shared";
 import type { CanvasChapterCard } from "../../lib/outline-canvas-layout";
@@ -68,6 +70,8 @@ export function ChapterCard({ data, selected }: NodeProps<ChapterCardNode>) {
       )}
       <Handle type="target" position={Position.Left} />
       <Handle type="source" position={Position.Right} />
+      {/* far 档左上角纯数字章号（默认 `display: none`，见 canvas-theme.css） */}
+      <span data-lod="far-number">{card.chapterNumber}</span>
       <span data-lod="head" className="flex min-w-0 items-center gap-1">
         <TypeChip tone="soft" className="min-w-14 justify-center tabular-nums">
           {card.chapterLabel}

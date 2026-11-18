@@ -106,6 +106,8 @@ export interface CanvasChapterCard {
   title: string;
   /** 卷号文案（`第N卷`）；**存量直挂 root 的章** = 空串（title 里省略该段） */
   volumeLabel: string;
+  /** 章号数值（1-based，与 `chapterLabel` 同源）：far 档左上角角标只显示它 */
+  chapterNumber: number;
   /** 章号徽标文案（`第N章`）——画布上唯一徽标 */
   chapterLabel: string;
   /** 可见场景数（软删场景不计；0 不进 title） */
@@ -144,6 +146,7 @@ export function canvasChapterCards(tree: OutlineTree | null): CanvasChapterCard[
       id: chapter.chapterId,
       title: chapter.chapterTitle,
       volumeLabel: chapter.volumeLabel,
+      chapterNumber: chapter.chapterNumber,
       chapterLabel: chapter.chapterLabel,
       sceneCount: scenes.filter((scene) => scene.deleted !== true).length,
       written: (node?.metadata?.textLength ?? 0) > 0,

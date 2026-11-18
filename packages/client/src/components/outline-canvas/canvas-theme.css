@@ -120,10 +120,28 @@
    `canvasLodLevel` 只在跨档时切换），显隐规则只在这一处：卡片组件只提供 `data-lod` 钩子。
    视口缩放**不改字号**（14px × 0.5 = 7px 不可读），换的是卡面颗粒度：两档。 */
 
-/* far：只留章名（+ 在读条，它在布局外、不属这几段） */
+/* far：只留章名 + 左上角纯数字章号（+ 在读条，它在布局外、不属这几段） */
 .lod-far [data-lod="head"],
 .lod-far [data-lod="status"] {
   display: none;
+}
+
+/* 章号角标：默认（全量档）不显示，far 档才占左上角。纯数字、无底色 / 无描边——它只回答
+   「这是第几章」，不能抢 26px 章名；数字与全量档徽标同源（卡片 `chapterNumber`）。 */
+[data-lod="far-number"] {
+  display: none;
+}
+
+.lod-far [data-lod="far-number"] {
+  display: block;
+  position: absolute;
+  top: 2px;
+  left: 8px;
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+  color: var(--muted-foreground);
 }
 
 /* 章名 = far 档唯一的内容行：单行居中、放大到 26px（`truncate` 由卡片类的

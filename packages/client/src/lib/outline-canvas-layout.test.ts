@@ -84,9 +84,9 @@ describe("canvasChapterCards（大纲树 → 画布卡片）", () => {
       ]),
     );
     expect(cards).toEqual([
-      { id: "ch-1", title: "开端", volumeLabel: "第1卷", chapterLabel: "第1章", sceneCount: 2, written: false, tags: [] },
-      { id: "ch-2", title: "转折", volumeLabel: "第1卷", chapterLabel: "第2章", sceneCount: 0, written: false, tags: [] },
-      { id: "ch-3", title: "收束", volumeLabel: "第2卷", chapterLabel: "第3章", sceneCount: 1, written: false, tags: [] },
+      { id: "ch-1", title: "开端", volumeLabel: "第1卷", chapterNumber: 1, chapterLabel: "第1章", sceneCount: 2, written: false, tags: [] },
+      { id: "ch-2", title: "转折", volumeLabel: "第1卷", chapterNumber: 2, chapterLabel: "第2章", sceneCount: 0, written: false, tags: [] },
+      { id: "ch-3", title: "收束", volumeLabel: "第2卷", chapterNumber: 3, chapterLabel: "第3章", sceneCount: 1, written: false, tags: [] },
     ]);
   });
 
@@ -107,6 +107,7 @@ describe("canvasChapterCards（大纲树 → 画布卡片）", () => {
         id: "ch-1",
         title: "有正文",
         volumeLabel: "第1卷",
+        chapterNumber: 1,
         chapterLabel: "第1章",
         sceneCount: 1,
         written: true,
@@ -116,6 +117,7 @@ describe("canvasChapterCards（大纲树 → 画布卡片）", () => {
         id: "ch-2",
         title: "空章",
         volumeLabel: "第1卷",
+        chapterNumber: 2,
         chapterLabel: "第2章",
         sceneCount: 0,
         written: false,
@@ -127,7 +129,7 @@ describe("canvasChapterCards（大纲树 → 画布卡片）", () => {
   it("存量直挂 root 的章没有卷号（volumeLabel 空串 ⇒ title 省略卷号段）", () => {
     const cards = canvasChapterCards(tree([chapter("ch-1", "无卷章"), volume("vol-1", "第一卷")]));
     expect(cards).toEqual([
-      { id: "ch-1", title: "无卷章", volumeLabel: "", chapterLabel: "第1章", sceneCount: 0, written: false, tags: [] },
+      { id: "ch-1", title: "无卷章", volumeLabel: "", chapterNumber: 1, chapterLabel: "第1章", sceneCount: 0, written: false, tags: [] },
     ]);
   });
 
@@ -146,6 +148,7 @@ describe("canvasChapterCards（大纲树 → 画布卡片）", () => {
       id: "ch-1",
       title: "开端",
       volumeLabel: "第1卷",
+      chapterNumber: 1,
       chapterLabel: "第1章",
       sceneCount: 0,
       written: false,
@@ -175,6 +178,7 @@ describe("canvasChapterCards（大纲树 → 画布卡片）", () => {
       id: "ch-1",
       title: "开端",
       volumeLabel: "第1卷",
+      chapterNumber: 1,
       chapterLabel: "第1章",
       sceneCount: 0,
       written: false,

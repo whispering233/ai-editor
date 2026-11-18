@@ -17,6 +17,7 @@ function card(over: Partial<CanvasChapterCard> = {}): CanvasChapterCard {
     id: "ch-1",
     title: "开端",
     volumeLabel: "第1卷",
+    chapterNumber: 3,
     chapterLabel: "第3章",
     sceneCount: 5,
     written: false,
@@ -72,6 +73,10 @@ describe("ChapterCard 第三行（状态 + 剧情线标签）", () => {
   it("筛选未命中 → data-filtered=\"true\"（透明度钩子在 canvas-theme.css）", () => {
     expect(render({ card: card(), filtered: true })).toContain('data-filtered="true"');
     expect(render({ card: card() })).toContain('data-filtered="false"');
+  });
+
+  it("far 档章号角标 = 纯数字（无「第/章」；显隐与配色在 canvas-theme.css）", () => {
+    expect(render({ card: card() })).toContain('<span data-lod="far-number">3</span>');
   });
 });
 
