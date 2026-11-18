@@ -5,9 +5,10 @@
 // 不改父子 / 章序 / 卷归属。
 // 节点 = 章（唯一）：卷与场景不上画布，层级由卡片上的章号徽标 + 元信息行的卷号段表达（components/outline-canvas/ChapterCard）。
 // 摆位 = 确定性网格（lib/outline-canvas-layout 纯函数）：缺坐标的章按可见章序每行 5 张补位、
-// 已有手工坐标不动、新章落网格末尾。首次进入（无存量视口）按 `resolveInitialViewport` 落点：
-// 内容装得下就居中，装不下则钳到全量档下界（0.85）并从左上角起步；有存量视口则用它。
-// 缩放分级（LOD）只换容器上的 `lod-full` / `lod-compact` / `lod-far` 类（跨档才 setState，不逐帧重渲染节点），
+// **行距按行算**（该行最高卡片 + 间距）、已有手工坐标不动、新章落网格末尾。首次进入（无存量视口）
+// 按 `resolveInitialViewport` 落点：内容装得下就居中，装不下则钳到全量档下界（0.85）并从左上角起步；
+// 有存量视口则用它。卡片高度随内容（无状态无标签 = 68、有 = 92）。
+// 缩放分级（LOD）只换容器上的 `lod-full` / `lod-far` 类（跨档才 setState，不逐帧重渲染节点），
 // 显隐规则全在 components/outline-canvas/canvas-theme.css。
 // 筛选（组件态，刷新即清）= 左上工具条的筛选按钮 + Popover：状态 / 剧情线标签，「同维度 OR、跨维度 AND」
 // （判定全在 lib/outline-canvas-filter）——未命中卡只降透明度（坐标与拖拽 / 选中交互保留），
@@ -61,10 +62,10 @@ import {
   type RelationSummaryItem,
 } from "../lib/api";
 import {
-  CANVAS_CARD_HEIGHT,
   CANVAS_CARD_WIDTH,
   CANVAS_MAX_ZOOM,
   CANVAS_MIN_ZOOM,
+  canvasCardHeight,
   canvasChapterCards,
   canvasContentBounds,
   canvasLodLevel,
@@ -122,7 +123,6 @@ const FIT_VIEW_OPTIONS = { padding: 0.1, minZoom: CANVAS_MIN_ZOOM, maxZoom: 1 } 
 /** 档位 → 容器类名（字面量常量表：CSS 按类名选中，不拼接字符串） */
 const LOD_CLASS: Record<CanvasLodLevel, string> = {
   full: "lod-full",
-  compact: "lod-compact",
   far: "lod-far",
 };
 
@@ -172,7 +172,7 @@ function CanvasFlow({ projectId, cards, marks, readingId, deductionIds }: Canvas
 
   const positions = useMemo(() => layoutCanvasChapters(cards, saved.nodes), [cards, saved.nodes]);
   /** 内容外包（首次进入落点的输入；拖拽后坐标变化会带动它，但控制器只跑一次） */
-  const contentBounds = useMemo(() => canvasContentBounds(positions), [positions]);
+  const contentBounds = useMemo(() => canvasContentBounds(positions, cards), [positions, cards]);
   // 首帧档位取自存量视口（无存量 = 1 → 全量档）；之后由 CanvasLodTracker 在跨档时更新
   const [lod, setLod] = useState<CanvasLodLevel>(() =>
     canvasLodLevel(initialViewport?.zoom ?? 1),
@@ -244,8 +244,8 @@ function CanvasFlow({ projectId, cards, marks, readingId, deductionIds }: Canvas
           deduction: deductionIds.has(card.id),
           filtered: !matchedIds.has(card.id),
         },
-        // 卡片尺寸 = lib 常量（网格步长与卡片几何同源；颜色仍全走主题表 / token 类）
-        style: { width: CANVAS_CARD_WIDTH, height: CANVAS_CARD_HEIGHT },
+        // 卡片尺寸 = lib 常量 / 逐卡高度（网格步长与卡片几何同源；颜色仍全走主题表 / token 类）
+        style: { width: CANVAS_CARD_WIDTH, height: canvasCardHeight(card) },
       })),
     [cards, positions, marks, readingId, deductionIds, matchedIds],
   );

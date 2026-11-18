@@ -116,17 +116,12 @@
 }
 
 /* ===== 缩放分级（LOD，契约：DESIGN.md `outline-canvas`「缩放分级（LOD）」）=====
-   档位类挂在包 ReactFlow 的容器上（`.lod-full` / `.lod-compact` / `.lod-far`，页面按
+   档位类挂在包 ReactFlow 的容器上（`.lod-full` / `.lod-far`，页面按
    `canvasLodLevel` 只在跨档时切换），显隐规则只在这一处：卡片组件只提供 `data-lod` 钩子。
-   视口缩放**不改字号**（14px × 0.5 = 7px 不可读），换的是卡面颗粒度。 */
+   视口缩放**不改字号**（14px × 0.5 = 7px 不可读），换的是卡面颗粒度：两档。 */
 
-/* 大章号：只在 far 档出现（其余档恒隐藏；它始终在 DOM 里，显隐不靠 JS） */
+/* 大章号：只在 far 档出现（全量档恒隐藏；它始终在 DOM 里，显隐不靠 JS） */
 [data-lod="far-label"] {
-  display: none;
-}
-
-/* compact：藏第三行（状态 / 标签；章号 + 章名仍可读） */
-.lod-compact [data-lod="status"] {
   display: none;
 }
 
@@ -155,9 +150,7 @@
   background: var(--accent);
 }
 
-/* 边标签：z < 0.85 就不画（文字在缩略规模下只是噪点；底色块同理） */
-.lod-compact .react-flow__edge-text,
-.lod-compact .react-flow__edge-textbg,
+/* 边标签：z < 0.72（far 档）就不画（文字在缩略规模下只是噪点；底色块同理） */
 .lod-far .react-flow__edge-text,
 .lod-far .react-flow__edge-textbg {
   display: none;
