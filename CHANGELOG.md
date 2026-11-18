@@ -9,6 +9,14 @@
 
 ## [Unreleased]
 
+### Changed
+
+- **写作 / 大纲 / 设定三页子栏面板开关统一图标**：6 枚收起 / 展开按钮改用 `PanelToggleButton`（内部静态 `PanelToggleIcon`，与主工具栏左右栏同形），图标不随状态换向，`aria-label` / `title` / `aria-expanded` 继续表达状态。
+
+### Fixed
+
+- **「全部折叠 / 全部展开」图标**：大纲 / 设定 rail 头改用 `NodeCollapseOutlined` / `NodeExpandOutlined`，不再使用 `MenuFoldOutlined` / `MenuUnfoldOutlined`（仅面向左侧，且与 `DESIGN.md` 的禁用条款冲突）。
+
 ## [v0.0.64] - 2026-11-17
 
 ### Added
