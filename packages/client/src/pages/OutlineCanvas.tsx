@@ -4,8 +4,11 @@
 // **只改坐标**（`localStorage` `ai-editor:canvas:{projectId}`，不进 outline.json / 备份 / 云端包），
 // 不改父子 / 章序 / 卷归属。
 // 节点 = 章（唯一）：卷与场景不上画布，层级由卡片上的章号徽标 + 元信息行的卷号段表达（components/outline-canvas/ChapterCard）。
-// 摆位 = 确定性网格（lib/outline-canvas-layout 纯函数）：缺坐标的章按可见章序每行 8 张补位、
-// 已有手工坐标不动、新章落网格末尾；首次进入（无存量视口）→ fitView，有存量视口则恢复。
+// 摆位 = 确定性网格（lib/outline-canvas-layout 纯函数）：缺坐标的章按可见章序每行 5 张补位、
+// 已有手工坐标不动、新章落网格末尾。首次进入（无存量视口）按 `resolveInitialViewport` 落点：
+// 内容装得下就居中，装不下则钳到全量档下界（0.85）并从左上角起步；有存量视口则用它。
+// 缩放分级（LOD）只换容器上的 `lod-full` / `lod-compact` / `lod-far` 类（跨档才 setState，不逐帧重渲染节点），
+// 显隐规则全在 components/outline-canvas/canvas-theme.css。
 //
 // 连线 = `plot_edge`（章 → 章）：关系的列表是唯一事实源（`listRelations`），边每次从它派生
 // （lib/outline-canvas-edges）；建边 / 删边 / 改标签成功后**重拉列表**，不手工 push 平行状态。
@@ -27,6 +30,9 @@ import {
   ReactFlow,
   useEdgesState,
   useNodesState,
+  useOnViewportChange,
+  useReactFlow,
+  useStore,
   type Edge,
   type EdgeChange,
   type NodeChange,
@@ -55,11 +61,16 @@ import {
   CANVAS_MAX_ZOOM,
   CANVAS_MIN_ZOOM,
   canvasChapterCards,
+  canvasContentBounds,
+  canvasLodLevel,
   layoutCanvasChapters,
   pruneCanvasPositions,
   readCanvasState,
+  resolveInitialViewport,
   writeCanvasState,
+  type CanvasBounds,
   type CanvasChapterCard,
+  type CanvasLodLevel,
   type CanvasSavedState,
 } from "../lib/outline-canvas-layout";
 import { buildNodeHookMarks, HOOK_MARK_TYPES, type NodeHookMark } from "../lib/outline-hooks";
@@ -90,12 +101,45 @@ const ARIA_LABEL_CONFIG = {
 } as const;
 
 /**
- * 首帧 fitView 的缩放区间：
+ * `fitViewOptions`：**只服务 Controls 的「适应视图」按钮**（首次进入不再用 fitView，见 `CanvasViewportController`）。
  * - 上界 1 —— 小书（1–2 章）不放大到满屏；
- * - 下界 0.5 —— 大书不缩成「一条不可读的窄带」（24 章在 692px 画布内原本会到 0.33），
- *   装不下时靠平移 / MiniMap，与手动缩放的下限（0.25）是两件事。
+ * - 下界 = 手动缩放下限 —— 「适应视图」就是「把整本书装进画布」，缩到多小由 LOD far 档承接可读性。
  */
-const FIT_VIEW_OPTIONS = { padding: 0.1, minZoom: 0.5, maxZoom: 1 } as const;
+const FIT_VIEW_OPTIONS = { padding: 0.1, minZoom: CANVAS_MIN_ZOOM, maxZoom: 1 } as const;
+
+/** 档位 → 容器类名（字面量常量表：CSS 按类名选中，不拼接字符串） */
+const LOD_CLASS: Record<CanvasLodLevel, string> = {
+  full: "lod-full",
+  compact: "lod-compact",
+  far: "lod-far",
+};
+
+/**
+ * 首次进入（无存量视口）的落点执行者：必须在 ReactFlow 子树内（`useStore` 才拿得到画布尺寸）。
+ * 宽度就绪（resize observer 报出非零尺寸）后跑**一次**，`applied` 防重——`bounds` 后续随拖拽变化不再重算。
+ */
+function CanvasViewportController({ bounds }: { bounds: CanvasBounds | null }) {
+  const { setViewport } = useReactFlow();
+  const width = useStore((state) => state.width);
+  const height = useStore((state) => state.height);
+  const applied = useRef(false);
+  useEffect(() => {
+    if (applied.current || width <= 0 || height <= 0) return;
+    applied.current = true;
+    void setViewport(resolveInitialViewport(bounds, { width, height }));
+  }, [bounds, width, height, setViewport]);
+  return null;
+}
+
+/** 视口 → 档位（只在跨档时上抛：`onChange` 每帧都来，但同类档位不 setState、不重渲染节点） */
+function CanvasLodTracker({ onChange }: { onChange: (zoom: number) => void }) {
+  const handleViewportChange = useCallback(
+    (viewport: Viewport) => onChange(viewport.zoom),
+    [onChange],
+  );
+  useOnViewportChange({ onChange: handleViewportChange });
+  return null;
+}
 
 interface CanvasFlowProps {
   projectId: string | null;
@@ -110,11 +154,24 @@ interface CanvasFlowProps {
 /** 画布本体：坐标 / 视口只在挂载时读一次（换书 → 外层以 projectId 为 key 重挂） */
 function CanvasFlow({ projectId, cards, marks, readingId, deductionIds }: CanvasFlowProps) {
   const [saved, setSaved] = useState<CanvasSavedState>(() => readCanvasState(projectId));
-  // 首帧视口二选一后**冻结**：落盘的视口不能让 `fitView` prop 翻转——否则 StoreUpdater 会清掉
-  // 排队中的 fitView，首次进入就停在左上角（网格有 100 章时尤其明显）
+  // 首帧视口二选一后**冻结**：`defaultViewport` 与「是否挂首屏落点控制器」都以它为判据——
+  // 落盘回写 `saved.viewport` 后不能让这两者翻转（否则控制器会在用户平移后二次落点）
   const initialViewport = useRef(saved.viewport).current;
 
   const positions = useMemo(() => layoutCanvasChapters(cards, saved.nodes), [cards, saved.nodes]);
+  /** 内容外包（首次进入落点的输入；拖拽后坐标变化会带动它，但控制器只跑一次） */
+  const contentBounds = useMemo(() => canvasContentBounds(positions), [positions]);
+  // 首帧档位取自存量视口（无存量 = 1 → 全量档）；之后由 CanvasLodTracker 在跨档时更新
+  const [lod, setLod] = useState<CanvasLodLevel>(() =>
+    canvasLodLevel(initialViewport?.zoom ?? 1),
+  );
+  /** 同档返回原 state：React 本就会 bail out，这里把意图写死在调用点 */
+  const handleLodChange = useCallback((zoom: number) => {
+    setLod((current) => {
+      const next = canvasLodLevel(zoom);
+      return next === current ? current : next;
+    });
+  }, []);
   const flowNodes = useMemo<ChapterCardNode[]>(
     () =>
       cards.map((card) => ({
@@ -265,7 +322,8 @@ function CanvasFlow({ projectId, cards, marks, readingId, deductionIds }: Canvas
     writeCanvasState(projectId, next);
   };
 
-  /** 平移 / 缩放结束 = 视口落盘（下一次进入直接恢复；首次进入时 fitView 的结果也会落盘） */
+  /** 平移 / 缩放结束 = 视口落盘（下一次进入直接恢复）：首次进入的落点由 `CanvasViewportController`
+   *  调 `setViewport`，库会走同一条 zoom / end 事件链，因此也会落盘 */
   function handleMoveEnd(_event: MouseEvent | TouchEvent | null, viewport: Viewport) {
     const next: CanvasSavedState = { ...saved, viewport };
     setSaved(next);
@@ -295,7 +353,7 @@ function CanvasFlow({ projectId, cards, marks, readingId, deductionIds }: Canvas
           </Button>
         </div>
       )}
-      <div className="min-h-0 flex-1">
+      <div className={cn("min-h-0 flex-1", LOD_CLASS[lod])}>
         <ReactFlow
           className="h-full w-full"
           nodes={nodes}
@@ -314,7 +372,6 @@ function CanvasFlow({ projectId, cards, marks, readingId, deductionIds }: Canvas
           onNodeDoubleClick={(_event, node) => navigate(`#/outline/${node.id}`)}
           deleteKeyCode={["Delete", "Backspace"]}
           defaultViewport={initialViewport}
-          fitView={initialViewport === undefined}
           fitViewOptions={FIT_VIEW_OPTIONS}
           minZoom={CANVAS_MIN_ZOOM}
           maxZoom={CANVAS_MAX_ZOOM}
@@ -325,6 +382,9 @@ function CanvasFlow({ projectId, cards, marks, readingId, deductionIds }: Canvas
           // ⇒ 只能从这里传（值仍是变量引用，调色板单源留在 canvas-theme.css）
           defaultMarkerColor="var(--xy-edge-stroke-default)"
         >
+          {/* 首次进入落点 / 档位追踪：两个都不渲染 DOM，只是库内 hook 的宿主（必须在 ReactFlow 子树内） */}
+          {initialViewport === undefined && <CanvasViewportController bounds={contentBounds} />}
+          <CanvasLodTracker onChange={handleLodChange} />
           {/* 点阵底纹：不传 color ⇒ `--xy-background-pattern-dots-color-default`（canvas-theme.css） */}
           <Background variant={BackgroundVariant.Dots} gap={24} size={1} />
           <Controls showInteractive={false} position="top-left" />

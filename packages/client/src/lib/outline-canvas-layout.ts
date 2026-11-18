@@ -1,12 +1,15 @@
 // 大纲画布（`#/canvas`）的展示层纯函数（契约：docs/ui/DESIGN.md `outline-canvas`）。
 //
-// 四件事：
+// 五件事：
 // ① `canvasChapterCards`：大纲树 → 画布卡片（**节点 = 章**，卷 / 场景不上画布）。编号与卷号消费
 //    shared `numberVisibleOutline`（展示口径、只计可见节点），本模块不另算编号；元信息列表
 //    （卷号 / 字数 / 场数 / 更新时间）同为纯函数 `canvasChapterMeta`，空段不产出；
 // ② `layoutCanvasChapters`：**确定性网格**——缺坐标的章按其可见章序每行 `CANVAS_CHAPTERS_PER_ROW`
 //    张补位（新章在可见序末尾 ⇒ 自然落在网格末尾），已有手工坐标的章不动（摆位优先）；
-// ③ 坐标 / 视口的 localStorage 读写（`ai-editor:canvas:{projectId}`）：展示层偏好，**不进
+// ③ `canvasContentBounds` / `resolveInitialViewport`：首次进入（无存量视口）的落点——内容装得下就居中，
+//    装不下则钳到全量档下界并从左上角起步（居中裁切会把首列卡片推出画布外）；
+// ④ `canvasLodLevel`：缩放分级（全量 / 隐藏元信息 / 只留大章号），阈值常量同在本模块；
+// ⑤ 坐标 / 视口的 localStorage 读写（`ai-editor:canvas:{projectId}`）：展示层偏好，**不进
 //    outline.json / 备份 / 云端包**（跨设备不同步是有意取舍，见 docs/design/config.md）。
 //
 // 写侧清理：`pruneCanvasPositions` 只留仍在可见大纲里的章（已删章 / 换书残留的条目不会越攒越多）。
@@ -17,7 +20,7 @@ import { formatTextLength } from "./manuscript";
 import { findNode } from "./outline-tree";
 
 /** 网格每行的章卡片数（换行档位常量单点；调它是布局决定，不是逐页参数） */
-export const CANVAS_CHAPTERS_PER_ROW = 8;
+export const CANVAS_CHAPTERS_PER_ROW = 5;
 /** 卡片宽 / 高 / 间距（像素）：网格步长与卡片几何**同源**——卡片尺寸也读这里，改一处两处一起变 */
 export const CANVAS_CARD_WIDTH = 220;
 export const CANVAS_CARD_HEIGHT = 92;
@@ -25,9 +28,26 @@ export const CANVAS_CARD_GAP = 24;
 /** 缩放区间（DESIGN.md：缩放 0.25–2）——MiniMap / Controls / 读侧兜底共用 */
 export const CANVAS_MIN_ZOOM = 0.25;
 export const CANVAS_MAX_ZOOM = 2;
+/** 全量三行的最小缩放（LOD 上界档下界） */
+export const CANVAS_LOD_FULL_MIN_ZOOM = 0.85;
+/** 元信息行的最小缩放（再低就只留大章号） */
+export const CANVAS_LOD_COMPACT_MIN_ZOOM = 0.72;
+/**
+ * 首次进入视口的缩放下界 = 全量档下界：首屏必须落在「全量」档——一进来就是半截卡面，
+ * 等于把「缩放才分级」这件设计藏起来。同一个数、两个用途，源仍只有一处。
+ */
+export const CANVAS_INITIAL_MIN_ZOOM = CANVAS_LOD_FULL_MIN_ZOOM;
+/** 首次进入视口的四边留白（内容装不下时左上角从这里起步） */
+export const CANVAS_VIEW_PADDING = 24;
 
 /** localStorage key 前缀（按书隔离：`ai-editor:canvas:{projectId}`） */
 const CANVAS_STORAGE_PREFIX = "ai-editor:canvas:";
+/**
+ * 存储格式版本（只活在磁盘形状里，`CanvasSavedState` 不暴露）：v2 起才有 `viewport`。
+ * v1（无 `version`，含更早的 `{ nodes, zoom }`）读侧只取 `nodes`——旧默认视口已不可读，
+ * 丢弃一次让首次进入按新口径重算（DESIGN.md `outline-canvas`「坐标与视口」）。
+ */
+const CANVAS_STATE_VERSION = 2;
 
 /** 平面坐标（与 React Flow 的 `XYPosition` 同形） */
 export interface CanvasPoint {
@@ -40,7 +60,18 @@ export interface CanvasViewport extends CanvasPoint {
   zoom: number;
 }
 
-/** 持久化状态：手工摆位 + 视口（都缺省 = 全新画布 ⇒ 首次进入 fitView） */
+/** 内容外包矩形（流坐标，含卡片自身宽高） */
+export interface CanvasBounds {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
+/** 缩放分级档位（DESIGN.md `outline-canvas`「缩放分级（LOD）」） */
+export type CanvasLodLevel = "full" | "compact" | "far";
+
+/** 持久化状态：手工摆位 + 视口（都缺省 = 全新画布 ⇒ 首次进入按 `resolveInitialViewport` 落点） */
 export interface CanvasSavedState {
   nodes: Record<string, CanvasPoint>;
   viewport?: CanvasViewport;
@@ -117,6 +148,69 @@ export function layoutCanvasChapters(
   return positions;
 }
 
+/** 缩放到档位（阈值单源在本模块：`>= 0.85` 全量、`>= 0.72` 隐藏元信息、其余只留大章号） */
+export function canvasLodLevel(zoom: number): CanvasLodLevel {
+  if (zoom >= CANVAS_LOD_FULL_MIN_ZOOM) return "full";
+  if (zoom >= CANVAS_LOD_COMPACT_MIN_ZOOM) return "compact";
+  return "far";
+}
+
+/**
+ * 全部卡片的外包矩形（流坐标，含卡片自身宽高；零章 → `null`）。
+ * 只读摆位、不读 DOM 尺寸——卡片宽高是常量（`CANVAS_CARD_WIDTH/HEIGHT`），不依赖测量结果。
+ */
+export function canvasContentBounds(
+  positions: Record<string, CanvasPoint>,
+): CanvasBounds | null {
+  const points = Object.values(positions);
+  if (points.length === 0) return null;
+  let minX = Infinity;
+  let minY = Infinity;
+  let maxX = -Infinity;
+  let maxY = -Infinity;
+  for (const point of points) {
+    minX = Math.min(minX, point.x);
+    minY = Math.min(minY, point.y);
+    maxX = Math.max(maxX, point.x + CANVAS_CARD_WIDTH);
+    maxY = Math.max(maxY, point.y + CANVAS_CARD_HEIGHT);
+  }
+  return { x: minX, y: minY, width: maxX - minX, height: maxY - minY };
+}
+
+/**
+ * 首次进入（无存量视口）的落点：
+ * - 内容装得下（`zoom >= CANVAS_INITIAL_MIN_ZOOM`）→ **居中**；上界 1 ⇒ 1–2 章的小书不放大到满屏；
+ * - 装不下 → 缩放钳到 `CANVAS_INITIAL_MIN_ZOOM` 并**定位到内容左上角 + 留白**（居中裁切会把首列卡片
+ *   推出画布外，故不居中）；
+ * - 没有内容 / 画布尺寸未就绪 → 中性缺省 `(0, 0, 1)`（不猜落点，等下一帧拿到真实尺寸）。
+ */
+export function resolveInitialViewport(
+  bounds: CanvasBounds | null,
+  canvas: { width: number; height: number },
+): CanvasViewport {
+  if (bounds === null || canvas.width <= 0 || canvas.height <= 0) {
+    return { x: 0, y: 0, zoom: 1 };
+  }
+  const fitZoom = Math.min(
+    1,
+    (canvas.width - CANVAS_VIEW_PADDING * 2) / bounds.width,
+    (canvas.height - CANVAS_VIEW_PADDING * 2) / bounds.height,
+  );
+  if (fitZoom >= CANVAS_INITIAL_MIN_ZOOM) {
+    return {
+      x: (canvas.width - bounds.width * fitZoom) / 2 - bounds.x * fitZoom,
+      y: (canvas.height - bounds.height * fitZoom) / 2 - bounds.y * fitZoom,
+      zoom: fitZoom,
+    };
+  }
+  const zoom = CANVAS_INITIAL_MIN_ZOOM;
+  return {
+    x: CANVAS_VIEW_PADDING - bounds.x * zoom,
+    y: CANVAS_VIEW_PADDING - bounds.y * zoom,
+    zoom,
+  };
+}
+
 /** 只保留仍在可见大纲里的章坐标（写侧清理：已删章 / 换书残留的条目） */
 export function pruneCanvasPositions(
   chapters: readonly { id: string }[],
@@ -153,8 +247,8 @@ function toViewport(value: unknown): CanvasViewport | null {
 
 /**
  * 解析持久化状态（`null` = 没存过）。
- * 坏 JSON / 非对象 / 坐标形状不对 → 空状态；**旧格式 `{ nodes, zoom }`**（旧画布只记缩放）：
- * 视口 = `(0, 0, zoom)`，坐标照常读。
+ * 坏 JSON / 非对象 / 坐标形状不对 → 空状态；**v1 旧条目（无 `version`，含 `{ nodes, zoom }`）**
+ * 只读 `nodes`、视口丢弃（旧缩放值不再当视口用）。
  */
 export function parseCanvasState(raw: string | null): CanvasSavedState {
   if (raw === null) return { nodes: {} };
@@ -173,7 +267,7 @@ export function parseCanvasState(raw: string | null): CanvasSavedState {
       if (point !== null) nodes[id] = point;
     }
   }
-  const viewport = toViewport(record.viewport) ?? toViewport({ x: 0, y: 0, zoom: record.zoom });
+  const viewport = record.version === CANVAS_STATE_VERSION ? toViewport(record.viewport) : null;
   return viewport === null ? { nodes } : { nodes, viewport };
 }
 
@@ -191,7 +285,12 @@ export function readCanvasState(projectId: string | null): CanvasSavedState {
 export function writeCanvasState(projectId: string | null, state: CanvasSavedState): void {
   if (projectId === null) return;
   try {
-    localStorage.setItem(canvasStorageKey(projectId), JSON.stringify(state));
+    const payload = {
+      version: CANVAS_STATE_VERSION,
+      nodes: state.nodes,
+      ...(state.viewport === undefined ? {} : { viewport: state.viewport }),
+    };
+    localStorage.setItem(canvasStorageKey(projectId), JSON.stringify(payload));
   } catch {
     /* 同上：不因展示偏好写失败打断画布 */
   }

@@ -1,5 +1,6 @@
 // 大纲画布摆位纯函数单测（卡 C6）：摆位规则与 localStorage 读侧兼容是「结构不得被展示层改写」的
-// 边界，坏了会让手工摆位被网格覆盖或旧坐标读不回来。
+// 边界，坏了会让手工摆位被网格覆盖或旧坐标读不回来；另守首屏落点（居中 / 钳到 0.85 左上）、
+// 缩放分级边界与存储版本（只有 v2 的视口可信）。
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type {
   OutlineChapter,
@@ -12,15 +13,20 @@ import {
   CANVAS_CARD_HEIGHT,
   CANVAS_CARD_WIDTH,
   CANVAS_CHAPTERS_PER_ROW,
+  CANVAS_INITIAL_MIN_ZOOM,
   CANVAS_MAX_ZOOM,
   CANVAS_MIN_ZOOM,
+  CANVAS_VIEW_PADDING,
   canvasChapterCards,
   canvasChapterMeta,
+  canvasContentBounds,
+  canvasLodLevel,
   canvasStorageKey,
   layoutCanvasChapters,
   parseCanvasState,
   pruneCanvasPositions,
   readCanvasState,
+  resolveInitialViewport,
   writeCanvasState,
   type CanvasChapterCard,
 } from "./outline-canvas-layout";
@@ -167,6 +173,10 @@ describe("canvasChapterMeta（元信息段：空段整段不产出）", () => {
 });
 
 describe("layoutCanvasChapters（确定性网格 + 手工坐标优先）", () => {
+  it("网格每行 5 张（换行档位是布局决定，别静默改）", () => {
+    expect(CANVAS_CHAPTERS_PER_ROW).toBe(5);
+  });
+
   it("缺坐标按可见章序每行 N 张补位（新章自然落在网格末尾）", () => {
     const chapters = Array.from({ length: CANVAS_CHAPTERS_PER_ROW + 1 }, (_, i) => ({
       id: `ch-${i}`,
@@ -209,8 +219,79 @@ describe("pruneCanvasPositions（写侧清理已删 id）", () => {
   });
 });
 
+describe("canvasLodLevel（缩放分级边界）", () => {
+  it("边界：0.85 / 0.72 归上档，低一档就降级", () => {
+    expect(canvasLodLevel(1)).toBe("full");
+    expect(canvasLodLevel(0.85)).toBe("full");
+    expect(canvasLodLevel(0.849)).toBe("compact");
+    expect(canvasLodLevel(0.72)).toBe("compact");
+    expect(canvasLodLevel(0.719)).toBe("far");
+    expect(canvasLodLevel(0.25)).toBe("far");
+  });
+});
+
+describe("canvasContentBounds（内容外包）", () => {
+  it("零章 → null（首次进入不猜落点）", () => {
+    expect(canvasContentBounds({})).toBeNull();
+  });
+
+  it("外包含卡片自身宽高（与网格步长同源）", () => {
+    expect(canvasContentBounds({ a: { x: 0, y: 0 }, b: { x: 244, y: 116 } })).toEqual({
+      x: 0,
+      y: 0,
+      width: 244 + CANVAS_CARD_WIDTH,
+      height: 116 + CANVAS_CARD_HEIGHT,
+    });
+  });
+
+  it("负坐标也照实求外包（手工左摆的卡片不被归零）", () => {
+    expect(canvasContentBounds({ a: { x: -50, y: -20 } })).toEqual({
+      x: -50,
+      y: -20,
+      width: CANVAS_CARD_WIDTH,
+      height: CANVAS_CARD_HEIGHT,
+    });
+  });
+});
+
+describe("resolveInitialViewport（首次进入落点）", () => {
+  const canvas = { width: 1000, height: 800 };
+
+  it("装得下 → 居中（小书不放大到满屏：zoom 上界 1）", () => {
+    expect(resolveInitialViewport({ x: 0, y: 0, width: 220, height: 92 }, canvas)).toEqual({
+      x: (1000 - 220) / 2,
+      y: (800 - 92) / 2,
+      zoom: 1,
+    });
+  });
+
+  it("装得下且内容有偏移 → 居中以内容为基准（不是以原点）", () => {
+    const viewport = resolveInitialViewport({ x: 100, y: 50, width: 220, height: 92 }, canvas);
+    expect(viewport).toEqual({ x: (1000 - 220) / 2 - 100, y: (800 - 92) / 2 - 50, zoom: 1 });
+  });
+
+  it("装不下 → 钳到全量档下界并从内容左上角 + 留白起步（不居中裁切）", () => {
+    const viewport = resolveInitialViewport(
+      { x: -30, y: -10, width: 2000, height: 400 },
+      { width: 800, height: 600 },
+    );
+    expect(viewport.zoom).toBe(CANVAS_INITIAL_MIN_ZOOM);
+    expect(viewport.x).toBeCloseTo(CANVAS_VIEW_PADDING + 30 * CANVAS_INITIAL_MIN_ZOOM);
+    expect(viewport.y).toBeCloseTo(CANVAS_VIEW_PADDING + 10 * CANVAS_INITIAL_MIN_ZOOM);
+  });
+
+  it("无内容 / 画布尺寸未就绪 → 中性缺省（不缩放、原点）", () => {
+    expect(resolveInitialViewport(null, canvas)).toEqual({ x: 0, y: 0, zoom: 1 });
+    const noWidth = resolveInitialViewport({ x: 0, y: 0, width: 220, height: 92 }, {
+      width: 0,
+      height: 800,
+    });
+    expect(noWidth).toEqual({ x: 0, y: 0, zoom: 1 });
+  });
+});
+
 describe("parseCanvasState（读侧兜底与旧格式兼容）", () => {
-  it("没存过 → 空状态（首次进入 fitView）", () => {
+  it("没存过 → 空状态（首次进入按 resolveInitialViewport 落点）", () => {
     expect(parseCanvasState(null)).toEqual({ nodes: {} });
   });
 
@@ -232,17 +313,34 @@ describe("parseCanvasState（读侧兜底与旧格式兼容）", () => {
     expect(parseCanvasState(raw)).toEqual({ nodes: { "ch-0": { x: 1, y: 2 } } });
   });
 
-  it("旧格式 { nodes, zoom }：视口还原为 (0, 0, zoom)", () => {
-    const raw = JSON.stringify({ nodes: { "ch-0": { x: 1, y: 2 } }, zoom: 1.4 });
+  it("v2（有 version）才接受视口", () => {
+    const raw = JSON.stringify({
+      version: 2,
+      nodes: { "ch-0": { x: 1, y: 2 } },
+      viewport: { x: 20, y: 30, zoom: 0.9 },
+    });
     expect(parseCanvasState(raw)).toEqual({
       nodes: { "ch-0": { x: 1, y: 2 } },
-      viewport: { x: 0, y: 0, zoom: 1.4 },
+      viewport: { x: 20, y: 30, zoom: 0.9 },
     });
   });
 
+  it("v1（无 version）只取 nodes，视口丢弃一次", () => {
+    const raw = JSON.stringify({
+      nodes: { "ch-0": { x: 1, y: 2 } },
+      viewport: { x: 20, y: 30, zoom: 0.5 },
+    });
+    expect(parseCanvasState(raw)).toEqual({ nodes: { "ch-0": { x: 1, y: 2 } } });
+  });
+
+  it("旧格式 { nodes, zoom }：zoom 不再当视口（只留坐标）", () => {
+    const raw = JSON.stringify({ nodes: { "ch-0": { x: 1, y: 2 } }, zoom: 1.4 });
+    expect(parseCanvasState(raw)).toEqual({ nodes: { "ch-0": { x: 1, y: 2 } } });
+  });
+
   it("视口缩放夹到画布区间（越界旧值读得回来）", () => {
-    const tooBig = JSON.stringify({ nodes: {}, viewport: { x: 2, y: 3, zoom: 9 } });
-    const tooSmall = JSON.stringify({ nodes: {}, viewport: { x: 2, y: 3, zoom: 0.01 } });
+    const tooBig = JSON.stringify({ version: 2, nodes: {}, viewport: { x: 2, y: 3, zoom: 9 } });
+    const tooSmall = JSON.stringify({ version: 2, nodes: {}, viewport: { x: 2, y: 3, zoom: 0.01 } });
     expect(parseCanvasState(tooBig).viewport).toEqual({ x: 2, y: 3, zoom: CANVAS_MAX_ZOOM });
     expect(parseCanvasState(tooSmall).viewport).toEqual({ x: 2, y: 3, zoom: CANVAS_MIN_ZOOM });
   });
@@ -276,13 +374,24 @@ describe("readCanvasState / writeCanvasState（localStorage 按书隔离）", ()
     expect(getItem).not.toHaveBeenCalled();
   });
 
+  it("写盘带 version: 2（读侧靠它决定视口是否可信）", () => {
+    const store = fakeStorage();
+    writeCanvasState("book-1", { nodes: {}, viewport: { x: 1, y: 2, zoom: 0.9 } });
+    expect(JSON.parse(store.get(canvasStorageKey("book-1")) ?? "null")).toEqual({
+      version: 2,
+      nodes: {},
+      viewport: { x: 1, y: 2, zoom: 0.9 },
+    });
+  });
+
   it("按书写读同一个 key", () => {
-    fakeStorage();
+    const store = fakeStorage();
     const saved = { nodes: { "ch-0": { x: 1, y: 2 } }, viewport: { x: 0, y: 0, zoom: 1 } };
     writeCanvasState("book-1", saved);
     expect(readCanvasState("book-1")).toEqual(saved);
     expect(readCanvasState("book-2")).toEqual({ nodes: {} });
     expect(canvasStorageKey("book-1")).toBe("ai-editor:canvas:book-1");
+    expect(store.has(canvasStorageKey("book-2"))).toBe(false);
   });
 
   it("存储不可用（写抛错）时降级为不记住坐标，不打断画布", () => {

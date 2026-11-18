@@ -64,13 +64,18 @@ export function ChapterCard({ data, selected }: NodeProps<ChapterCardNode>) {
           </span>
         )}
       </span>
-      <span className="min-w-0 truncate text-sm text-foreground">{card.title}</span>
+      <span data-lod="title" className="min-w-0 truncate text-sm text-foreground">
+        {card.title}
+      </span>
       <span
+        data-lod="meta"
         className="min-w-0 truncate text-xs tabular-nums text-muted-foreground"
         title={meta}
       >
         {meta}
       </span>
+      {/* far 档的大章号（非 far 档由 CSS 隐藏）：缩到很小后唯一可读的信息 */}
+      <span data-lod="far-label">{card.chapterLabel}</span>
     </div>
   );
 }

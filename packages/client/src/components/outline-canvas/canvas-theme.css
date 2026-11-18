@@ -102,3 +102,51 @@
 .react-flow__controls-button:hover {
   background: var(--accent);
 }
+
+/* ===== 缩放分级（LOD，契约：DESIGN.md `outline-canvas`「缩放分级（LOD）」）=====
+   档位类挂在包 ReactFlow 的容器上（`.lod-full` / `.lod-compact` / `.lod-far`，页面按
+   `canvasLodLevel` 只在跨档时切换），显隐规则只在这一处：卡片组件只提供 `data-lod` 钩子。
+   视口缩放**不改字号**（14px × 0.5 = 7px 不可读），换的是卡面颗粒度。 */
+
+/* 大章号：只在 far 档出现（其余档恒隐藏；它始终在 DOM 里，显隐不靠 JS） */
+[data-lod="far-label"] {
+  display: none;
+}
+
+/* compact：藏元信息行（章号 + 章名仍可读） */
+.lod-compact [data-lod="meta"] {
+  display: none;
+}
+
+/* far：只留大章号（+ 在读条，它在布局外、不属这三段） */
+.lod-far [data-lod="head"],
+.lod-far [data-lod="title"],
+.lod-far [data-lod="meta"] {
+  display: none;
+}
+
+.lod-far [data-lod="far-label"] {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  justify-content: center;
+  font-size: 26px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+  color: var(--foreground);
+}
+
+/* 未写章在 far 档换底色（surface-muted = --accent）：两档底色的对比让「哪几章还空着」在缩略规模上仍可辨。
+   已写章保持卡底色（--card = colors.canvas）。不引新色。 */
+.lod-far [data-written="false"] {
+  background: var(--accent);
+}
+
+/* 边标签：z < 0.85 就不画（文字在缩略规模下只是噪点；底色块同理） */
+.lod-compact .react-flow__edge-text,
+.lod-compact .react-flow__edge-textbg,
+.lod-far .react-flow__edge-text,
+.lod-far .react-flow__edge-textbg {
+  display: none;
+}
