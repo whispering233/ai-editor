@@ -7,15 +7,14 @@
 ### C2 — 画布主题层（底纹 / MiniMap / Controls / 边箭头 / 卡片状态）
 
 #### 范围
-- `packages/client/src/pages/OutlineCanvas.tsx`：`<Background variant="dots" gap={24} size={1} />`（不传 `color`）；`<MiniMap style={{ width: 160, height: 108 }} pannable zoomable />`；`ariaLabelConfig` 五个键中文（`controls.zoomIn.ariaLabel` / `controls.zoomOut.ariaLabel` / `controls.fitView.ariaLabel` / `controls.ariaLabel` / `minimap.ariaLabel`）；边补 `markerEnd: { type: MarkerType.ArrowClosed, width: 12, height: 12 }`（不传 color，走 `--xy-edge-stroke`）。
-- `packages/client/src/components/outline-canvas/ChapterCard.tsx`：hover = `hover:border-input`；选中 / 聚焦（`NodeProps.selected`）= `border-primary`（`cn` 二选一，不叠加）；不填充、不加阴影。
-- `packages/client/src/components/outline-canvas/canvas-theme.css`：MiniMap 皮肤（`--xy-minimap-background-color-props` = `{colors.canvas}`、`--xy-minimap-mask-background-color` = `{colors.surface}` 55% + `--xy-minimap-mask-stroke-*` = `{colors.hairline-strong}` 1px、节点 `{colors.hairline}`（`nodeStrokeWidth: 0`）、1px `{colors.hairline}` 边框 + `{rounded.sm}`）；Controls 按钮 28px + hover 底；handle 8 → 6px、常显 45% 不透明、hover 恢复 100%；attribution 10px `{colors.tertiary}`。
-- 测试：无新增逻辑，`design-discipline.test.ts` / `antd-tokens.test.ts` 保持绿（不得为验收去改守卫）。
-- **不做**：卡片内容与尺寸（C1）、LOD 与视口（C3）。
+- `packages/client/src/pages/OutlineCanvas.tsx`：新增 `<Background variant="dots" gap={24} size={1} />`（不传 `color`；变量已在 `canvas-theme.css` 映射）；`MiniMap` 补 `style={{ width: 160, height: 108 }}`（v12 由 `style.width/height` 决定 SVG 尺寸，别改用 props）；`Controls` 补 `ariaLabelConfig` 四键中文（`controls.zoomIn.ariaLabel` / `controls.zoomOut.ariaLabel` / `controls.fitView.ariaLabel` / `controls.ariaLabel`）；`flowEdges` 每条补 `markerEnd: { type: MarkerType.ArrowClosed, width: 12, height: 12 }`（不传 `color` → 走 `--xy-edge-stroke`）。
+- `packages/client/src/components/outline-canvas/ChapterCard.tsx`：`selected`（`NodeProps.selected`）时 `border-primary`，否则 `border-border hover:border-input`；不填充、不加阴影。
+- `packages/client/src/components/outline-canvas/canvas-theme.css`（只补未对齐处）：MiniMap 节点色 `--muted-foreground` → `--border`、节点描边 → `transparent`、遮罩 `--background` → `--surface` 55%、遮罩描边 → `--input`，`.react-flow__minimap` 加 1px `--border` 边框 + 6px 圆角 + `box-sizing: border-box`；Controls 按钮 26 → 28px；handle 保持 8px、默认 `opacity: .45`、hover / `.connectingfrom` / `.connectingto` 恢复 1。
+- 测试：无新增逻辑；`design-discipline.test.ts` / `antd-tokens.test.ts` 保持绿。
 
 #### 完成判据
 - `pnpm typecheck` / `pnpm lint` / `pnpm --filter @whispering233/ai-editor-client test` 绿。
-- 浏览器实测截图（1440×900 与对话栏打开两种宽度）：点阵底纹可见、MiniMap 尺寸 160×108 且不再是默认灰块、Controls 28px、卡片 hover / 选中描边可见、边有箭头与短标签。
+- 浏览器实测截图（1440×900 与对话栏打开两种宽度）：点阵底纹可见、MiniMap 160×108 且不再是默认灰块、Controls 28px 且中文 aria-label、卡片 hover / 选中描边可见、边有箭头与短标签。
 - 硬判据：`git log -1` 有新 commit 且 `git status` 干净；汇报附 commit hash + 命令输出。
 
 ### C3 — 画布视图初始化与缩放分级（LOD）
