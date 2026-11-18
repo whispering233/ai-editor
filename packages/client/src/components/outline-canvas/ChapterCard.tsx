@@ -110,8 +110,6 @@ export function ChapterCard({ data, selected }: NodeProps<ChapterCardNode>) {
           {tagOverflow > 0 && <span className="shrink-0">+{tagOverflow}</span>}
         </span>
       )}
-      {/* far 档的大章号（非 far 档由 CSS 隐藏）：缩到很小后唯一可读的信息 */}
-      <span data-lod="far-label">{card.chapterLabel}</span>
     </div>
   );
 }
