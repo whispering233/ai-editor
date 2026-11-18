@@ -599,6 +599,16 @@ describe("大纲节点详情页：写正文入口指向写作页", () => {
     expect(html).toContain("章"); // 类型徽标
   });
 
+  it("章结构化信息：状态 / 剧情线标签 / 叙事功能 / 张力度 / 章末反转 / 章高潮场景按序渲染", () => {
+    const html = renderDetailFor("ch-1");
+    const labels = ["状态", "剧情线标签", "叙事功能", "张力度", "章末反转", "章高潮场景"];
+    const indexes = labels.map((label) => html.indexOf(label));
+    expect(indexes.every((i) => i >= 0)).toBe(true);
+    expect(indexes).toEqual([...indexes].sort((a, b) => a - b));
+    expect(html).toContain("ant-select"); // 三个枚举下拉（状态 / 功能 / 张力）
+    expect(html).toContain("+ 添加"); // 标签编辑器
+  });
+
   it("卷节点：不渲染「写正文」（正文只挂章，不留必定 400 的入口）", () => {
     expect(renderDetailFor("vol-1")).not.toContain("写正文");
   });
@@ -651,5 +661,39 @@ describe("大纲详情表单 dirty 判定", () => {
     const base = { ...node, title: "旧标题" };
     expect(isOutlineDetailDirty(base, "旧标题", "", {})).toBe(false);
     expect(isOutlineDetailDirty(base, node.title, "", {})).toBe(true);
+  });
+
+  // 默认状态归一：状态缺省 = 草稿，否则下拉一进表单就永久 dirty
+  it("基线无 status + 表单为 draft → false（缺省即草稿）", () => {
+    expect(isOutlineDetailDirty(node, node.title, "", { status: "draft" })).toBe(false);
+  });
+
+  it("基线无 status + 表单为 revision/final → true", () => {
+    expect(isOutlineDetailDirty(node, node.title, "", { status: "revision" })).toBe(true);
+    expect(isOutlineDetailDirty(node, node.title, "", { status: "final" })).toBe(true);
+  });
+
+  it("基线已有 status：同值不脏，改回 draft（显式值）算变更", () => {
+    const withStatus = { ...node, data: { status: "final" } };
+    expect(isOutlineDetailDirty(withStatus, node.title, "", { status: "final" })).toBe(false);
+    expect(isOutlineDetailDirty(withStatus, node.title, "", { status: "draft" })).toBe(true);
+  });
+
+  // K5：TagsEditor 保留末行空串续输 ⇒ 空行 / 前后空格不算未提交变更（否则脏标记与「没有变更」互相打架）
+  describe("tags 归一", () => {
+    const tagged = { ...node, data: { tags: ["验收线"] } };
+
+    it("末行空串不算 dirty", () => {
+      expect(isOutlineDetailDirty(tagged, node.title, "", { tags: ["验收线", ""] })).toBe(false);
+    });
+
+    it("前后空格归一后不算 dirty", () => {
+      const spaced = { ...node, data: { tags: ["验收线", "支线"] } };
+      expect(isOutlineDetailDirty(spaced, node.title, "", { tags: [" 验收线 ", "支线"] })).toBe(false);
+    });
+
+    it("新增非空标签仍 dirty", () => {
+      expect(isOutlineDetailDirty(tagged, node.title, "", { tags: ["验收线", "支线"] })).toBe(true);
+    });
   });
 });

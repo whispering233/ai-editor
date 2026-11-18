@@ -9,18 +9,17 @@
 // 就绪后补（带上下文进聊天）
 import { useEffect, useRef, useState } from "react";
 import type { ReactNode } from "react";
-import { HolderOutlined, DeleteOutlined, SaveOutlined } from "@ant-design/icons";
+import { DeleteOutlined, SaveOutlined } from "@ant-design/icons";
 import { formatMonthDay, formatTimestamp, MAX_ENTITY_LIST_LIMIT } from "@whispering233/ai-editor-shared";
 import type { EntityType } from "@whispering233/ai-editor-shared";
 import { ConfirmDialog } from "../components/outline/dialogs";
-import { SuggestionDatalist } from "../components/ui/suggestion-datalist";
 import { CreateRelationDialog } from "../components/entity/create-relation-dialog";
+import { TagsEditor } from "../components/ui/tags-editor";
 import { ParentSettingSelect } from "../components/entity/parent-setting-select";
 import { TypeChip } from "../components/ui/tag-chip";
 import { ComputePreview } from "../components/delta/compute-preview";
 import { entityListHost } from "../lib/entity-paths";
 import { Button, Input, Select } from "antd";
-import type { InputRef } from "antd";
 import { PageHeader } from "@/components/ui/page-header";
 import { PanelHeader } from "@/components/ui/panel-header";
 import {
@@ -43,7 +42,6 @@ import {
   type DetailFieldConfig,
 } from "../lib/entity-detail";
 import { chapterNodeOptions } from "../lib/outline-tree";
-import { enterBehavior, moveArrayItem } from "../lib/tags-editor";
 import { useSaveShortcut } from "../lib/save-shortcut";
 import { cn } from "../lib/utils";
 import { skeletonClass } from "@/lib/styles";
@@ -57,133 +55,6 @@ import { useUiStore } from "../stores/ui";
 function fieldValue(form: Record<string, unknown>, key: string): string {
   const v = form[key];
   return v === undefined || v === null ? "" : String(v);
-}
-
-/** 标签列表编辑器（character.personality、setting.tags/rules）。
- * suggestions 提供时绑定 datalist（J2：浏览器原生自动完成——输入时弹出已有标签候选）；
- * quickTags 提供时渲染「已有标签」快捷选择 chips（K2：点击追加到列表，已选的隐藏） */
-function TagsEditor({
-  values,
-  onChange,
-  placeholder,
-  suggestions,
-  quickTags,
-}: {
-  values: string[];
-  onChange: (v: string[]) => void;
-  placeholder?: string;
-  suggestions?: readonly string[];
-  quickTags?: readonly string[];
-}) {
-  // 输入框 ref 表（M1：回车后聚焦下一行/新行；下标即行号，追加行在渲染后经 rAF 聚焦）
-  const inputRefs = useRef<Array<InputRef | null>>([]);
-  // 拖拽排序态（M3）：dragIndex = 被拖行；dragOverIndex = 当前悬停目标行（高亮提示）
-  const [dragIndex, setDragIndex] = useState<number | null>(null);
-  const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
-  return (
-    <div className="flex flex-col gap-1.5">
-      {values.map((v, i) => (
-        <div
-          key={i}
-          className={cn(
-            "flex items-center gap-1.5 rounded-md px-0.5 py-0.5 transition-colors",
-            dragIndex === i && "opacity-40",
-            dragOverIndex === i &&
-              dragIndex !== null &&
-              dragIndex !== i &&
-              "bg-muted/60 ring-1 ring-ring",
-          )}
-          onDragOver={(e) => {
-            // 仅自身拖拽进行中响应（dragIndex 非空）——不 preventDefault 时保留浏览器默认
-            // 行为（输入框内文本拖选/拖入照常），不干扰文本编辑
-            if (dragIndex === null) return;
-            e.preventDefault();
-            e.dataTransfer.dropEffect = "move";
-            if (dragOverIndex !== i) setDragOverIndex(i);
-          }}
-          onDrop={(e) => {
-            if (dragIndex === null) return;
-            e.preventDefault();
-            if (dragIndex !== i) onChange(moveArrayItem(values, dragIndex, i));
-            setDragIndex(null);
-            setDragOverIndex(null);
-          }}
-        >
-          {/* 拖拽手柄（M3：HTML5 原生 DnD，零依赖；draggable 仅手柄——输入框内文本选择不受影响） */}
-          <span className="flex shrink-0 cursor-grab active:cursor-grabbing">
-            <Button
-              color="default" variant="text"
-              size="small"
-              draggable
-              title="拖拽排序"
-              aria-label="拖拽排序"
-              onDragStart={(e) => {
-                setDragIndex(i);
-                e.dataTransfer.effectAllowed = "move";
-                // Firefox 需 setData 才启动拖拽（types 含 text/plain 亦可作自识别标记）
-                e.dataTransfer.setData("text/plain", String(i));
-              }}
-              onDragEnd={() => {
-                setDragIndex(null);
-                setDragOverIndex(null);
-              }}
-              icon={<HolderOutlined className="text-base" />}
-            />
-          </span>
-          <Input
-            value={v}
-            onChange={(e) => {
-              const next = [...values];
-              next[i] = e.target.value;
-              onChange(next);
-            }}
-            ref={(el) => {
-              inputRefs.current[i] = el;
-            }}
-            onKeyDown={(e) => {
-              // M1（2026-08 用户反馈）：「输入后回车添加下一项」——回车 = 非末行聚焦下一行 /
-              // 末行非空追加空行并聚焦 / 末行空无操作（决策纯函数 enterBehavior）
-              if (e.key !== "Enter") return;
-              e.preventDefault();
-              const b = enterBehavior(values, i);
-              if (!b) return;
-              if (b.append) onChange([...values, ""]);
-              // 追加行渲染完成后聚焦（rAF 确保新输入框已挂载）
-              requestAnimationFrame(() => inputRefs.current[b.focusIndex]?.focus());
-            }}
-            placeholder={placeholder}
-            list={suggestions && suggestions.length > 0 ? "entity-tags-suggestions" : undefined}
-            className="flex-1"
-          />
-          <Button onClick={() => onChange(values.filter((_, j) => j !== i))}>删除</Button>
-        </div>
-      ))}
-      <Button className="self-start" onClick={() => onChange([...values, ""])}>
-        + 添加
-      </Button>
-      {/* 快捷选择既有标签（K2：点击追加，去重——已选的不再展示） */}
-      {quickTags && quickTags.length > 0 && (
-        <div className="flex flex-wrap items-center gap-1">
-          <span className="text-xs text-muted-foreground">已有标签：</span>
-          {quickTags
-            .filter((t) => !values.includes(t))
-            .map((t) => (
-              <button
-                key={t}
-                type="button"
-                onClick={() => onChange([...values, t])}
-                className="rounded-md border border-border px-1.5 py-0.5 text-xs text-foreground hover:bg-muted hover:text-foreground"
-              >
-                {t}
-              </button>
-            ))}
-        </div>
-      )}
-      {suggestions && suggestions.length > 0 && (
-        <SuggestionDatalist id="entity-tags-suggestions" options={suggestions} />
-      )}
-    </div>
-  );
 }
 
 /** custom_fields 键值组编辑器（仅有值时显示；行内部 state，变更回调给父表单） */

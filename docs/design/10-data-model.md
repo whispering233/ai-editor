@@ -90,11 +90,13 @@
 
 大纲节点长期只有 title/summary 自由文本，作者无法挂载结构化信息。outline.json 节点新增可选 `data` 字段（`Record<string, unknown>`），按层级 schema 校验：
 
-- **scene**：`goal`（场景目标/欲望）、`conflict_levels`（麦基冲突三层次 `inner`/`personal`/`extra_personal` 多选）、`value_from`/`value_to`（开场/收场价值——「没有不转折的场景」）
-- **chapter**：`reversal`（章末反转）、`climax_scene`（章高潮场景引用，可选）
+- **scene**：`goal`（场景目标/欲望）、`conflict_levels`（麦基冲突三层次 `inner`/`personal`/`extra_personal` 多选）、`value_from`/`value_to`（开场/收场价值——「没有不转折的场景」）、`tags`（与章同 schema，为场景级标签留通道，UI 本轮只开放章标签）
+- **chapter**：`reversal`（章末反转）、`climax_scene`（章高潮场景引用，可选）；**2026-11 增补四个工作面字段**——`status`（`draft` / `revision` / `final`，缺省即草稿）、`tags`（剧情线标签 `string[]`，≤5 个、单值 1–24 字、trim）、`function`（`setup` / `advance` / `turn` / `resolve` / `breather`）、`tension`（`low` / `mid` / `high`）
 - **volume**：`climax_scene`（幕高潮场景引用）、`inciting_scene`（激励事件落位，可选）
 
-字段集**宁少勿多**（每层 1-3 字段），是 AI 做小说理论分析的结构化输入基础。关联（人物/地点/伏笔）仍走 `relation_records`，不在 data 中重复建模。
+**两层字段不要混**：`reversal` / `climax_scene` 是**麦基分析面**（给 AI 做结构判断的输入）；`status` / `tags` / `function` / `tension` 是**工作面**（作者自己的进度与分类）——前者要求语义精确、后者允许自由。**剧情线用标签、不用关系**：标签说「这章属于复仇线」（多标签），关系 `advances` 说「这章推进了复仇线」（有向、可锚定 hook）；两者不互相转换。章节标签 ≠ 场景价值转折（麦基：场景是最小转折单位，仍只看 `value_from → value_to`）。
+
+字段集**宁少勿多**：分析面每层 1–2 个字段，工作面只加有筛选价值的枚举与标签，是 AI 做小说理论分析的结构化输入基础。关联（人物/地点/伏笔）仍走 `relation_records`，不在 data 中重复建模。
 
 **不变式**：编辑 data **不自动生成 Delta**（手动编辑实体/节点 data 不产生变更记录属正常行为）；变更记录由「+ 新建变更」显式创建。
 

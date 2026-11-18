@@ -3,9 +3,16 @@
 // 画布是**观察面**，不是第二个大纲页：结构与顺序的唯一编辑入口仍是大纲树——本页拖动卡片
 // **只改坐标**（`localStorage` `ai-editor:canvas:{projectId}`，不进 outline.json / 备份 / 云端包），
 // 不改父子 / 章序 / 卷归属。
-// 节点 = 章（唯一）：卷与场景不上画布，层级由卡片上的卷号徽标表达（components/outline-canvas/ChapterCard）。
-// 摆位 = 确定性网格（lib/outline-canvas-layout 纯函数）：缺坐标的章按可见章序每行 8 张补位、
-// 已有手工坐标不动、新章落网格末尾；首次进入（无存量视口）→ fitView，有存量视口则恢复。
+// 节点 = 章（唯一）：卷与场景不上画布，层级由卡片上的章号徽标 + 元信息行的卷号段表达（components/outline-canvas/ChapterCard）。
+// 摆位 = 确定性网格（lib/outline-canvas-layout 纯函数）：缺坐标的章按可见章序每行 5 张补位、
+// **行距按行算**（该行最高卡片 + 间距）、已有手工坐标不动、新章落网格末尾。首次进入（无存量视口）
+// 按 `resolveInitialViewport` 落点：内容装得下就居中，装不下则钳到全量档下界（0.85）并从左上角起步；
+// 有存量视口则用它。卡片高度随内容（无状态无标签 = 68、有 = 92）。
+// 缩放分级（LOD）只换容器上的 `lod-full` / `lod-far` 类（跨档才 setState，不逐帧重渲染节点），
+// 显隐规则全在 components/outline-canvas/canvas-theme.css。
+// 筛选（组件态，刷新即清）= 左上工具条的筛选按钮 + Popover：状态 / 剧情线标签，「同维度 OR、跨维度 AND」
+// （判定全在 lib/outline-canvas-filter）——未命中卡只降透明度（坐标与拖拽 / 选中交互保留），
+// 端点被筛掉的连线不画，命中 0 张时画布中央提示「没有符合条件的章节」。
 //
 // 连线 = `plot_edge`（章 → 章）：关系的列表是唯一事实源（`listRelations`），边每次从它派生
 // （lib/outline-canvas-edges）；建边 / 删边 / 改标签成功后**重拉列表**，不手工 push 平行状态。
@@ -19,11 +26,18 @@ import "@xyflow/react/dist/base.css";
 import "../components/outline-canvas/canvas-theme.css";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
+  Background,
+  BackgroundVariant,
   Controls,
+  MarkerType,
   MiniMap,
+  Panel,
   ReactFlow,
   useEdgesState,
   useNodesState,
+  useOnViewportChange,
+  useReactFlow,
+  useStore,
   type Edge,
   type EdgeChange,
   type NodeChange,
@@ -35,6 +49,7 @@ import {
 import { Button, ConfigProvider } from "antd";
 import { EmptyState } from "../components/ui/empty-state";
 import { ChapterCard, type ChapterCardNode } from "../components/outline-canvas/ChapterCard";
+import { CanvasFilterControl } from "../components/outline-canvas/CanvasFilterControl";
 import { PlotEdgeDrawer } from "../components/outline-canvas/PlotEdgeDrawer";
 import { ConfirmDialog } from "../components/outline/dialogs";
 import { useOutlineLoader } from "../hooks/use-outline-loader";
@@ -47,18 +62,30 @@ import {
   type RelationSummaryItem,
 } from "../lib/api";
 import {
-  CANVAS_CARD_HEIGHT,
   CANVAS_CARD_WIDTH,
   CANVAS_MAX_ZOOM,
   CANVAS_MIN_ZOOM,
+  canvasCardHeight,
   canvasChapterCards,
+  canvasContentBounds,
+  canvasLodLevel,
   layoutCanvasChapters,
   pruneCanvasPositions,
   readCanvasState,
+  resolveInitialViewport,
   writeCanvasState,
+  type CanvasBounds,
   type CanvasChapterCard,
+  type CanvasLodLevel,
   type CanvasSavedState,
 } from "../lib/outline-canvas-layout";
+import {
+  applyCanvasFilter,
+  canvasTagOptions,
+  EMPTY_CANVAS_FILTER,
+  isCanvasFilterActive,
+  type CanvasFilter,
+} from "../lib/outline-canvas-filter";
 import { buildNodeHookMarks, HOOK_MARK_TYPES, type NodeHookMark } from "../lib/outline-hooks";
 import {
   adjacentPlotEdgeIds,
@@ -76,52 +103,91 @@ import { useUiStore } from "../stores/ui";
 /** 节点类型表（模块级常量：每次渲染新建对象会让 React Flow 重挂全部节点） */
 const NODE_TYPES: NodeTypes = { chapter: ChapterCard };
 
+/** Controls 的中文无障碍标签（键名 = `@xyflow/system` 的 `AriaLabelConfig`）。
+ * 挂 ReactFlow 而不挂 Controls：v12 由 store 统一下发（`ControlProps` 没有这个 prop），
+ * 页面只传文案，不传色值 / 尺寸。 */
+const ARIA_LABEL_CONFIG = {
+  "controls.ariaLabel": "画布控件",
+  "controls.zoomIn.ariaLabel": "放大",
+  "controls.zoomOut.ariaLabel": "缩小",
+  "controls.fitView.ariaLabel": "适应视图",
+} as const;
+
 /**
- * 首帧 fitView 的缩放区间：
+ * `fitViewOptions`：**只服务 Controls 的「适应视图」按钮**（首次进入不再用 fitView，见 `CanvasViewportController`）。
  * - 上界 1 —— 小书（1–2 章）不放大到满屏；
- * - 下界 0.5 —— 大书不缩成「一条不可读的窄带」（24 章在 692px 画布内原本会到 0.33），
- *   装不下时靠平移 / MiniMap，与手动缩放的下限（0.25）是两件事。
+ * - 下界 = 手动缩放下限 —— 「适应视图」就是「把整本书装进画布」，缩到多小由 LOD far 档承接可读性。
  */
-const FIT_VIEW_OPTIONS = { padding: 0.1, minZoom: 0.5, maxZoom: 1 } as const;
+const FIT_VIEW_OPTIONS = { padding: 0.1, minZoom: CANVAS_MIN_ZOOM, maxZoom: 1 } as const;
+
+/** 档位 → 容器类名（字面量常量表：CSS 按类名选中，不拼接字符串） */
+const LOD_CLASS: Record<CanvasLodLevel, string> = {
+  full: "lod-full",
+  far: "lod-far",
+};
+
+/**
+ * 首次进入（无存量视口）的落点执行者：必须在 ReactFlow 子树内（`useStore` 才拿得到画布尺寸）。
+ * 宽度就绪（resize observer 报出非零尺寸）后跑**一次**，`applied` 防重——`bounds` 后续随拖拽变化不再重算。
+ */
+function CanvasViewportController({ bounds }: { bounds: CanvasBounds | null }) {
+  const { setViewport } = useReactFlow();
+  const width = useStore((state) => state.width);
+  const height = useStore((state) => state.height);
+  const applied = useRef(false);
+  useEffect(() => {
+    if (applied.current || width <= 0 || height <= 0) return;
+    applied.current = true;
+    void setViewport(resolveInitialViewport(bounds, { width, height }));
+  }, [bounds, width, height, setViewport]);
+  return null;
+}
+
+/** 视口 → 档位（只在跨档时上抛：`onChange` 每帧都来，但同类档位不 setState、不重渲染节点） */
+function CanvasLodTracker({ onChange }: { onChange: (zoom: number) => void }) {
+  const handleViewportChange = useCallback(
+    (viewport: Viewport) => onChange(viewport.zoom),
+    [onChange],
+  );
+  useOnViewportChange({ onChange: handleViewportChange });
+  return null;
+}
 
 interface CanvasFlowProps {
   projectId: string | null;
   cards: readonly CanvasChapterCard[];
   marks: Map<string, NodeHookMark[]> | null;
+  /** 在读章 id（`config.currentPosition`；null = 未设置） */
+  readingId: string | null;
+  /** 推演章 id 集（`config.deductionNodes`） */
+  deductionIds: ReadonlySet<string>;
 }
 
 /** 画布本体：坐标 / 视口只在挂载时读一次（换书 → 外层以 projectId 为 key 重挂） */
-function CanvasFlow({ projectId, cards, marks }: CanvasFlowProps) {
+function CanvasFlow({ projectId, cards, marks, readingId, deductionIds }: CanvasFlowProps) {
   const [saved, setSaved] = useState<CanvasSavedState>(() => readCanvasState(projectId));
-  // 首帧视口二选一后**冻结**：落盘的视口不能让 `fitView` prop 翻转——否则 StoreUpdater 会清掉
-  // 排队中的 fitView，首次进入就停在左上角（网格有 100 章时尤其明显）
+  // 首帧视口二选一后**冻结**：`defaultViewport` 与「是否挂首屏落点控制器」都以它为判据——
+  // 落盘回写 `saved.viewport` 后不能让这两者翻转（否则控制器会在用户平移后二次落点）
   const initialViewport = useRef(saved.viewport).current;
 
   const positions = useMemo(() => layoutCanvasChapters(cards, saved.nodes), [cards, saved.nodes]);
-  const flowNodes = useMemo<ChapterCardNode[]>(
-    () =>
-      cards.map((card) => ({
-        id: card.id,
-        type: "chapter",
-        position: positions[card.id] ?? { x: 0, y: 0 },
-        data: { card, marks: marks?.get(card.id) ?? [] },
-        // 卡片尺寸 = lib 常量（网格步长与卡片几何同源；颜色仍全走主题表 / token 类）
-        style: { width: CANVAS_CARD_WIDTH, height: CANVAS_CARD_HEIGHT },
-      })),
-    [cards, positions, marks],
+  /** 内容外包（首次进入落点的输入；拖拽后坐标变化会带动它，但控制器只跑一次） */
+  const contentBounds = useMemo(() => canvasContentBounds(positions, cards), [positions, cards]);
+  // 首帧档位取自存量视口（无存量 = 1 → 全量档）；之后由 CanvasLodTracker 在跨档时更新
+  const [lod, setLod] = useState<CanvasLodLevel>(() =>
+    canvasLodLevel(initialViewport?.zoom ?? 1),
   );
-  const [nodes, setNodes, onNodesChange] = useNodesState<ChapterCardNode>(flowNodes);
-  // 树 / 标记 / 坐标变化 → 收敛到 flowNodes（拖动中的位置由 onNodesChange 维护）
-  useEffect(() => {
-    setNodes(flowNodes);
-  }, [flowNodes, setNodes]);
-
-  /** 只放行拖动 / 选中：**节点不可删**（结构只在大纲树里改）——`Delete` 键的删除变更在这里掉 */
-  const handleNodesChange = useCallback(
-    (changes: NodeChange<ChapterCardNode>[]) =>
-      onNodesChange(changes.filter((change) => change.type !== "remove")),
-    [onNodesChange],
-  );
+  /** 同档返回原 state：React 本就会 bail out，这里把意图写死在调用点 */
+  const handleLodChange = useCallback((zoom: number) => {
+    setLod((current) => {
+      const next = canvasLodLevel(zoom);
+      return next === current ? current : next;
+    });
+  }, []);
+  /** 画布筛选（组件态：刷新即清，不写 localStorage / 不进 URL） */
+  const [filter, setFilter] = useState<CanvasFilter>(EMPTY_CANVAS_FILTER);
+  /** 标签池 = 全量卡片派生（不随筛选收窄，否则勾一个标签后其余选项就消失） */
+  const tagOptions = useMemo(() => canvasTagOptions(cards), [cards]);
 
   // ===== 连线（plot_edge）=====
   // 关系列表是唯一事实源：建边 / 删边 / 改标签成功后一律重拉，边从列表派生（不手工 push）
@@ -154,24 +220,64 @@ function CanvasFlow({ projectId, cards, marks }: CanvasFlowProps) {
     () => canvasPlotEdges(relations, visibleChapterIds),
     [relations, visibleChapterIds],
   );
-  const adjacentEdgeIds = useMemo(
-    () => adjacentPlotEdgeIds(plotEdges, focusedNodeId),
-    [plotEdges, focusedNodeId],
+  // 筛选 = 命中章 id 集 + 两端都命中的连线（未筛时二者为全集，行为与不筛选完全一致）
+  const { matchedIds, edges: visibleEdges } = useMemo(
+    () => applyCanvasFilter(cards, plotEdges, filter),
+    [cards, plotEdges, filter],
   );
+  const filterActive = isCanvasFilterActive(filter);
+  const adjacentEdgeIds = useMemo(
+    () => adjacentPlotEdgeIds(visibleEdges, focusedNodeId),
+    [visibleEdges, focusedNodeId],
+  );
+
+  const flowNodes = useMemo<ChapterCardNode[]>(
+    () =>
+      cards.map((card) => ({
+        id: card.id,
+        type: "chapter",
+        position: positions[card.id] ?? { x: 0, y: 0 },
+        data: {
+          card,
+          marks: marks?.get(card.id) ?? [],
+          reading: card.id === readingId,
+          deduction: deductionIds.has(card.id),
+          filtered: !matchedIds.has(card.id),
+        },
+        // 卡片尺寸 = lib 常量 / 逐卡高度（网格步长与卡片几何同源；颜色仍全走主题表 / token 类）
+        style: { width: CANVAS_CARD_WIDTH, height: canvasCardHeight(card) },
+      })),
+    [cards, positions, marks, readingId, deductionIds, matchedIds],
+  );
+  const [nodes, setNodes, onNodesChange] = useNodesState<ChapterCardNode>(flowNodes);
+  // 树 / 标记 / 坐标变化 → 收敛到 flowNodes（拖动中的位置由 onNodesChange 维护）
+  useEffect(() => {
+    setNodes(flowNodes);
+  }, [flowNodes, setNodes]);
+
+  /** 只放行拖动 / 选中：**节点不可删**（结构只在大纲树里改）——`Delete` 键的删除变更在这里掉 */
+  const handleNodesChange = useCallback(
+    (changes: NodeChange<ChapterCardNode>[]) =>
+      onNodesChange(changes.filter((change) => change.type !== "remove")),
+    [onNodesChange],
+  );
+
   const flowEdges = useMemo<Edge[]>(
     () =>
-      plotEdges.map((edge) => ({
+      visibleEdges.map((edge) => ({
         id: edge.id,
         source: edge.source,
         target: edge.target,
         // 空标签不传：React Flow 收到 `undefined` 才不画文字（空串会留一个空文本框）
         label: edge.label === "" ? undefined : edge.label,
+        // 方向箭头：不传 color ⇒ 走 canvas-theme.css 的 `--xy-edge-stroke`（色值单源在那里）
+        markerEnd: { type: MarkerType.ArrowClosed, width: 12, height: 12 },
         style:
           focusedNodeId === null || adjacentEdgeIds.has(edge.id)
             ? undefined
             : { opacity: PLOT_EDGE_DIM_OPACITY },
       })),
-    [plotEdges, focusedNodeId, adjacentEdgeIds],
+    [visibleEdges, focusedNodeId, adjacentEdgeIds],
   );
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>(flowEdges);
   // 关系列表 / 聚焦章变化 → 收敛到 flowEdges（选中态由 onEdgesChange 维护）
@@ -241,7 +347,8 @@ function CanvasFlow({ projectId, cards, marks }: CanvasFlowProps) {
     writeCanvasState(projectId, next);
   };
 
-  /** 平移 / 缩放结束 = 视口落盘（下一次进入直接恢复；首次进入时 fitView 的结果也会落盘） */
+  /** 平移 / 缩放结束 = 视口落盘（下一次进入直接恢复）：首次进入的落点由 `CanvasViewportController`
+   *  调 `setViewport`，库会走同一条 zoom / end 事件链，因此也会落盘 */
   function handleMoveEnd(_event: MouseEvent | TouchEvent | null, viewport: Viewport) {
     const next: CanvasSavedState = { ...saved, viewport };
     setSaved(next);
@@ -271,7 +378,7 @@ function CanvasFlow({ projectId, cards, marks }: CanvasFlowProps) {
           </Button>
         </div>
       )}
-      <div className="min-h-0 flex-1">
+      <div className={cn("relative min-h-0 flex-1", LOD_CLASS[lod])}>
         <ReactFlow
           className="h-full w-full"
           nodes={nodes}
@@ -290,16 +397,43 @@ function CanvasFlow({ projectId, cards, marks }: CanvasFlowProps) {
           onNodeDoubleClick={(_event, node) => navigate(`#/outline/${node.id}`)}
           deleteKeyCode={["Delete", "Backspace"]}
           defaultViewport={initialViewport}
-          fitView={initialViewport === undefined}
           fitViewOptions={FIT_VIEW_OPTIONS}
           minZoom={CANVAS_MIN_ZOOM}
           maxZoom={CANVAS_MAX_ZOOM}
           zoomOnDoubleClick={false}
           attributionPosition="bottom-left"
+          ariaLabelConfig={ARIA_LABEL_CONFIG}
+          // 箭头色：库把 `#b1b1b7` 写成 marker 的**内联** fill/stroke，base.css 的 `--xy-edge-stroke` 抢不过
+          // ⇒ 只能从这里传（值仍是变量引用，调色板单源留在 canvas-theme.css）
+          defaultMarkerColor="var(--xy-edge-stroke-default)"
         >
-          <Controls showInteractive={false} position="top-left" />
-          <MiniMap position="top-right" pannable zoomable ariaLabel="章节缩略图" />
+          {/* 首次进入落点 / 档位追踪：两个都不渲染 DOM，只是库内 hook 的宿主（必须在 ReactFlow 子树内） */}
+          {initialViewport === undefined && <CanvasViewportController bounds={contentBounds} />}
+          <CanvasLodTracker onChange={handleLodChange} />
+          {/* 点阵底纹：不传 color ⇒ `--xy-background-pattern-dots-color-default`（canvas-theme.css） */}
+          <Background variant={BackgroundVariant.Dots} gap={24} size={1} />
+          {/* 左上竖向工具条：筛选按钮在上、缩放组在下（内层 Panel 的外距 / 绝对定位在 canvas-theme.css 归零） */}
+          <Panel position="top-left" className="canvas-toolbar flex flex-col items-start gap-2">
+            <CanvasFilterControl filter={filter} tagOptions={tagOptions} onChange={setFilter} />
+            <Controls showInteractive={false} />
+          </Panel>
+          {/* 尺寸走 style：v12 的 MiniMap 用 `style.width/height` 决定 SVG 尺寸（props 已废弃） */}
+          <MiniMap
+            position="top-right"
+            pannable
+            zoomable
+            ariaLabel="章节缩略图"
+            style={{ width: 160, height: 108 }}
+          />
         </ReactFlow>
+        {/* 空结果提示：画布中央一行，不拦截鼠标（拖拽 / 平移照常） */}
+        {filterActive && matchedIds.size === 0 && (
+          <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
+            <span className="rounded-md bg-background px-3 py-1.5 text-sm text-muted-foreground">
+              没有符合条件的章节
+            </span>
+          </div>
+        )}
       </div>
       {editingRelation !== undefined && (
         // key = 边 id：换边就重挂，草稿即该边的当前值（同 EditRelationDialog 的「挂载时取初值」）
@@ -332,6 +466,10 @@ export default function OutlineCanvas() {
   const config = useProjectStore((s) => s.config);
   const configLoading = useProjectStore((s) => s.configLoading);
   const projectId = config?.id ?? null;
+  // 在读 / 推演：服务端二者均只接受章节点 → 直接按 id 命中，不做祖先映射（DESIGN.md `outline-canvas`）
+  const readingId = useProjectStore((s) => s.config?.currentPosition ?? null);
+  const deductionNodeIds = useProjectStore((s) => s.config?.deductionNodes);
+  const deductionIds = useMemo(() => new Set(deductionNodeIds ?? []), [deductionNodeIds]);
   const { retry: retryOutline } = useOutlineLoader({ withMetadata: true });
 
   // 伏笔徽标（同大纲页数据流）：树就绪后并行拉三类标记关系 → buildNodeHookMarks 聚合为
@@ -415,7 +553,16 @@ export default function OutlineCanvas() {
       </div>
     );
   } else {
-    body = <CanvasFlow key={projectId ?? "none"} projectId={projectId} cards={cards} marks={hookMarks} />;
+    body = (
+      <CanvasFlow
+        key={projectId ?? "none"}
+        projectId={projectId}
+        cards={cards}
+        marks={hookMarks}
+        readingId={readingId}
+        deductionIds={deductionIds}
+      />
+    );
   }
 
   return (

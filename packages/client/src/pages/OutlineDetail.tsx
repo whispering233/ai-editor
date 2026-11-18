@@ -38,12 +38,15 @@ import { DeltaCreateForm } from "../components/delta/delta-create-form";
 import { TYPE_LABEL } from "../components/outline/dialogs";
 import { Button, Input, Select } from "antd";
 import { TypeChip } from "@/components/ui/tag-chip";
+import { TagsEditor } from "@/components/ui/tags-editor";
 import { PanelHeader } from "@/components/ui/panel-header";
 import { SectionCard } from "@/components/ui/section-card";
 import { ApiError, updateOutlineNode, type UpdateOutlineBody } from "../lib/api";
 import { diffData } from "../lib/entity-detail";
 import {
+  chapterTagPool,
   detailFieldsForNodeType,
+  normalizeOutlineDataForm,
   sceneNodeOptions,
   sceneSelectValue,
   toggleConflictLevel,
@@ -73,11 +76,26 @@ export function isOutlineDetailDirty(
   summaryValue: string,
   dataForm: Record<string, unknown>,
 ): boolean {
+  // 两侧都归一：末尾空行（TagsEditor 续输用）不算 dirty，基线里带空格的旧值也不会一进表单就脏
+  const baselineData = normalizeOutlineDataForm(baseline.data ?? {});
   return (
     shouldCommitTitle(baseline.title, titleValue) ||
     shouldCommitSummary(baseline.summary, summaryValue) ||
-    diffData(baseline.data ?? {}, dataForm) !== null
+    diffData(
+      baselineData,
+      normalizeDefaultStatus(baselineData, normalizeOutlineDataForm(dataForm)),
+    ) !== null
   );
+}
+
+/** 状态缺省 = 草稿：两者等价（否则默认值一进表单就永久 dirty）。只在本判定内归一，不改
+ * `diffData` 的通用语义——`status: undefined` 在 diffData 里是「不提交」 */
+function normalizeDefaultStatus(
+  baselineData: Record<string, unknown>,
+  dataForm: Record<string, unknown>,
+): Record<string, unknown> {
+  if (baselineData.status !== undefined || dataForm.status !== "draft") return dataForm;
+  return { ...dataForm, status: undefined };
 }
 
 /** 可嵌入（中栏分栏壳的右列）：节点由壳 `findNode` 派生传入（本组件不自拉大纲）；
@@ -136,6 +154,11 @@ export default function OutlineDetail({
 
   const fields = detailFieldsForNodeType(node.type);
   const sceneOptions = sceneNodeOptions(outline?.children ?? []);
+  // 章标签候选 = 全书章 / 场景已用标签（使用次数降序；不新增请求——树就在 store 里）
+  const tagPool = useMemo(
+    () => chapterTagPool(outline?.children ?? []).map((t) => t.value),
+    [outline],
+  );
   const isCurrent = config?.currentPosition === nodeId;
   /** 本节点是否可承载「阅读进度」（卡片 1.1 章级收窄：仅章） */
   const currentPositionHost = isCurrentPositionHost(node.type);
@@ -206,7 +229,9 @@ export default function OutlineDetail({
     const patch: UpdateOutlineBody = {};
     if (shouldCommitTitle(baseline.title, titleValue)) patch.title = title;
     if (shouldCommitSummary(baseline.summary, summaryValue)) patch.summary = summaryValue.trim();
-    const dataDiff = diffData(baseline.data ?? {}, dataForm);
+    // 归一后再 diff / 提交：tags 末尾空行不能进 payload（nodeTagsSchema min(1) 会 400）
+    const normalizedData = normalizeOutlineDataForm(dataForm);
+    const dataDiff = diffData(baseline.data ?? {}, normalizedData);
     if (dataDiff !== null) patch.data = dataDiff;
     if (Object.keys(patch).length === 0) {
       // 表单已与基线同值：node 可能被外部改名（rail）/ AI 写库更新，先让表单跟随服务端再归零基线，
@@ -222,10 +247,11 @@ export default function OutlineDetail({
     setSaveError(null);
     try {
       await updateOutlineNode(node.id, patch);
-      // 回写 trimmed 值并把基线前移到刚提交的值：保存后 dirty 立即归零（重拉的新 node 走同步 effect 收敛）
+      // 回写 trimmed / 归一值并把基线前移到刚提交的值：保存后 dirty 立即归零（重拉的新 node 走同步 effect 收敛）
       setTitleValue(title);
       setSummaryValue(summaryValue.trim());
-      setBaseline({ ...node, title, summary: summaryValue.trim(), data: dataForm });
+      setDataForm(normalizedData);
+      setBaseline({ ...node, title, summary: summaryValue.trim(), data: normalizedData });
       useUiStore.getState().showToast("已保存");
       await onReload();
     } catch (err) {
@@ -436,6 +462,7 @@ export default function OutlineDetail({
                       field={f}
                       value={dataForm[f.key]}
                       sceneOptions={sceneOptions}
+                      tagPool={tagPool}
                       onChange={(v) => setDataField(f.key, v)}
                     />
                   </div>
@@ -504,20 +531,47 @@ export default function OutlineDetail({
   );
 }
 
-/** 单个 data 字段控件（text/textarea/checkbox-group/scene-select） */
+/** 单个 data 字段控件（text/textarea/checkbox-group/scene-select/select/tags） */
 function FieldControl({
   field,
   value,
   sceneOptions,
+  tagPool,
   onChange,
 }: {
   field: NodeFieldConfig;
   value: unknown;
   /** scene-select 用：场景节点选项（树中全部 scene 叶子） */
   sceneOptions: Array<{ id: string; label: string; depth: number }>;
+  /** tags 用：候选标签（全书已用标签） */
+  tagPool: string[];
   onChange: (v: unknown) => void;
 }) {
   switch (field.control) {
+    case "select": {
+      const current = typeof value === "string" && value !== "" ? value : (field.defaultValue ?? "");
+      return (
+        <Select
+          className="w-full"
+          value={current}
+          onChange={(v) => onChange(v)}
+          options={(field.options ?? []).map((opt) => ({
+            value: opt,
+            label: field.optionsLabels?.[opt] ?? opt,
+          }))}
+        />
+      );
+    }
+    case "tags":
+      return (
+        <TagsEditor
+          values={Array.isArray(value) ? (value as string[]) : []}
+          onChange={onChange}
+          placeholder="标签（回车添加，如：复仇线）"
+          suggestions={tagPool}
+          quickTags={tagPool}
+        />
+      );
     case "textarea":
       return (
         <Input.TextArea

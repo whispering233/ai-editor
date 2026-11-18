@@ -18,12 +18,10 @@
 //   关系不参与 `computeState`，但不放在字段 tab 之下、也不共享折叠壳：四个 tab = 四个数据集）。
 // 数据：GET /entity/character/:id（含 relations + deltaCount）、PUT partial（diffData 只提交变更字段 + 姓名）、
 //   DELETE（软删 + 级联计数 → 跳 `#/characters`）、POST /delta/compute（tab 2 自动计算）、POST/DELETE /relation。
-import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { HolderOutlined } from "@ant-design/icons";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { formatTimestamp } from "@whispering233/ai-editor-shared";
 import type { ComputeStateResult } from "@whispering233/ai-editor-shared";
 import { Button, Input, Select, Tabs } from "antd";
-import type { InputRef } from "antd";
 import { ComputeResult } from "../delta/compute-preview";
 import { PanelTree } from "./panel-tree";
 import { CharacterRelations } from "./character-relations";
@@ -31,6 +29,7 @@ import { partitionCharacterRelations } from "../../lib/character-relations";
 import { EmptyState } from "../ui/empty-state";
 import { PageHeader } from "../ui/page-header";
 import { SectionCard } from "../ui/section-card";
+import { TagsEditor } from "../ui/tags-editor";
 import { navigate } from "../../hooks/use-route";
 import { useDataRefresh } from "../../hooks/use-data-refresh";
 import {
@@ -61,7 +60,6 @@ import { diffData, type DetailFieldConfig } from "../../lib/entity-detail";
 import { entityListPath } from "../../lib/entity-paths";
 import { chapterNodeOptions, type FlatNodeOption } from "../../lib/outline-tree";
 import { useSaveShortcut } from "../../lib/save-shortcut";
-import { enterBehavior, moveArrayItem } from "../../lib/tags-editor";
 import { useProjectStore } from "../../stores/project";
 import { useUiStore } from "../../stores/ui";
 import { cn } from "../../lib/utils";
@@ -73,103 +71,6 @@ const LIST_ROUTE = entityListPath("character");
 /** 字段值 → 表单字符串（undefined/null → 空串；与 `EntityDetail` 同语义） */
 function fieldValue(raw: unknown): string {
   return raw === undefined || raw === null ? "" : String(raw);
-}
-
-/**
- * 标签列表编辑器（人物 `personality`）：拖拽排序 + 回车续行，交互语义与 `EntityDetail` 的私有实现一致
- * （本卡不复用泛型详情页的私有组件，见文件头注释——人物页与其持续分化）。
- * 仅可编辑态使用（阅读进度 tab 走只读文本单元，不渲染本编辑器）。
- */
-function TagsEditor({
-  values,
-  onChange,
-  placeholder,
-}: {
-  values: string[];
-  onChange: (v: string[]) => void;
-  placeholder?: string;
-}) {
-  const inputRefs = useRef<Array<InputRef | null>>([]);
-  const [dragIndex, setDragIndex] = useState<number | null>(null);
-  const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
-  return (
-    <div className="flex flex-col gap-1.5">
-      {values.map((v, i) => (
-        <div
-          key={i}
-          className={cn(
-            "flex items-center gap-1.5 rounded-md px-0.5 py-0.5 transition-colors",
-            dragIndex === i && "opacity-40",
-            dragOverIndex === i &&
-              dragIndex !== null &&
-              dragIndex !== i &&
-              "bg-muted/60 ring-1 ring-ring",
-          )}
-          onDragOver={(e) => {
-            if (dragIndex === null) return;
-            e.preventDefault();
-            e.dataTransfer.dropEffect = "move";
-            if (dragOverIndex !== i) setDragOverIndex(i);
-          }}
-          onDrop={(e) => {
-            if (dragIndex === null) return;
-            e.preventDefault();
-            if (dragIndex !== i) onChange(moveArrayItem(values, dragIndex, i));
-            setDragIndex(null);
-            setDragOverIndex(null);
-          }}
-        >
-          <span className="flex shrink-0 cursor-grab active:cursor-grabbing">
-            <Button
-              color="default"
-              variant="text"
-              size="small"
-              draggable
-              title="拖拽排序"
-              aria-label="拖拽排序"
-              onDragStart={(e) => {
-                setDragIndex(i);
-                e.dataTransfer.effectAllowed = "move";
-                e.dataTransfer.setData("text/plain", String(i));
-              }}
-              onDragEnd={() => {
-                setDragIndex(null);
-                setDragOverIndex(null);
-              }}
-              icon={<HolderOutlined className="text-base" />}
-            />
-          </span>
-          <Input
-            value={v}
-            onChange={(e) => {
-              const next = [...values];
-              next[i] = e.target.value;
-              onChange(next);
-            }}
-            ref={(el) => {
-              inputRefs.current[i] = el;
-            }}
-            onKeyDown={(e) => {
-              if (e.key !== "Enter") return;
-              e.preventDefault();
-              const b = enterBehavior(values, i);
-              if (!b) return;
-              if (b.append) onChange([...values, ""]);
-              requestAnimationFrame(() => inputRefs.current[b.focusIndex]?.focus());
-            }}
-            placeholder={placeholder}
-            className="flex-1"
-          />
-          <Button onClick={() => onChange(values.filter((_, j) => j !== i))}>
-            删除
-          </Button>
-        </div>
-      ))}
-      <Button className="self-start" onClick={() => onChange([...values, ""])}>
-        + 添加
-      </Button>
-    </div>
-  );
 }
 
 /** custom_fields 键值组编辑器（**仅有值时显示**——MVP 无法新增键，见 `EntityDetail` 同款边界；仅可编辑态使用） */

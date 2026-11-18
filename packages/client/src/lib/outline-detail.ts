@@ -2,7 +2,15 @@
 // + shared OUTLINE_NODE_DATA_SCHEMAS——client 只消费常量与类型，不打包 zod 校验函数）
 // 用途：详情页 data 表单按层级渲染（仿 lib/entity-detail.ts 的字段配置模式）——纯函数可单测，UI 只做编排
 import type { OutlineNode } from "@whispering233/ai-editor-shared";
-import { CONFLICT_LEVELS } from "@whispering233/ai-editor-shared";
+import {
+  CHAPTER_FUNCTIONS,
+  CHAPTER_FUNCTION_LABEL,
+  CHAPTER_TENSIONS,
+  CHAPTER_TENSION_LABEL,
+  CONFLICT_LEVELS,
+  OUTLINE_STATUS,
+  OUTLINE_STATUS_LABEL,
+} from "@whispering233/ai-editor-shared";
 import type { OutlineNodeType } from "./api";
 
 /** 场景冲突层次 → 中文（麦基冲突三层次；checkbox 组标签） */
@@ -12,8 +20,9 @@ export const CONFLICT_LEVEL_LABEL: Record<string, string> = {
   extra_personal: "社会冲突",
 };
 
-/** 字段控件类型：text 单行 / textarea 多行 / checkbox-group 冲突层次多选 / scene-select 场景节点选择器 */
-export type NodeFieldControl = "text" | "textarea" | "checkbox-group" | "scene-select";
+/** 字段控件类型：text 单行 / textarea 多行 / checkbox-group 冲突层次多选 / scene-select 场景节点选择器 /
+ * select 枚举下拉 / tags 标签编辑器 */
+export type NodeFieldControl = "text" | "textarea" | "checkbox-group" | "scene-select" | "select" | "tags";
 
 /** data 字段配置（顺序 = 展示顺序；label 为字段中文名） */
 export interface NodeFieldConfig {
@@ -26,12 +35,14 @@ export interface NodeFieldConfig {
   options?: readonly string[];
  /** checkbox-group 用：选项 → 中文标签 */
   optionsLabels?: Record<string, string>;
+ /** select 用：未设置时的展示值（章 status 缺省即草稿，服务端 schema 同口径） */
+  defaultValue?: string;
 }
 
 /**
- * 按节点层级的 data 字段配置（麦基字段集；root 无 data 不适用——详情页仅卷/章/场可达）：
- * scene——goal/conflict_levels/value_from/value_to；chapter——reversal/climax_scene；
- * volume——climax_scene/inciting_scene。
+ * 按节点层级的 data 字段配置（麦基字段集 + 工作面字段；root 无 data 不适用——详情页仅卷/章/场可达）：
+ * scene——goal/conflict_levels/value_from/value_to；chapter——status/tags/function/tension（工作面）
+ * → reversal/climax_scene（分析面）；volume——climax_scene/inciting_scene。
  * 引用字段（climax_scene/inciting_scene）用 scene-select（仅列 scene 节点，见 sceneNodeOptions）。
  */
 export function detailFieldsForNodeType(type: OutlineNodeType): NodeFieldConfig[] {
@@ -51,6 +62,29 @@ export function detailFieldsForNodeType(type: OutlineNodeType): NodeFieldConfig[
       ];
     case "chapter":
       return [
+        {
+          key: "status",
+          label: "状态",
+          control: "select",
+          options: OUTLINE_STATUS,
+          optionsLabels: OUTLINE_STATUS_LABEL,
+          defaultValue: "draft",
+        },
+        { key: "tags", label: "剧情线标签", control: "tags" },
+        {
+          key: "function",
+          label: "叙事功能",
+          control: "select",
+          options: CHAPTER_FUNCTIONS,
+          optionsLabels: CHAPTER_FUNCTION_LABEL,
+        },
+        {
+          key: "tension",
+          label: "张力度",
+          control: "select",
+          options: CHAPTER_TENSIONS,
+          optionsLabels: CHAPTER_TENSION_LABEL,
+        },
         { key: "reversal", label: "章末反转", control: "textarea", maxLength: 1000 },
         { key: "climax_scene", label: "章高潮场景", control: "scene-select" },
       ];
@@ -60,6 +94,33 @@ export function detailFieldsForNodeType(type: OutlineNodeType): NodeFieldConfig[
         { key: "inciting_scene", label: "激励事件", control: "scene-select" },
       ];
   }
+}
+
+/**
+ * 剧情线标签候选池（详情页章标签的 datalist / 快捷 chips）：遍历全书章与场景的 `data.tags`，
+ * 去重计数 → 按使用次数降序、同频按字典序（中文按拼音）。
+ */
+export function chapterTagPool(tree: OutlineNode[]): Array<{ value: string; count: number }> {
+  const counts = new Map<string, number>();
+  const walk = (nodes: OutlineNode[]): void => {
+    for (const node of nodes) {
+      if (node.type === "chapter" || node.type === "scene") {
+        const tags = node.data?.tags;
+        if (Array.isArray(tags)) {
+          for (const tag of tags) {
+            if (typeof tag === "string" && tag !== "") {
+              counts.set(tag, (counts.get(tag) ?? 0) + 1);
+            }
+          }
+        }
+      }
+      if (node.type !== "scene" && node.children) walk(node.children);
+    }
+  };
+  walk(tree);
+  return [...counts]
+    .map(([value, count]) => ({ value, count }))
+    .sort((a, b) => b.count - a.count || a.value.localeCompare(b.value, "zh"));
 }
 
 /**
@@ -88,6 +149,20 @@ export function sceneNodeOptions(
   };
   walk(nodes, 0);
   return options;
+}
+
+/**
+ * data 表单归一（保存提交与 dirty 判定共用）：`tags` 为数组时逐项 trim、丢弃空串——TagsEditor
+ * 为续输故意保留末行空串（回车 / `+ 添加`），原样提交会被 `nodeTagsSchema`（trim 后 min(1)）判 400。
+ * 其它 key 原样；无 tags 键或非数组时返回入参同一对象（不白造新对象）。
+ */
+export function normalizeOutlineDataForm(data: Record<string, unknown>): Record<string, unknown> {
+  if (!Array.isArray(data.tags)) return data;
+  const tags = data.tags
+    .filter((tag): tag is string => typeof tag === "string")
+    .map((tag) => tag.trim())
+    .filter((tag) => tag !== "");
+  return { ...data, tags };
 }
 
 /**
