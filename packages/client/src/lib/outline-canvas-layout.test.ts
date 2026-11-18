@@ -18,7 +18,6 @@ import {
   CANVAS_MIN_ZOOM,
   CANVAS_VIEW_PADDING,
   canvasChapterCards,
-  canvasChapterMeta,
   canvasContentBounds,
   canvasLodLevel,
   canvasStorageKey,
@@ -28,9 +27,7 @@ import {
   readCanvasState,
   resolveInitialViewport,
   writeCanvasState,
-  type CanvasChapterCard,
 } from "./outline-canvas-layout";
-import { formatTextLength } from "./manuscript";
 
 function chapter(
   id: string,
@@ -84,13 +81,13 @@ describe("canvasChapterCards（大纲树 → 画布卡片）", () => {
       ]),
     );
     expect(cards).toEqual([
-      { id: "ch-1", title: "开端", volumeLabel: "第1卷", chapterLabel: "第1章", sceneCount: 2, textLength: 0 },
-      { id: "ch-2", title: "转折", volumeLabel: "第1卷", chapterLabel: "第2章", sceneCount: 0, textLength: 0 },
-      { id: "ch-3", title: "收束", volumeLabel: "第2卷", chapterLabel: "第3章", sceneCount: 1, textLength: 0 },
+      { id: "ch-1", title: "开端", volumeLabel: "第1卷", chapterLabel: "第1章", sceneCount: 2, written: false, tags: [] },
+      { id: "ch-2", title: "转折", volumeLabel: "第1卷", chapterLabel: "第2章", sceneCount: 0, written: false, tags: [] },
+      { id: "ch-3", title: "收束", volumeLabel: "第2卷", chapterLabel: "第3章", sceneCount: 1, written: false, tags: [] },
     ]);
   });
 
-  it("字数 / 更新时间取自章节点的 metadata（无 metadata → 0 字、无更新时间，不新增请求）", () => {
+  it("已写 = metadata.textLength > 0（字数本身不上卡面）；无 metadata ⇒ 未写，不新增请求", () => {
     const cards = canvasChapterCards(
       tree([
         volume("vol-1", "第一卷", [
@@ -109,8 +106,8 @@ describe("canvasChapterCards（大纲树 → 画布卡片）", () => {
         volumeLabel: "第1卷",
         chapterLabel: "第1章",
         sceneCount: 1,
-        textLength: 1200,
-        updatedAt: "2026-03-05T10:00:00",
+        written: true,
+        tags: [],
       },
       {
         id: "ch-2",
@@ -118,57 +115,69 @@ describe("canvasChapterCards（大纲树 → 画布卡片）", () => {
         volumeLabel: "第1卷",
         chapterLabel: "第2章",
         sceneCount: 0,
-        textLength: 0,
+        written: false,
+        tags: [],
       },
     ]);
   });
 
-  it("存量直挂 root 的章没有卷号（volumeLabel 空串 ⇒ 元信息行省略卷号段）", () => {
+  it("存量直挂 root 的章没有卷号（volumeLabel 空串 ⇒ title 省略卷号段）", () => {
     const cards = canvasChapterCards(tree([chapter("ch-1", "无卷章"), volume("vol-1", "第一卷")]));
     expect(cards).toEqual([
-      { id: "ch-1", title: "无卷章", volumeLabel: "", chapterLabel: "第1章", sceneCount: 0, textLength: 0 },
+      { id: "ch-1", title: "无卷章", volumeLabel: "", chapterLabel: "第1章", sceneCount: 0, written: false, tags: [] },
     ]);
   });
-});
 
-describe("canvasChapterMeta（元信息段：空段整段不产出）", () => {
-  function card(over: Partial<CanvasChapterCard> = {}): CanvasChapterCard {
-    return {
+  it("data 窄化：合法枚举 / 标签数组进卡（缺 status ⇔ 草稿）", () => {
+    const [card] = canvasChapterCards(
+      tree([
+        volume("vol-1", "第一卷", [
+          {
+            ...chapter("ch-1", "开端"),
+            data: { status: "final", tags: ["伏笔", "转折"], function: "turn", tension: "high" },
+          },
+        ]),
+      ]),
+    );
+    expect(card).toEqual({
       id: "ch-1",
       title: "开端",
       volumeLabel: "第1卷",
       chapterLabel: "第1章",
-      sceneCount: 2,
-      textLength: 1200,
-      updatedAt: "2026-03-05T10:00:00",
-      ...over,
-    };
-  }
-
-  it("全量：卷号 · 字数 · 场数 · 更新时间（按序）", () => {
-    expect(canvasChapterMeta(card())).toEqual(["第1卷", "1.2 千字", "2 场", "更新 03-05"]);
+      sceneCount: 0,
+      written: false,
+      tags: ["伏笔", "转折"],
+      status: "final",
+      function: "turn",
+      tension: "high",
+    });
   });
 
-  it("空章：0 字 → 未写，无场数 / 无更新时间（字数段恒有一段）", () => {
-    expect(
-      canvasChapterMeta(card({ textLength: 0, sceneCount: 0, updatedAt: undefined })),
-    ).toEqual(["第1卷", "未写"]);
-  });
-
-  it("root 直挂章（无卷号）→ 首段省略，其余段顺位前移", () => {
-    expect(canvasChapterMeta(card({ volumeLabel: "" }))).toEqual([
-      "1.2 千字",
-      "2 场",
-      "更新 03-05",
-    ]);
-  });
-
-  it("字数段与 formatTextLength 同源（千字档 / 零字档都一致）", () => {
-    for (const textLength of [0, 1, 999, 1000, 12345]) {
-      expect(canvasChapterMeta(card({ textLength }))[1]).toBe(
-        formatTextLength(textLength) ?? "未写",
-      );
-    }
+  it("data 窄化：非法枚举 / 非字符串标签按未设置处理（坏字段不污染卡面）", () => {
+    const cards = canvasChapterCards(
+      tree([
+        volume("vol-1", "第一卷", [
+          {
+            ...chapter("ch-1", "开端"),
+            data: { status: "unknown", tags: "伏笔", function: 42, tension: "extreme" },
+          },
+          {
+            ...chapter("ch-2", "转折"),
+            data: { tags: ["伏笔", 42, ""] },
+          },
+        ]),
+      ]),
+    );
+    expect(cards[0]).toEqual({
+      id: "ch-1",
+      title: "开端",
+      volumeLabel: "第1卷",
+      chapterLabel: "第1章",
+      sceneCount: 0,
+      written: false,
+      tags: [],
+    });
+    expect(cards[1]?.tags).toEqual(["伏笔"]);
   });
 });
 

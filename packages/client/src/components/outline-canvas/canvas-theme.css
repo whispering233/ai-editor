@@ -113,15 +113,15 @@
   display: none;
 }
 
-/* compact：藏元信息行（章号 + 章名仍可读） */
-.lod-compact [data-lod="meta"] {
+/* compact：藏第三行（状态 / 标签；章号 + 章名仍可读） */
+.lod-compact [data-lod="status"] {
   display: none;
 }
 
 /* far：只留大章号（+ 在读条，它在布局外、不属这三段） */
 .lod-far [data-lod="head"],
 .lod-far [data-lod="title"],
-.lod-far [data-lod="meta"] {
+.lod-far [data-lod="status"] {
   display: none;
 }
 

@@ -2,21 +2,30 @@
 //
 // 五件事：
 // ① `canvasChapterCards`：大纲树 → 画布卡片（**节点 = 章**，卷 / 场景不上画布）。编号与卷号消费
-//    shared `numberVisibleOutline`（展示口径、只计可见节点），本模块不另算编号；元信息列表
-//    （卷号 / 字数 / 场数 / 更新时间）同为纯函数 `canvasChapterMeta`，空段不产出；
+//    shared `numberVisibleOutline`（展示口径、只计可见节点），本模块不另算编号；卡面第三行的
+//    状态 / 剧情线标签从 `node.data` 窄化（非法枚举 / 非字符串数组 = 未设置）；
 // ② `layoutCanvasChapters`：**确定性网格**——缺坐标的章按其可见章序每行 `CANVAS_CHAPTERS_PER_ROW`
 //    张补位（新章在可见序末尾 ⇒ 自然落在网格末尾），已有手工坐标的章不动（摆位优先）；
 // ③ `canvasContentBounds` / `resolveInitialViewport`：首次进入（无存量视口）的落点——内容装得下就居中，
 //    装不下则钳到全量档下界并从左上角起步（居中裁切会把首列卡片推出画布外）；
-// ④ `canvasLodLevel`：缩放分级（全量 / 隐藏元信息 / 只留大章号），阈值常量同在本模块；
+// ④ `canvasLodLevel`：缩放分级（全量 / 隐藏第三行 / 只留大章号），阈值常量同在本模块；
 // ⑤ 坐标 / 视口的 localStorage 读写（`ai-editor:canvas:{projectId}`）：展示层偏好，**不进
 //    outline.json / 备份 / 云端包**（跨设备不同步是有意取舍，见 docs/design/config.md）。
 //
 // 写侧清理：`pruneCanvasPositions` 只留仍在可见大纲里的章（已删章 / 换书残留的条目不会越攒越多）。
 // 读侧防御：坏 JSON / 形状不对 → 空状态（画布照常按网格渲染，不抛错、不阻塞页面）。
-import type { OutlineTree } from "@whispering233/ai-editor-shared";
-import { formatMonthDay, numberVisibleOutline } from "@whispering233/ai-editor-shared";
-import { formatTextLength } from "./manuscript";
+import type {
+  ChapterFunction,
+  ChapterTension,
+  OutlineStatus,
+  OutlineTree,
+} from "@whispering233/ai-editor-shared";
+import {
+  CHAPTER_FUNCTIONS,
+  CHAPTER_TENSIONS,
+  OUTLINE_STATUS,
+  numberVisibleOutline,
+} from "@whispering233/ai-editor-shared";
 import { findNode } from "./outline-tree";
 
 /** 网格每行的章卡片数（换行档位常量单点；调它是布局决定，不是逐页参数） */
@@ -30,7 +39,7 @@ export const CANVAS_MIN_ZOOM = 0.25;
 export const CANVAS_MAX_ZOOM = 2;
 /** 全量三行的最小缩放（LOD 上界档下界） */
 export const CANVAS_LOD_FULL_MIN_ZOOM = 0.85;
-/** 元信息行的最小缩放（再低就只留大章号） */
+/** 第三行（状态 / 标签）的最小缩放（再低就只留大章号） */
 export const CANVAS_LOD_COMPACT_MIN_ZOOM = 0.72;
 /**
  * 首次进入视口的缩放下界 = 全量档下界：首屏必须落在「全量」档——一进来就是半截卡面，
@@ -77,20 +86,39 @@ export interface CanvasSavedState {
   viewport?: CanvasViewport;
 }
 
-/** 画布卡片（章级派生：编号徽标文案 + 场景数 + 元信息） */
+/** 画布卡片（章级派生：编号徽标文案 + 场景数 + 第三行状态 / 标签） */
 export interface CanvasChapterCard {
   id: string;
   title: string;
-  /** 卷号文案（`第N卷`）；**存量直挂 root 的章** = 空串（元信息行省略该段） */
+  /** 卷号文案（`第N卷`）；**存量直挂 root 的章** = 空串（title 里省略该段） */
   volumeLabel: string;
   /** 章号徽标文案（`第N章`）——画布上唯一徽标 */
   chapterLabel: string;
-  /** 可见场景数（软删场景不计；0 不渲染） */
+  /** 可见场景数（软删场景不计；0 不进 title） */
   sceneCount: number;
-  /** 正文字数（`metadata.textLength`；无统计 = 0，元信息行显示 `未写`） */
-  textLength: number;
-  /** 正文最近保存时刻（`metadata.documentUpdatedAt`；无文档 = 字段缺省，元信息行不产时间段） */
-  updatedAt?: string;
+  /** 已写（`metadata.textLength > 0`）：只给 LOD far 档的两档底色用，字数本身不上卡面 */
+  written: boolean;
+  /** 剧情线标签（`data.tags`；非法形状按空处理） */
+  tags: string[];
+  /** 写作状态（`data.status`；缺省 = 草稿，非法枚举按未设置处理） */
+  status?: OutlineStatus;
+  /** 叙事功能（`data.function`；卡面不展示，筛选用） */
+  function?: ChapterFunction;
+  /** 张力度（`data.tension`；卡面不展示，筛选用） */
+  tension?: ChapterTension;
+}
+
+/** 枚举字段窄化：`node.data` 是宽松 record，非法值一律按未设置处理 */
+function enumField<T extends string>(value: unknown, allowed: readonly T[]): T | undefined {
+  return typeof value === "string" && (allowed as readonly string[]).includes(value)
+    ? (value as T)
+    : undefined;
+}
+
+/** 标签窄化：非数组 / 空串 / 非字符串元素丢弃（长度与条数在写侧 schema 已限） */
+function tagList(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  return value.filter((tag): tag is string => typeof tag === "string" && tag !== "");
 }
 
 /** 大纲树 → 画布卡片（阅读序 = 可见章先序，与行编号同源）；`null` / 空树 → 空数组 */
@@ -99,33 +127,24 @@ export function canvasChapterCards(tree: OutlineTree | null): CanvasChapterCard[
   return chapters.map((chapter) => {
     const node = findNode(tree?.children ?? [], chapter.chapterId);
     const scenes = node?.type === "chapter" ? (node.children ?? []) : [];
-    // 字数 / 更新时间只在章节点的 `metadata`（with_metadata=true 的联查统计）：缺省按空处理，不新增请求
-    const updatedAt = node?.metadata?.documentUpdatedAt;
+    // 只读章节点的 `data` / `metadata`（with_metadata=true 的联查统计）：缺省按空处理，不新增请求
+    const data = node?.data ?? {};
+    const status = enumField(data.status, OUTLINE_STATUS);
+    const narrFunction = enumField(data.function, CHAPTER_FUNCTIONS);
+    const tension = enumField(data.tension, CHAPTER_TENSIONS);
     return {
       id: chapter.chapterId,
       title: chapter.chapterTitle,
       volumeLabel: chapter.volumeLabel,
       chapterLabel: chapter.chapterLabel,
       sceneCount: scenes.filter((scene) => scene.deleted !== true).length,
-      textLength: node?.metadata?.textLength ?? 0,
-      ...(updatedAt === undefined ? {} : { updatedAt }),
+      written: (node?.metadata?.textLength ?? 0) > 0,
+      tags: tagList(data.tags),
+      ...(status === undefined ? {} : { status }),
+      ...(narrFunction === undefined ? {} : { function: narrFunction }),
+      ...(tension === undefined ? {} : { tension }),
     };
   });
-}
-
-/**
- * 卡片的元信息段（按序拼接，空段整段不产出）：`第N卷` · 字数 · `N 场` · `更新 MM-DD`。
- * - 卷号：存量直挂 root 的章没有卷号 → 省略；
- * - 字数：`formatTextLength` 为空（0 / 非法）→ `未写`（**恒有一段**，空章也看得出没写）；
- * - 场数：0 省略；更新时间：无正文（无 `documentUpdatedAt`）省略。
- */
-export function canvasChapterMeta(card: CanvasChapterCard): string[] {
-  const meta: string[] = [];
-  if (card.volumeLabel !== "") meta.push(card.volumeLabel);
-  meta.push(formatTextLength(card.textLength) ?? "未写");
-  if (card.sceneCount > 0) meta.push(`${card.sceneCount} 场`);
-  if (card.updatedAt !== undefined) meta.push(`更新 ${formatMonthDay(card.updatedAt)}`);
-  return meta;
 }
 
 /**
@@ -148,7 +167,7 @@ export function layoutCanvasChapters(
   return positions;
 }
 
-/** 缩放到档位（阈值单源在本模块：`>= 0.85` 全量、`>= 0.72` 隐藏元信息、其余只留大章号） */
+/** 缩放到档位（阈值单源在本模块：`>= 0.85` 全量、`>= 0.72` 隐藏第三行、其余只留大章号） */
 export function canvasLodLevel(zoom: number): CanvasLodLevel {
   if (zoom >= CANVAS_LOD_FULL_MIN_ZOOM) return "full";
   if (zoom >= CANVAS_LOD_COMPACT_MIN_ZOOM) return "compact";
