@@ -3,21 +3,6 @@
 只放当前 / 进行中的任务卡。完成后清卡（历史 = `CHANGELOG.md` 的逐版本段）；未排期项进 `backlog.md`。执行纪律与派工流程见 `AGENTS.md`「协作流程」。
 
 ## 当前任务卡
-### K2 — 画布卡面第三行（状态 + 剧情线标签）
-
-契约见 `DESIGN.md` `outline-canvas`「节点 = 章」第③行。
-
-#### 范围
-- `packages/client/src/lib/outline-canvas-layout.ts`：`CanvasChapterCard` 增 `tags: string[]` / `status?` / `function?` / `tension?`（`node.data` 是 `Record<string, unknown>`，加窄化 helper，非法枚举按未设置处理）；删卡片上的 `textLength` / `updatedAt` 依赖（字数 / 更新时间**保留**在 `metadata` 里，卡片不再读）。
-- `packages/client/src/components/outline-canvas/ChapterCard.tsx`：第③行 = 状态（仅非草稿：`修正中` / `定稿`，全部走 token 类）+ 标签（`#tag`，≤ 2 个，超出 `+N`；色相复用 `tagTintClass`）；`第N卷` / `N 场` 移入 `title`；状态与标签皆空 → 第③行不渲染；`data-lod` 保持（compact 隐藏第③行、far 只留章号）。
-- 测试：`outline-canvas-layout.test.ts` 整卡断言更新；卡片 `renderToString` 断言（非草稿状态可见、草稿不可见、3 个标签出 `+1`、全空不出第③行）。
-- **不做**：筛选（K3）。
-
-#### 完成判据
-- `pnpm typecheck` / `pnpm lint` / `pnpm --filter @whispering233/ai-editor-client test` 绿。
-- 浏览器实测（24 章验收书）：给第 1 章加两个标签 + 定稿，第 2 章留空；截图确认第 1 章第三行出现状态与标签、第 2 章不出现空行，`title` 提示含卷号与场数。
-- 硬判据：`git log -1` 有新 commit 且 `git status` 干净；汇报附 commit hash + 命令输出。
-
 ### K3 — 画布筛选（状态 + 剧情线标签）
 
 契约见 `DESIGN.md` `outline-canvas`「筛选」。
