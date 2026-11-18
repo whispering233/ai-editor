@@ -3,20 +3,6 @@
 只放当前 / 进行中的任务卡。完成后清卡（历史 = `CHANGELOG.md` 的逐版本段）；未排期项进 `backlog.md`。执行纪律与派工流程见 `AGENTS.md`「协作流程」。
 
 ## 当前任务卡
-### K0 — 抽出共享 `TagsEditor`（纯重构，零行为变化）
-
-契约见 `DESIGN.md` `outline-page`（章标签编辑复用实体页的标签编辑器）。当前 `TagsEditor` 在 `pages/EntityDetail.tsx:65` 与 `components/character/character-detail.tsx:83` 各有一份（后者无 `suggestions` / `quickTags`）。
-
-#### 范围
-- 新建 `packages/client/src/components/ui/tags-editor.tsx`：取 `EntityDetail` 版超集（`values` / `onChange` / `placeholder?` / `suggestions?` / `quickTags?`），继续消费 `lib/tags-editor.ts` 的 `enterBehavior` / `moveArrayItem`。
-- 迁移 `EntityDetail.tsx`、`character-detail.tsx` 两处调用点，删本地副本；不改 props 行为、不改样式类。
-- **不做**：章详情接入（K1）。
-
-#### 完成判据
-- `pnpm typecheck` / `pnpm lint` / `pnpm --filter @whispering233/ai-editor-client test` 绿（既有实体页 / 人物页标签测试不改也应绿）。
-- 浏览器抽查一处标签新增 / 删除 / 拖拽排序行为不变。
-- 硬判据：`git log -1` 出现本卡新 commit 且 `git status` 干净；汇报附 commit hash + 命令输出。
-
 ### K1 — 章字段 schema + 详情页编辑（状态 / 剧情线标签 / 叙事功能 / 张力度）
 
 契约见 `docs/design/10-data-model.md` §8、`docs/api/60-api-outline.md`（节点 `data`）、`DESIGN.md` `outline-page`「章的结构化信息」。
