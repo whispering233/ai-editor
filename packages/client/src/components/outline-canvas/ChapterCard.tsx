@@ -35,6 +35,7 @@ export function ChapterCard({ data, selected }: NodeProps<ChapterCardNode>) {
   const meta = canvasChapterMeta(card).join(" · ");
   return (
     <div
+      data-written={card.textLength > 0 ? "true" : "false"}
       className={cn(
         "relative flex h-full w-full flex-col gap-1 rounded-md border bg-card px-3 py-2",
         // 选中 / 聚焦 = primary 描边；hover = hairline-strong（不填充、不加阴影）
@@ -48,7 +49,7 @@ export function ChapterCard({ data, selected }: NodeProps<ChapterCardNode>) {
       )}
       <Handle type="target" position={Position.Left} />
       <Handle type="source" position={Position.Right} />
-      <span className="flex min-w-0 items-center gap-1">
+      <span data-lod="head" className="flex min-w-0 items-center gap-1">
         <TypeChip tone="soft" className="min-w-14 justify-center tabular-nums">
           {card.chapterLabel}
         </TypeChip>
