@@ -1,7 +1,7 @@
 // 应用外壳（§2）：三栏装配——左栏 Sidebar + 中栏 MainPanel + 右栏 ChatPanel
 // F7 修订（2026-08 用户反馈）：桌面态（≥1024px）三栏宽度可拖拽（像素）+ 左/右栏可收起/展开，
 // 宽度与收起态 localStorage 持久化（hooks/use-panels，同哲学——纯展示层不进数据文件）；
-// 2026-11 修订：**收起 = 0px**（不渲染该栏、无窄条、无占位）；收起/展开入口全部在 `main-toolbar` 两端
+// 2026-11 修订：**收起 = 0px**（不渲染该栏、无窄条、无占位）；整栏的收起/展开入口全部在 `main-toolbar` 两端
 // （两枚静态 `PanelToggleIcon`，状态经 `panelToggles` 下发），栏内不再有收起按钮。
 // 装配顺序 Sidebar（展开态）→ 拖拽手柄 → MainPanel（flex-1 弹性吸收剩余空间）→ 拖拽手柄 →
 // ChatPanel（展开态）；拖拽手柄仅在「桌面 + 该栏展开」时渲染（拖拽与收起互斥）。
@@ -59,7 +59,7 @@ export function AppShell({ route, children }: { route: Route; children: ReactNod
       {!focusMode && (
         <>
           {/* 左栏：桌面收起态 = 0px（整栏不渲染，无窄条/占位）；展开态 = NavRail + 拖拽手柄。
-              收起/展开入口在 main-toolbar 左端（`panelToggles`），栏内无按钮。 */}
+              整栏收起/展开入口在 main-toolbar 左端（`panelToggles`），栏内无按钮。 */}
           {(!isDesktop || !layout.collapsedSidebar) && (
             <>
               <NavRail width={isDesktop ? layout.sidebarWidth : undefined} />

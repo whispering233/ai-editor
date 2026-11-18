@@ -4,6 +4,7 @@
 // `PanelToggleIcon`，与 main-toolbar 的整栏开关**共用同一面板图形**（同形 = 同一语义「收 / 展一整栏」），
 // 靠位置区分控制哪一栏。`side` 由栏位决定（左栏 / 右栏），**图标不随收起态换向**——状态只由这里统一
 // 生成的动态 `aria-label` / `title` / `aria-expanded` 表达；toggle 是瞬时动作，不加常驻选中面。
+// 放置 = 最左可见列 `leading` / 最右可见列 `actions` 末尾（外端锚定，见 DESIGN.md §Layout「工作台子栏页头」）。
 import { Button } from "antd";
 import { PanelToggleIcon } from "./panel-toggle-icon";
 

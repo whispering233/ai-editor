@@ -88,8 +88,8 @@ type CreatingState = { parentId: string | null } | null;
  * 设定树栏：header（`PanelHeader`）+ 常驻控件行 + 行区（自身纵向滚动）。
  * 宽度 / 收起态由壳持有（hooks/use-setting-rail）：本栏只消费 `width`；右侧拖拽手柄由壳作为兄弟渲染。
  * 选中唯一来源 = URL（`nodeId`）；本栏不存选中态，切换 / 清选中一律经 `onSelect`（壳负责守卫与导航）。
- * 左栏（本栏）收起 / 展开入口在详情列页头 `leading`；右侧详情收起 / 展开入口在标题行最外端：
- * 两栏都开时在详情页头动作组末尾、详情收起时在本栏 header 右端组末尾（`leading` / `onToggleDetail`，
+ * 左栏（本栏）收起 / 展开入口按外端锚定：两栏都开时在本栏 header `leading`，本栏收起后由详情列页头 `leading` 承载；
+ * 右侧详情收起 / 展开入口同样按外端锚定：两栏都开时在详情页头动作组末尾、详情收起时在本栏 header 右端组末尾（`leading` / `onToggleDetail`，
  * 窄屏不传 = 不渲染），见 DESIGN.md §Layout「工作台子栏页头」/ `setting-page`「宽度与两档收起」。
  */
 export function SettingRail({

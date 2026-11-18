@@ -1,7 +1,7 @@
 // 三栏工作台宽度与收起态 hook（F7、注记）：
 // - 桌面态（≥1024px）左/右栏宽度为**像素**（可拖拽，覆盖默认 10%/40% 百分比）；中栏不可收起，
 // 保底最小宽度 MIDDLE_MIN_WIDTH（由 MainPanel minWidth 保证，flex 自然吸收窗口收缩）
-// - 左/右栏可收起（收起 = 0px：AppShell 整栏不渲染、无窄条/占位；入口在 main-toolbar 两端），
+// - 左/右栏可收起（收起 = 0px：AppShell 整栏不渲染、无窄条/占位；整栏入口在 main-toolbar 两端），
 // 收起态下拖拽手柄隐藏（互斥）
 // - 宽度与收起态持久化 localStorage（key ai-editor:panels，同哲学：纯展示层不进数据文件）；
 // 持久化 JSON 为扁平 { sidebarWidth, chatWidth, collapsedSidebar, collapsedChat }

@@ -14,7 +14,7 @@ import { PageDivider } from "./page-header";
 export interface PanelHeaderProps {
   /** 列标题（16px / 600，单行截断） */
   title: ReactNode;
-  /** 标题行最左的前置元素（24px 图标，如左侧 rail 的收起 / 展开入口） */
+  /** 标题行最左的前置元素（24px 图标，如最左可见列的左钮） */
   leading?: ReactNode;
   /** 标题行右端的操作组（24px 图标按钮，自带 `title` / `aria-label`） */
   actions?: ReactNode;
