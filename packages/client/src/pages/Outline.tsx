@@ -38,9 +38,9 @@ import {
   BranchesOutlined,
   ClearOutlined,
   DeleteOutlined,
-  NodeCollapseOutlined,
-  NodeExpandOutlined,
+  MinusSquareOutlined,
   PlusOutlined,
+  PlusSquareOutlined,
   RightOutlined,
 } from "@ant-design/icons";
 import { CHILD_TYPE, TYPE_LABEL } from "../components/outline/dialogs";
@@ -1369,9 +1369,9 @@ function OutlineRail({
               onClick={toggleAllCollapse}
               icon={
                 collapsed.size > 0 ? (
-                  <NodeExpandOutlined className="text-sm" />
+                  <PlusSquareOutlined className="text-sm" />
                 ) : (
-                  <NodeCollapseOutlined className="text-sm" />
+                  <MinusSquareOutlined className="text-sm" />
                 )
               }
             />

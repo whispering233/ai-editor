@@ -28,9 +28,9 @@ import { Button, Input, Select, Switch } from "antd";
 import {
   DeleteOutlined,
   DownOutlined,
-  NodeCollapseOutlined,
-  NodeExpandOutlined,
+  MinusSquareOutlined,
   PlusOutlined,
+  PlusSquareOutlined,
   RightOutlined,
   SearchOutlined,
   UpOutlined,
@@ -1068,9 +1068,9 @@ export function SettingRail({
               onClick={toggleAllCollapse}
               icon={
                 collapsedIds.size > 0 ? (
-                  <NodeExpandOutlined className="text-sm" />
+                  <PlusSquareOutlined className="text-sm" />
                 ) : (
-                  <NodeCollapseOutlined className="text-sm" />
+                  <MinusSquareOutlined className="text-sm" />
                 )
               }
             />

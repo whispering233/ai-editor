@@ -64,7 +64,7 @@ describe("设定页：桌面分栏", () => {
     // rail：左列存在 + header 两枚图标按钮（全部折叠 / 新建）
     expect(html).toContain('aria-label="设定树"');
     expect(html).toContain('aria-label="全部折叠"');
-    expect(html).toContain("anticon-node-collapse");
+    expect(html).toContain("anticon-minus-square");
     expect(html).toContain('aria-label="新建设定"');
     // 右端组顺序 = [全部折叠/展开][+ 新建][收起右侧详情]（详情钮最右端，紧邻被收起的详情列）
     const collapseIdx = html.indexOf('aria-label="全部折叠"');

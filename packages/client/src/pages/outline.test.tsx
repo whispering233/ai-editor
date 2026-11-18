@@ -276,6 +276,7 @@ describe("大纲页：rail header 图标组", () => {
     const html = render();
     expect(html).not.toContain("章视图");
     expect(html).toContain('aria-label="全部折叠"');
+    expect(html).toContain("anticon-minus-square"); // 初始态 = 全展开，折叠钮用方框减号
     expect(html).toContain('aria-label="新建卷"');
     // header = PanelHeader（标题行 40 + 预留元信息行 24 + 分割线），不放收起钮（收起入口在详情列页头）
     expect(html).toContain("flex h-10 min-w-0 items-center gap-2");
