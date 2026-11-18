@@ -3,23 +3,6 @@
 只放当前 / 进行中的任务卡。完成后清卡（历史 = `CHANGELOG.md` 的逐版本段）；未排期项进 `backlog.md`。执行纪律与派工流程见 `AGENTS.md`「协作流程」。
 
 ## 当前任务卡
-### K1 — 章字段 schema + 详情页编辑（状态 / 剧情线标签 / 叙事功能 / 张力度）
-
-契约见 `docs/design/10-data-model.md` §8、`docs/api/60-api-outline.md`（节点 `data`）、`DESIGN.md` `outline-page`「章的结构化信息」。
-
-#### 范围
-- `packages/shared/src/types/api.ts`：`nodeTagsSchema`（`z.array(z.string().trim().min(1).max(24)).max(5)`）；`chapterDataSchema` 增 `tags` / `status` / `function` / `tension`（均可选）；`sceneDataSchema` 增 `tags`（仅开 schema）。枚举值来自新常量，不手抄字面量。
-- 新建 `packages/shared/src/constants/outline.ts`：`OUTLINE_STATUS` / `CHAPTER_FUNCTIONS` / `CHAPTER_TENSIONS` + 中文标签表（`Record<Value, string>`），从 shared index 导出。
-- `packages/client/src/lib/outline-detail.ts`：`NodeFieldControl` 增 `"select"` / `"tags"`；章字段表变 6 项（状态 → 剧情线标签 → 叙事功能 → 张力度 → 章末反转 → 章高潮场景），`select` 复用 `options` / `optionsLabels`；新增 `chapterTagPool(tree)`（遍历全书章 + 场景标签 → 去重 + 按使用次数降序 + 同频按字典序）。
-- `packages/client/src/pages/OutlineDetail.tsx`：`select` 用 antd `Select`、`tags` 用共享 `TagsEditor`（候选 = `chapterTagPool`）；**默认状态归一**：diff 前把 baseline 缺失的 `status` 视为 `"draft"`（否则默认值一进表单就永久 dirty）；清空标签提交 `[]`（`diffData` 把 `[]` 与缺失都规约为 null，只有显式 `[]` 才真正清除）。
-- 测试：shared schema（接受 / 拒绝超 5 个 / 超长 / 非法枚举）；`detailFieldsForNodeType("chapter")` 顺序与控件类型；`chapterTagPool` 排序；`isOutlineDetailDirty` 在 status 缺省且表单为 `draft` 时为 false。
-- **不做**：场景标签表单（K3 之后单独排），画布呈现（K2）。
-
-#### 完成判据
-- `pnpm -r build` → `pnpm typecheck` / `pnpm lint` / `pnpm --filter @whispering233/ai-editor-client test` 绿。
-- 浏览器实测（大纲页章详情）：四个控件渲染、选状态 / 加两个标签 / 选功能与张力 → 保存 → 刷新仍在；底座回显正确；清标签保存后 `outline.json` 里 `data.tags` 为空数组。
-- 硬判据：`git log -1` 有新 commit 且 `git status` 干净；汇报附 commit hash + 命令输出。
-
 ### K2 — 画布卡面第三行（状态 + 剧情线标签）
 
 契约见 `DESIGN.md` `outline-canvas`「节点 = 章」第③行。
