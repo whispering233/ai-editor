@@ -4,23 +4,6 @@
 
 ## 当前任务卡
 
-### C1 — 画布卡片 v2（信息面与形态）
-
-设计契约已定稿：`docs/ui/DESIGN.md` `outline-canvas`（节点 / LOD 两条）。本卡只改卡片，不动主题、视图与交互。
-
-#### 范围
-- `packages/client/src/lib/outline-canvas-layout.ts`：`CANVAS_CARD_HEIGHT` 84 → **92**；`CanvasChapterCard` 增 `textLength: number` 与 `updatedAt?: string`（同一次漫步取 `node.metadata`，不新增请求）；新增纯函数 `canvasChapterMeta(card): string[]`——卷号 / 字数 / 场数 / 更新时间，空段不产出。
-- `packages/client/src/components/outline-canvas/ChapterCard.tsx`：三行布局（①徽标 `TypeChip tone="soft"` + 状态标记 + `NodeHookMarkBadge`；②章名 14px 单行 `truncate`；③ `canvasChapterMeta` 拼 ` · `），`title` 属性给全量文案；在读 = 左侧 2px `bg-primary` 内嵌条，推演 = 4px `bg-type-badge-border` 圆点；**只用 token 类，不写色值**。
-- `packages/client/src/pages/OutlineCanvas.tsx`：从 `config.currentPosition` / `config.deductionNodes` 派生 `reading` / `deduction` 传入节点 data（节点 data 的 memo 依赖补齐）；其余交互不变。
-- 测试：更新 `packages/client/src/lib/outline-canvas-layout.test.ts`（整卡字段 `toEqual`）；新增 `canvasChapterMeta` 用例（全量 / 空章 / root 直挂章 / 无更新时间）。
-- `CHANGELOG.md` `[Unreleased] → Changed` 一条（中文、无任务卡语义）。
-- **不做**：Background / MiniMap / Controls 皮肤、边箭头、LOD、视口初始化（后两卡）。
-
-#### 完成判据
-- `pnpm -r build` → `pnpm typecheck` / `pnpm lint` 绿；`pnpm --filter @whispering233/ai-editor-client test` 绿。
-- 浏览器实测（client dev + 24 章验收书）截图：三行卡无溢出、未写章显示 `未写`、在读章有左侧条、推演章有圆点、勾标可点。
-- 硬判据：`git log -1 --pretty=%h` 出现本卡新 commit 且 `git status` 干净；汇报附 commit hash + 命令输出。**无 commit 不许报 PASS**。
-
 ### C2 — 画布主题层（底纹 / MiniMap / Controls / 边箭头 / 卡片状态）
 
 #### 范围
