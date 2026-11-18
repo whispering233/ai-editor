@@ -4,6 +4,7 @@ import { describe, expect, it } from "vitest";
 import type { OutlineNode } from "@whispering233/ai-editor-shared";
 import {
   CONFLICT_LEVEL_LABEL,
+  chapterTagPool,
   detailFieldsForNodeType,
   sceneNodeOptions,
   sceneSelectValue,
@@ -49,11 +50,33 @@ describe("detailFieldsForNodeType（data 字段按层级）", () => {
     expect(fields.find((f) => f.key === "value_to")!.maxLength).toBe(200);
   });
 
-  it("chapter：reversal（多行 1000）+ climax_scene（场景选择器）", () => {
+  it("chapter 六项：状态 → 剧情线标签 → 叙事功能 → 张力度 → 章末反转 → 章高潮场景", () => {
     const fields = detailFieldsForNodeType("chapter");
-    expect(fields.map((f) => f.key)).toEqual(["reversal", "climax_scene"]);
-    expect(fields[0].control).toBe("textarea");
-    expect(fields[1].control).toBe("scene-select");
+    expect(fields.map((f) => f.key)).toEqual([
+      "status",
+      "tags",
+      "function",
+      "tension",
+      "reversal",
+      "climax_scene",
+    ]);
+    expect(fields.map((f) => f.control)).toEqual([
+      "select",
+      "tags",
+      "select",
+      "select",
+      "textarea",
+      "scene-select",
+    ]);
+    // 枚举下拉复用 options / optionsLabels；状态缺省即草稿（服务端 schema 同口径）
+    expect(fields[0].options).toEqual(["draft", "revision", "final"]);
+    expect(fields[0].optionsLabels?.final).toBe("定稿");
+    expect(fields[0].defaultValue).toBe("draft");
+    expect(fields[2].options).toEqual(["setup", "advance", "turn", "resolve", "breather"]);
+    expect(fields[2].optionsLabels?.turn).toBe("转折");
+    expect(fields[3].options).toEqual(["low", "mid", "high"]);
+    expect(fields[3].optionsLabels?.high).toBe("高");
+    expect(fields[4].maxLength).toBe(1000);
   });
 
   it("volume：climax_scene + inciting_scene（双场景选择器）", () => {
@@ -74,6 +97,56 @@ describe("toggleConflictLevel（checkbox 组 ↔ conflict_levels 数组）", () 
   it("非法值忽略（不进入数组，也不因未知值报错）", () => {
     expect(toggleConflictLevel([], "social")).toEqual([]);
     expect(toggleConflictLevel(["inner"], "social")).toEqual(["inner"]);
+  });
+});
+
+describe("chapterTagPool（章标签候选池）", () => {
+  const tagged: OutlineNode[] = [
+    {
+      id: "vol-1",
+      type: "volume",
+      title: "第一卷",
+      updatedAt: "t0",
+      children: [
+        {
+          id: "ch-1",
+          type: "chapter",
+          title: "第一章",
+          updatedAt: "t0",
+          data: { tags: ["复仇线", "感情线"] },
+          children: [
+            { id: "sc-1", type: "scene", title: "场景一", updatedAt: "t0", data: { tags: ["复仇线"] } },
+          ],
+        },
+        { id: "ch-2", type: "chapter", title: "第二章", updatedAt: "t0", data: { tags: ["权谋"] } },
+      ],
+    },
+    {
+      id: "ch-3",
+      type: "chapter",
+      title: "第三章",
+      updatedAt: "t0",
+      data: { tags: ["感情线", ""] },
+    },
+  ];
+
+  it("遍历全书章与场景标签：去重计数 + 次数降序 + 同频字典序", () => {
+    expect(chapterTagPool(tagged)).toEqual([
+      { value: "复仇线", count: 2 },
+      { value: "感情线", count: 2 },
+      { value: "权谋", count: 1 },
+    ]);
+  });
+
+  it("无标签 / 脏值（非数组、非字符串项、空串）不产生候选", () => {
+    expect(chapterTagPool([])).toEqual([]);
+    expect(
+      chapterTagPool([
+        { id: "ch-1", type: "chapter", title: "第一章", updatedAt: "t0", data: { tags: "复仇线" } },
+        { id: "ch-2", type: "chapter", title: "第二章", updatedAt: "t0", data: {} },
+        { id: "ch-3", type: "chapter", title: "第三章", updatedAt: "t0" },
+      ]),
+    ).toEqual([]);
   });
 });
 

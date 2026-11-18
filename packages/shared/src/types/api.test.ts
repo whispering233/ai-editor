@@ -779,6 +779,39 @@ describe("OUTLINE_NODE_DATA_SCHEMAS", () => {
     const parsed = OUTLINE_NODE_DATA_SCHEMAS.scene.parse({ goal: "x", custom_field: { a: 1 } });
     expect(parsed).toEqual({ goal: "x", custom_field: { a: 1 } });
   });
+
+  it("chapter 工作面字段：status/function/tension 合法枚举通过，非法枚举拒绝", () => {
+    expect(
+      OUTLINE_NODE_DATA_SCHEMAS.chapter.parse({
+        status: "final",
+        function: "turn",
+        tension: "high",
+      }),
+    ).toEqual({ status: "final", function: "turn", tension: "high" });
+    expect(OUTLINE_NODE_DATA_SCHEMAS.chapter.safeParse({ status: "published" }).success).toBe(false);
+    expect(OUTLINE_NODE_DATA_SCHEMAS.chapter.safeParse({ function: "climax" }).success).toBe(false);
+    expect(OUTLINE_NODE_DATA_SCHEMAS.chapter.safeParse({ tension: "extreme" }).success).toBe(false);
+  });
+
+  it("tags：章 / 场景同 schema——≤5 个、单值 trim 后 1–24 字", () => {
+    expect(OUTLINE_NODE_DATA_SCHEMAS.chapter.parse({ tags: [" 复仇线 ", "感情线"] })).toEqual({
+      tags: ["复仇线", "感情线"],
+    });
+    expect(OUTLINE_NODE_DATA_SCHEMAS.scene.parse({ tags: ["复仇线"] })).toEqual({ tags: ["复仇线"] });
+    const five = ["a", "b", "c", "d", "e"];
+    expect(OUTLINE_NODE_DATA_SCHEMAS.chapter.safeParse({ tags: five }).success).toBe(true);
+    expect(OUTLINE_NODE_DATA_SCHEMAS.chapter.safeParse({ tags: [...five, "f"] }).success).toBe(false);
+    expect(OUTLINE_NODE_DATA_SCHEMAS.scene.safeParse({ tags: [...five, "f"] }).success).toBe(false);
+    expect(OUTLINE_NODE_DATA_SCHEMAS.chapter.safeParse({ tags: ["a".repeat(24)] }).success).toBe(true);
+    expect(OUTLINE_NODE_DATA_SCHEMAS.chapter.safeParse({ tags: ["a".repeat(25)] }).success).toBe(false);
+    expect(OUTLINE_NODE_DATA_SCHEMAS.chapter.safeParse({ tags: ["   "] }).success).toBe(false);
+    expect(OUTLINE_NODE_DATA_SCHEMAS.chapter.safeParse({ tags: [1] }).success).toBe(false);
+  });
+
+  it("chapter 未知字段同样透传（新字段不改宽松语义）", () => {
+    const parsed = OUTLINE_NODE_DATA_SCHEMAS.chapter.parse({ status: "revision", custom_field: "x" });
+    expect(parsed).toEqual({ status: "revision", custom_field: "x" });
+  });
 });
 
 describe("chat 端点", () => {

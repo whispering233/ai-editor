@@ -10,7 +10,7 @@ import { CHARACTER_PRIORITIES, DEFAULT_ENTITY_LIST_LIMIT, ENTITY_TYPES, MAX_ENTI
 import { normalizeRelationType, relationTypeSyntaxError } from "../utils/relation-type.js";
 import { NOVEL_TXT_LAYOUTS } from "../utils/novel-export.js";
 import { HOOK_STATUSES, PAYOFF_TIMING } from "../constants/hook.js";
-import { CONFLICT_LEVELS } from "../constants/outline.js";
+import { CONFLICT_LEVELS, CHAPTER_FUNCTIONS, CHAPTER_TENSIONS, OUTLINE_STATUS } from "../constants/outline.js";
 import { BACKUP_FREQUENCIES } from "../constants/backup.js";
 import { WORKSPACE_KINDS } from "../constants/workspace.js";
 import {
@@ -736,9 +736,14 @@ export const deltaComputeResSchema: z.ZodType<ComputeStateResult> = z.object({
 // ============ outline 端点（「大纲操作」，严格三层） ============
 
 /**
+ * 节点剧情线标签（章 / 场景共用）：≤5 个、单值 trim 后 1–24 字（docs/design/10-data-model.md §8）
+ */
+export const nodeTagsSchema = z.array(z.string().trim().min(1).max(24)).max(5);
+
+/**
  * 大纲节点 data 字段 schema（麦基《故事》字段集，outline.json「节点结构化信息」节）：
- * scene——goal/conflict_levels/value_from/value_to；chapter——reversal/climax_scene；
- * volume——climax_scene/inciting_scene。
+ * scene——goal/conflict_levels/value_from/value_to/tags；chapter——reversal/climax_scene
+ * + 工作面四字段 status/tags/function/tension；volume——climax_scene/inciting_scene。
  * 宽松语义与 ENTITY_DATA_SCHEMAS 一致：
  * - `.passthrough` 允许未知字段（创作工具，用户自定义字段自由，未知字段原样保留透传）
  * - 引用字段（climax_scene/inciting_scene）仅类型校验（字符串），不校验存在性/范围（MVP 宽松）
@@ -750,6 +755,7 @@ export const sceneDataSchema = z
     conflict_levels: z.array(z.enum(CONFLICT_LEVELS)).optional(), // 冲突三层次多选
     value_from: z.string().max(200).optional(), // 开场价值
     value_to: z.string().max(200).optional(), // 收场价值（「No scene that doesn't turn」）
+    tags: nodeTagsSchema.optional(), // 剧情线标签（场景级只开 schema，UI 本轮不开放）
   })
   .passthrough();
 
@@ -757,6 +763,11 @@ export const chapterDataSchema = z
   .object({
     reversal: z.string().max(1000).optional(), // 章末反转（单文本）
     climax_scene: z.string().optional(), // 章高潮场景引用（宽松：仅字符串，MVP 不校验引用范围）
+    // 工作面四字段（2026-11）：作者自己的进度与分类，与分析面 reversal/climax_scene 不混
+    status: z.enum(OUTLINE_STATUS).optional(), // 写作状态（缺省即草稿）
+    tags: nodeTagsSchema.optional(), // 剧情线标签
+    function: z.enum(CHAPTER_FUNCTIONS).optional(), // 叙事功能
+    tension: z.enum(CHAPTER_TENSIONS).optional(), // 张力度
   })
   .passthrough();
 

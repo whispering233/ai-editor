@@ -38,11 +38,13 @@ import { DeltaCreateForm } from "../components/delta/delta-create-form";
 import { TYPE_LABEL } from "../components/outline/dialogs";
 import { Button, Input, Select } from "antd";
 import { TypeChip } from "@/components/ui/tag-chip";
+import { TagsEditor } from "@/components/ui/tags-editor";
 import { PanelHeader } from "@/components/ui/panel-header";
 import { SectionCard } from "@/components/ui/section-card";
 import { ApiError, updateOutlineNode, type UpdateOutlineBody } from "../lib/api";
 import { diffData } from "../lib/entity-detail";
 import {
+  chapterTagPool,
   detailFieldsForNodeType,
   sceneNodeOptions,
   sceneSelectValue,
@@ -76,8 +78,18 @@ export function isOutlineDetailDirty(
   return (
     shouldCommitTitle(baseline.title, titleValue) ||
     shouldCommitSummary(baseline.summary, summaryValue) ||
-    diffData(baseline.data ?? {}, dataForm) !== null
+    diffData(baseline.data ?? {}, normalizeDefaultStatus(baseline.data ?? {}, dataForm)) !== null
   );
+}
+
+/** 状态缺省 = 草稿：两者等价（否则默认值一进表单就永久 dirty）。只在本判定内归一，不改
+ * `diffData` 的通用语义——`status: undefined` 在 diffData 里是「不提交」 */
+function normalizeDefaultStatus(
+  baselineData: Record<string, unknown>,
+  dataForm: Record<string, unknown>,
+): Record<string, unknown> {
+  if (baselineData.status !== undefined || dataForm.status !== "draft") return dataForm;
+  return { ...dataForm, status: undefined };
 }
 
 /** 可嵌入（中栏分栏壳的右列）：节点由壳 `findNode` 派生传入（本组件不自拉大纲）；
@@ -133,6 +145,11 @@ export default function OutlineDetail({
 
   const fields = detailFieldsForNodeType(node.type);
   const sceneOptions = sceneNodeOptions(outline?.children ?? []);
+  // 章标签候选 = 全书章 / 场景已用标签（使用次数降序；不新增请求——树就在 store 里）
+  const tagPool = useMemo(
+    () => chapterTagPool(outline?.children ?? []).map((t) => t.value),
+    [outline],
+  );
   const isCurrent = config?.currentPosition === nodeId;
   /** 本节点是否可承载「阅读进度」（卡片 1.1 章级收窄：仅章） */
   const currentPositionHost = isCurrentPositionHost(node.type);
@@ -432,6 +449,7 @@ export default function OutlineDetail({
                       field={f}
                       value={dataForm[f.key]}
                       sceneOptions={sceneOptions}
+                      tagPool={tagPool}
                       onChange={(v) => setDataField(f.key, v)}
                     />
                   </div>
@@ -500,20 +518,47 @@ export default function OutlineDetail({
   );
 }
 
-/** 单个 data 字段控件（text/textarea/checkbox-group/scene-select） */
+/** 单个 data 字段控件（text/textarea/checkbox-group/scene-select/select/tags） */
 function FieldControl({
   field,
   value,
   sceneOptions,
+  tagPool,
   onChange,
 }: {
   field: NodeFieldConfig;
   value: unknown;
   /** scene-select 用：场景节点选项（树中全部 scene 叶子） */
   sceneOptions: Array<{ id: string; label: string; depth: number }>;
+  /** tags 用：候选标签（全书已用标签） */
+  tagPool: string[];
   onChange: (v: unknown) => void;
 }) {
   switch (field.control) {
+    case "select": {
+      const current = typeof value === "string" && value !== "" ? value : (field.defaultValue ?? "");
+      return (
+        <Select
+          className="w-full"
+          value={current}
+          onChange={(v) => onChange(v)}
+          options={(field.options ?? []).map((opt) => ({
+            value: opt,
+            label: field.optionsLabels?.[opt] ?? opt,
+          }))}
+        />
+      );
+    }
+    case "tags":
+      return (
+        <TagsEditor
+          values={Array.isArray(value) ? (value as string[]) : []}
+          onChange={onChange}
+          placeholder="标签（回车添加，如：复仇线）"
+          suggestions={tagPool}
+          quickTags={tagPool}
+        />
+      );
     case "textarea":
       return (
         <Input.TextArea
