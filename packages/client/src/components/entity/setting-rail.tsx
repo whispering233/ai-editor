@@ -2,7 +2,8 @@
 // （原整页树视图 `SettingTreeView` 收敛为栏，壳 = pages/SettingWorkbench）。
 // `#/setting` / `#/setting/:id` 共用一个壳，**选中唯一来源 = URL**：本栏不再持 `selectedId`，
 // 选中由 prop `nodeId` 驱动、切换经 `onSelect`（壳负责未保存守卫与导航）。
-// 顶部 = PanelHeader（工作台子栏页头：标题行 40 + 预留元信息行 24 + 1px 分割线；右端组 = [全部折叠/展开] [+ 新建] [收起/展开右侧详情]）
+// 顶部 = PanelHeader（工作台子栏页头：标题行 40 + 预留元信息行 24 + 1px 分割线；右端组 = [全部折叠/展开] [+ 新建]，
+// 右侧详情收起时再补 [收起/展开右侧详情]）
 // + 常驻控件行（搜索 / 标签 / 排序 / 描述）；
 // 下面是自身滚动的行区。原 `PageHeader` + `PageDivider` 与树外层圆角卡边框已删（栏已是容器）。
 // 数据：全量 setting（limit 取 `MAX_ENTITY_LIST_LIMIT` + 名称排序）+ 全量 belongs_to 层级边 →
@@ -87,8 +88,9 @@ type CreatingState = { parentId: string | null } | null;
  * 设定树栏：header（`PanelHeader`）+ 常驻控件行 + 行区（自身纵向滚动）。
  * 宽度 / 收起态由壳持有（hooks/use-setting-rail）：本栏只消费 `width`；右侧拖拽手柄由壳作为兄弟渲染。
  * 选中唯一来源 = URL（`nodeId`）；本栏不存选中态，切换 / 清选中一律经 `onSelect`（壳负责守卫与导航）。
- * 左栏（本栏）收起 / 展开入口在详情列页头 `leading`；右侧详情收起 / 展开入口在本栏 header 右端组最右端
- * （`detailCollapsed` / `onToggleDetail`，窄屏不传 = 不渲染），见 DESIGN.md `setting-page`「宽度与两档收起」。
+ * 左栏（本栏）收起 / 展开入口在详情列页头 `leading`；右侧详情收起 / 展开入口在标题行最外端：
+ * 两栏都开时在详情页头动作组末尾、详情收起时在本栏 header 右端组末尾（`leading` / `onToggleDetail`，
+ * 窄屏不传 = 不渲染），见 DESIGN.md §Layout「工作台子栏页头」/ `setting-page`「宽度与两档收起」。
  */
 export function SettingRail({
   railRef,
@@ -97,6 +99,7 @@ export function SettingRail({
   onSelect,
   width,
   className,
+  leading,
   detailCollapsed,
   onToggleDetail,
   onMutated,
@@ -113,9 +116,11 @@ export function SettingRail({
   width?: string;
   /** 覆盖类（窄屏 `w-full border-r-0`——`cn` 用 twMerge，同属性后者胜） */
   className?: string;
-  /** 右侧详情当前是否收起（只驱动 header 按钮图标 / 无障碍状态；详情列由壳决定是否渲染） */
+  /** 标题行最左的面板开关（详情列可见时 = 左钮） */
+  leading?: ReactNode;
+  /** 右侧详情当前是否收起（只驱动 header 按钮 / 无障碍状态；详情列由壳决定是否渲染） */
   detailCollapsed?: boolean;
-  /** 切换右侧详情收起态（壳做未保存守卫）；不传 = 不渲染该按钮（窄屏无相邻详情列） */
+  /** 切换右侧详情收起态（壳做未保存守卫）；不传 = 不渲染该按钮（详情展开时右钮在详情页头、窄屏无相邻详情列） */
   onToggleDetail?: () => void;
   /** 写操作成功（改名 / 新建 / 删除 / 移动）后通知宿主刷新外部视图（如已打开的详情页头） */
   onMutated?: () => void;
@@ -1051,11 +1056,13 @@ export function SettingRail({
       className={cn("flex min-h-0 shrink-0 flex-col border-r border-border", className)}
     >
       {/* rail header（`PanelHeader`，`mb-0`：行区 / 控件行紧随分割线）：标题 +
-          [全部折叠/展开] [+ 新建] [详情收起/展开]——详情钮排最右端（紧邻被收起的详情列）；
-          详情按钮只在桌面态（壳传 onToggleDetail）渲染，见 DESIGN.md `setting-page`「宽度与两档收起」 */}
+          [全部折叠/展开] [+ 新建]，详情收起时补 [收起/展开右侧详情]（最右端，紧邻被收起的详情列）；
+          左钮 = 详情列可见时的 `leading`；承载开关时 `px-6`（与详情页头同内距，钮点击前后 x 不变）。 */}
       <PanelHeader
         title="设定"
+        leading={leading}
         className="mb-0"
+        insetClassName={leading !== undefined || onToggleDetail !== undefined ? "px-6" : undefined}
         actions={
           <>
             <Button

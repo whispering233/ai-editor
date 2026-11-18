@@ -236,13 +236,23 @@ export default function Outline({ nodeId }: { nodeId?: string }) {
   const selectedNode =
     outline !== null && nodeId !== undefined ? findNode(outline.children, nodeId) : null;
 
-  // 收起 / 展开入口：详情列页头标题行最左（`PanelHeader` `leading`，同写作页）；窄屏无相邻栏不渲染
+  // 面板开关外端锚定（DESIGN.md §Layout「工作台子栏页头」）：左钮只在最左可见列、右钮只在最右可见列；
+  // 同一页各只渲染一枚。窄屏（无子栏）不渲染。
   const railToggle = isDesktop ? (
     <PanelToggleButton
       side="left"
       collapsed={railCollapsed}
       label="大纲树"
       onToggle={toggleRailCollapse}
+    />
+  ) : undefined;
+  // 左栏收起时右钮隐藏（两栏不会同时全空），左钮改由详情页头承载
+  const detailToggle = isDesktop ? (
+    <PanelToggleButton
+      side="right"
+      collapsed={railLayout.detailCollapsed}
+      label="右侧详情"
+      onToggle={toggleDetailWithGuard}
     />
   ) : undefined;
 
@@ -262,7 +272,8 @@ export default function Outline({ nodeId }: { nodeId?: string }) {
       <section className="flex min-h-0 flex-1 flex-col">
         <PanelHeader
           title="详情"
-          leading={railToggle}
+          leading={railCollapsed ? railToggle : undefined}
+          actions={!railCollapsed ? detailToggle : undefined}
           className="-mx-6"
           insetClassName="px-6"
         />
@@ -285,7 +296,8 @@ export default function Outline({ nodeId }: { nodeId?: string }) {
       <section className="flex min-h-0 flex-1 flex-col">
         <PanelHeader
           title="详情"
-          leading={railToggle}
+          leading={railCollapsed ? railToggle : undefined}
+          actions={!railCollapsed ? detailToggle : undefined}
           className="-mx-6"
           insetClassName="px-6"
         />
@@ -308,7 +320,8 @@ export default function Outline({ nodeId }: { nodeId?: string }) {
       <section className="flex min-h-0 flex-1 flex-col">
         <PanelHeader
           title="详情"
-          leading={railToggle}
+          leading={railCollapsed ? railToggle : undefined}
+          actions={!railCollapsed ? detailToggle : undefined}
           className="-mx-6"
           insetClassName="px-6"
         />
@@ -332,7 +345,8 @@ export default function Outline({ nodeId }: { nodeId?: string }) {
       <section className="flex min-h-0 flex-1 flex-col">
         <PanelHeader
           title="详情"
-          leading={railToggle}
+          leading={railCollapsed ? railToggle : undefined}
+          actions={!railCollapsed ? detailToggle : undefined}
           className="-mx-6"
           insetClassName="px-6"
         />
@@ -366,7 +380,8 @@ export default function Outline({ nodeId }: { nodeId?: string }) {
         node={selectedNode}
         nodeId={nodeId}
         onReload={reload}
-        leading={railToggle}
+        leading={railCollapsed ? railToggle : undefined}
+        headerActions={!railCollapsed ? detailToggle : undefined}
         onDirtyChange={setDetailDirty}
         onNavigate={async (path) => {
           if (await confirmDiscard()) navigate(path);
@@ -400,12 +415,14 @@ export default function Outline({ nodeId }: { nodeId?: string }) {
               ? (railLayout.width ?? OUTLINE_RAIL_DEFAULT_WIDTH_CSS)
               : undefined
           }
+          // 两栏都开时左钮在本 header 的 `leading`（左栏收起时不传：左钮改由详情页头承载）
+          leading={!detailHidden ? railToggle : undefined}
           // 窄屏全宽无邻栏、右侧详情收起时邻栏不在：抹掉 rail 自带的右边线
           //（DESIGN.md §Layout「分栏边线单所有权」）
           className={isDesktop && !detailHidden ? undefined : "w-full border-r-0"}
-          // 详情收起按钮只在桌面态传给 rail（窄屏无相邻详情列）
+          // 详情收起按钮：详情收起时在本栏 header 右端组末尾（详情展开时在详情页头动作组末尾）
           detailCollapsed={isDesktop ? railLayout.detailCollapsed : undefined}
-          onToggleDetail={isDesktop ? toggleDetailWithGuard : undefined}
+          onToggleDetail={detailHidden ? toggleDetailWithGuard : undefined}
         />
       )}
       {/* 桌面展开态右边界 6px 拖拽手柄；收起态 / 窄屏 / 详情收起（rail 全宽）不渲染 */}
@@ -452,7 +469,8 @@ export default function Outline({ nodeId }: { nodeId?: string }) {
  * 大纲树栏：header（PanelHeader——标题行 40 + 预留元信息行 24 + 1px 分割线；右端组迁自原页面页头）
  * + 行区（自身纵向滚动）。
  * 宽度 / 收起态由壳持有（hooks/use-outline-rail）：本栏只消费 `width`；右侧拖拽手柄由壳作为兄弟渲染。
- * 收起入口不在本栏（在详情列页头），见 DESIGN.md `outline-page`「rail header」。
+ * 面板开关外端锚定（DESIGN.md §Layout「工作台子栏页头」）：左钮走 `leading`（两栏都开时 = 最左可见列）、
+ * 右钮走 `onToggleDetail`（详情收起时 = 最右可见列）；左栏收起时壳不渲染本栏，左钮改由详情页头承载、右钮隐藏。
  */
 function OutlineRail({
   railRef,
@@ -462,6 +480,7 @@ function OutlineRail({
   confirmDiscard,
   width,
   className,
+  leading,
   detailCollapsed,
   onToggleDetail,
 }: {
@@ -479,7 +498,9 @@ function OutlineRail({
   width?: number | string;
   /** 覆盖类（窄屏 `w-full border-r-0`——`cn` 用 twMerge，同属性后者胜） */
   className?: string;
-  /** 右侧详情当前是否收起（只驱动 header 按钮图标 / 无障碍状态；详情列由壳决定是否渲染） */
+  /** 标题行最左的面板开关（两栏都开时 = 左钮） */
+  leading?: ReactNode;
+  /** 右侧详情当前是否收起（只驱动 header 按钮 / 无障碍状态；详情列由壳决定是否渲染） */
   detailCollapsed?: boolean;
   /** 切换右侧详情收起态；不传 = 不渲染该按钮（窄屏无相邻详情列） */
   onToggleDetail?: () => void;
@@ -1338,12 +1359,14 @@ function OutlineRail({
       //（DESIGN.md §Layout「分栏边线单所有权」——手柄不画线，只有面板边线能覆盖全部场景）
       className={cn("flex min-h-0 shrink-0 flex-col border-r border-border", className)}
     >
-      {/* rail header（工作台子栏页头，`px-3`；标题行 40 + 预留元信息行 24 + 1px 分割线）：标题 +
-          原页头右端图标组；**不放 rail 自身的收起钮**（收起 / 展开入口在详情列页头 leading，同写作页）。
+      {/* rail header（工作台子栏页头，承载开关时 `px-6`、否则 `px-3`）：标题 +
+          原页头右端图标组；左钮 = 两栏都开时的 `leading`，详情收起时右端组最右端补右钮。
           图标按钮均带 title / aria-label；行区紧随分割线，所以 `mb-0` 抹掉默认下边距。 */}
       <PanelHeader
         title="大纲"
+        leading={leading}
         className="mb-0"
+        insetClassName={leading !== undefined || onToggleDetail !== undefined ? "px-6" : undefined}
         actions={
           <>
             {/* 一键清空推演标记（DESIGN.md「`推演节点` 徽标」）：仅**有可见标记**时渲染

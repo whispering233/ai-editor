@@ -81,7 +81,8 @@ export function isOutlineDetailDirty(
 }
 
 /** 可嵌入（中栏分栏壳的右列）：节点由壳 `findNode` 派生传入（本组件不自拉大纲）；
- * `leading` = 页头标题行最左的槽（壳注入 rail 收起 / 展开钮）；`onReload` = 保存后由壳收敛整树；
+ * `leading` = 页头标题行最左的槽（壳注入 rail 展开钮）；`headerActions` = 追加到操作组末尾
+ * （壳注入右侧详情收起钮）；`onReload` = 保存后由壳收敛整树；
  * `onDirtyChange` = 未保存状态上报给壳（rail 切换 / 返回条 / 新建导航前确认）；
  * `onNavigate` = 壳的离开守卫（写正文前确认，见下），不给则退回裸 `href` 跳转。
  * 页头常驻、内容区独立滚动（DESIGN.md §Layout「页头常驻」）。 */
@@ -90,6 +91,7 @@ export default function OutlineDetail({
   nodeId,
   onReload,
   leading,
+  headerActions,
   onDirtyChange,
   onNavigate,
 }: {
@@ -97,6 +99,7 @@ export default function OutlineDetail({
   nodeId: string;
   onReload: () => Promise<void>;
   leading?: ReactNode;
+  headerActions?: ReactNode;
   onDirtyChange?: (dirty: boolean) => void;
   onNavigate?: (path: string) => void | Promise<void>;
 }) {
@@ -366,6 +369,7 @@ export default function OutlineDetail({
               aria-label="保存"
               onClick={() => void handleSave()}
             />
+            {headerActions}
           </>
         }
         meta={

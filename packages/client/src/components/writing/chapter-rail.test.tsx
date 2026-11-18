@@ -1,7 +1,8 @@
 // 写作页卷章导航栏 SSR 走查（2026-11）：仓内无 jsdom/@testing-library（既有纪律：不引新依赖），
 // 用 react-dom/server renderToString 直渲染富数据（组件是纯展示的，无 api/store 依赖）。
 // 契约 = docs/ui/DESIGN.md `writing-page`：卷行 N章 / 章行字数（0 不显示）/ 根级章顶层 /
-// 0 章卷 / 选中 aria-current / 折叠箭头；以及否定契约（无结构编辑、无宽度手柄 / 收起按钮）。
+// 0 章卷 / 选中 aria-current / 折叠箭头；以及否定契约（无结构编辑、无宽度手柄 / 收起态状态），
+// 面板开关 = `leading` / `onToggleDetail` 由页面按外端锚定传入。
 import { describe, expect, it } from "vitest";
 import { renderToString } from "react-dom/server";
 import type {
@@ -11,6 +12,7 @@ import type {
 } from "@whispering233/ai-editor-shared";
 import { buildWritingRailRows } from "../../lib/writing";
 import { ChapterRail, type ChapterRailProps } from "./chapter-rail";
+import { PanelToggleButton } from "../ui/panel-toggle-button";
 
 const chapter = (id: string, title: string, textLength?: number): OutlineChapter => ({
   id,
@@ -191,10 +193,30 @@ describe("ChapterRail · 否定契约（rail 不是第二个大纲页）", () =>
     expect(html).not.toContain("draggable");
   });
 
-  it("收起 / 展开入口不在 rail 内（在正文列页头）：无圆钮、无收起按钮", () => {
-    const html = render();
-    expect(html).not.toContain('aria-label="收起卷章导航栏"');
-    expect(html).not.toContain('aria-label="展开卷章导航栏"');
+  it("面板开关走 `leading`：传入即渲染在标题行最左（承载开关时内距 `px-6`）", () => {
+    const html = render({
+      leading: (
+        <PanelToggleButton
+          side="left"
+          collapsed={false}
+          label="卷章导航栏"
+          onToggle={() => {}}
+        />
+      ),
+    });
+    expect(html).toContain('aria-label="收起卷章导航栏"');
+    expect(html).toContain('aria-expanded="true"');
+    // 位置 = 标题行最左（在「卷章」标题之前）
+    expect(html.indexOf('aria-label="收起卷章导航栏"')).toBeLessThan(html.indexOf(">卷章<"));
+    // 承载开关时横向内距 = px-6（与详情页头同内距，钮点击前后 x 不变）
+    expect(html).toContain('<div class="flex flex-col px-6">');
     expect(html).not.toContain("ant-btn-circle");
+  });
+
+  it("不传 leading / 窄屏（全宽覆盖类）：不渲染任何面板开关", () => {
+    for (const html of [render(), render({ className: "w-full border-r-0" })]) {
+      expect(html).not.toContain('aria-label="收起卷章导航栏"');
+      expect(html).not.toContain('aria-label="展开卷章导航栏"');
+    }
   });
 });

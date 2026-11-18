@@ -9,8 +9,9 @@
 // 未保存守卫：详情上报 dirty，切行 / 清选中 / 窄屏返回条 / 收起右侧详情先 `confirm`
 // （浏览器后退仍不拦，见 backlog.md）。
 // 两档收起（DESIGN.md `setting-page`「宽度与两档收起」，均存于 hooks/use-setting-rail）：
-// 左栏收起 = 不渲染 rail（按钮在详情列页头 `leading`）；右侧详情收起 = 详情列整列不渲染、rail 吸收全宽
-// （按钮在 rail header；不改存宽度、不改 URL、点行不自动展开），两栏不会同时收起。
+// 左栏收起 = 不渲染 rail（按钮在详情页头 `leading`）；右侧详情收起 = 详情列整列不渲染、rail 吸收全宽
+// （按钮在 rail header 右端组；不改存宽度、不改 URL、点行不自动展开），两栏不会同时收起。
+// 面板开关外端锚定：左钮只在最左可见列、右钮只在最右可见列（同一页各只渲染一枚）。
 import { useEffect, useState } from "react";
 import type { ReactNode } from "react";
 import { ArrowLeftOutlined } from "@ant-design/icons";
@@ -33,8 +34,9 @@ import { useUiStore } from "../stores/ui";
 /**
  * 设定工作台壳：`id` 与路由一致（undefined = `#/setting` 无选中）。
  * 左列 rail 宽度 / 收起态由 hooks/use-setting-rail 持有（桌面态默认宽度 = SETTING_RAIL_DEFAULT_WIDTH_CSS）；
- * 右列详情页头由 `EntityDetail` 自己渲染，本壳只把「收起 / 展开设定树」按钮作为 `leading` 传下去；
- * 右侧详情的收起 / 展开按钮由本壳传入 rail header（`detailCollapsed` / `onToggleDetail`）。
+ * 右列详情页头由 `EntityDetail` 自己渲染，本壳把面板开关按外端锚定分发：
+ * 左栏收起时「展开设定树」进详情页头 `leading`；右侧详情可见时「收起右侧详情」进详情页头动作组末尾
+ * （详情收起时回到 rail header 右端组末尾）。
  */
 export default function SettingWorkbench({ id }: { id?: string }) {
   const isDesktop = useMediaQuery("(min-width: 1024px)");
@@ -90,13 +92,22 @@ export default function SettingWorkbench({ id }: { id?: string }) {
     });
   }
 
-  // 收起 / 展开入口：详情列页头标题行最左（`PanelHeader` `leading`，同写作页）；窄屏无相邻栏不渲染
+  // 收起 / 展开入口：左钮只在最左可见列、右钮只在最右可见列；同一页各只渲染一枚；窄屏不渲染
   const railToggle = isDesktop ? (
     <PanelToggleButton
       side="left"
       collapsed={railCollapsed}
       label="设定树"
       onToggle={toggleCollapse}
+    />
+  ) : undefined;
+  // 左栏收起时右钮隐藏（两栏不会同时全空），左钮改由详情页头承载
+  const detailToggle = isDesktop ? (
+    <PanelToggleButton
+      side="right"
+      collapsed={layout.detailCollapsed}
+      label="右侧详情"
+      onToggle={toggleDetailWithGuard}
     />
   ) : undefined;
 
@@ -106,7 +117,8 @@ export default function SettingWorkbench({ id }: { id?: string }) {
       <section className="flex min-h-0 flex-1 flex-col">
         <PanelHeader
           title="详情"
-          leading={railToggle}
+          leading={railCollapsed ? railToggle : undefined}
+          actions={!railCollapsed ? detailToggle : undefined}
           className="-mx-6"
           insetClassName="px-6"
         />
@@ -124,7 +136,8 @@ export default function SettingWorkbench({ id }: { id?: string }) {
         key={`setting:${id}`}
         type="setting"
         id={id}
-        leading={railToggle}
+        leading={railCollapsed ? railToggle : undefined}
+        headerActions={!railCollapsed ? detailToggle : undefined}
         compact
         onDirtyChange={setDetailDirty}
         onSaved={() => setTick((t) => t + 1)}
@@ -168,9 +181,11 @@ export default function SettingWorkbench({ id }: { id?: string }) {
           // 无邻栏时抹掉 rail 自带的右边线（DESIGN.md §Layout「分栏边线单所有权」）；
           // 右侧详情收起时邻栏不在，同窄屏
           className={isDesktop && !detailHidden ? undefined : "w-full border-r-0"}
-          // 详情收起按钮只在桌面态传给 rail（窄屏无相邻详情列）
+          // 两栏都开时左钮在本 header 的 `leading`；详情收起时右钮回到本 header 右端组末尾
+          leading={!detailHidden ? railToggle : undefined}
+          // 详情收起按钮：详情收起时传；详情展开时在详情页头动作组末尾（窄屏不传）
           detailCollapsed={isDesktop ? layout.detailCollapsed : undefined}
-          onToggleDetail={isDesktop ? toggleDetailWithGuard : undefined}
+          onToggleDetail={detailHidden ? toggleDetailWithGuard : undefined}
         />
       )}
       {/* 桌面展开态右边界 6px 拖拽手柄；收起态 / 窄屏 / 详情收起（rail 全宽）不渲染 */}

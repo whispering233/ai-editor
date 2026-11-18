@@ -247,14 +247,17 @@ export default function EntityDetail({
   type,
   id,
   leading,
+  headerActions,
   compact,
   onSaved,
   onDirtyChange,
 }: {
   type: string;
   id: string;
-  /** 标题行前置元素（`PageHeader` / `PanelHeader` 的 `leading`；设定工作台放「设定树」收起按钮） */
+  /** 标题行前置元素（`PageHeader` / `PanelHeader` 的 `leading`；设定工作台在左栏收起时放「设定树」展开钮） */
   leading?: ReactNode;
+  /** 追加到页头操作组末尾的元素（设定工作台放右侧详情收起钮）；compact 与非 compact 两条路径都接 */
+  headerActions?: ReactNode;
   /** 工作台子栏形态（仅设定页传）：页头换 `PanelHeader`（图标操作 + 单行元信息），
    * 分割线 `-mx-6` 穿透详情列内边距；不传 = 普通中栏页（`PageHeader` 文字按钮） */
   compact?: boolean;
@@ -565,6 +568,7 @@ export default function EntityDetail({
                 aria-label="移入回收站"
                 onClick={() => void handleDelete()}
               />
+              {headerActions}
             </>
           }
           meta={
@@ -602,6 +606,7 @@ export default function EntityDetail({
               <Button danger disabled={!detail} onClick={() => void handleDelete()}>
                 移入回收站
               </Button>
+              {headerActions}
             </>
           }
           description={

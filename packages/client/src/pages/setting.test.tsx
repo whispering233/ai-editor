@@ -21,13 +21,13 @@ vi.mock("../hooks/use-media-query", () => ({
 }));
 
 /** 设定树 rail 的 mock 状态（测试可改 `detailCollapsed` 再渲染） */
-const railHook = vi.hoisted(() => ({ detailCollapsed: false }));
+const railHook = vi.hoisted(() => ({ detailCollapsed: false, collapsed: false }));
 vi.mock("../hooks/use-setting-rail", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../hooks/use-setting-rail")>();
   return {
     ...actual,
     useSettingRail: () => ({
-      layout: { width: null, collapsed: false, detailCollapsed: railHook.detailCollapsed },
+      layout: { width: null, collapsed: railHook.collapsed, detailCollapsed: railHook.detailCollapsed },
       resizing: false,
       railRef: null,
       startResize: () => {},
@@ -47,6 +47,7 @@ function render(id?: string): string {
 beforeEach(() => {
   media.desktop = true;
   railHook.detailCollapsed = false;
+  railHook.collapsed = false;
   vi.stubGlobal("window", {
     localStorage: { getItem: () => null, setItem: () => {} },
   });
@@ -55,6 +56,7 @@ beforeEach(() => {
 afterEach(() => {
   media.desktop = true;
   railHook.detailCollapsed = false;
+  railHook.collapsed = false;
   vi.unstubAllGlobals();
 });
 
@@ -66,15 +68,17 @@ describe("设定页：桌面分栏", () => {
     expect(html).toContain('aria-label="全部折叠"');
     expect(html).toContain("anticon-minus-square");
     expect(html).toContain('aria-label="新建设定"');
-    // 右端组顺序 = [全部折叠/展开][+ 新建][收起右侧详情]（详情钮最右端，紧邻被收起的详情列）
+    // rail 右端组顺序 = [全部折叠/展开][+ 新建]（右钮在两栏都开时属详情页头）
     const collapseIdx = html.indexOf('aria-label="全部折叠"');
     const createIdx = html.indexOf('aria-label="新建设定"');
-    const detailIdx = html.indexOf('aria-label="收起右侧详情"');
     expect(collapseIdx).toBeGreaterThan(-1);
     expect(collapseIdx).toBeLessThan(createIdx);
-    expect(createIdx).toBeLessThan(detailIdx);
-    // 详情列页头有「收起设定树」leading，窄屏返回条不渲染
-    expect(html).toContain('aria-label="收起设定树"');
+    // 外端锚定：左钮在 rail 页头（「设定」之前），右钮在详情页头最右端
+    expect(html.indexOf('aria-label="收起设定树"')).toBeLessThan(html.indexOf(">设定<"));
+    expect(html).toContain('aria-label="收起右侧详情"');
+    expect(html.indexOf('aria-label="收起右侧详情"')).toBeGreaterThan(
+      html.indexOf(">详情<"),
+    );
     expect(html).not.toContain('href="#/setting"');
     // 详情列空态 = PanelHeader（标题「详情」，-mx-6 穿透列内边距）
     expect(html).toContain(">详情<");
@@ -136,10 +140,13 @@ describe("设定页：右侧详情收起（卡 4）", () => {
     // rail 仍在并吸收全宽（不写存宽度）
     expect(html).toContain('aria-label="设定树"');
     expect(html).toContain("w-full border-r-0");
-    // header 右端组最左 = 详情展开按钮（收起态 aria-expanded=false）
+    // header 右端组最右端 = 详情展开按钮（详情收起 = rail 是最右可见列；收起态 aria-expanded=false）
     expect(html).toContain('aria-label="展开右侧详情"');
     expect(html).toContain('aria-expanded="false"');
     expect(html).not.toContain("收起右侧详情");
+    expect(html.indexOf('aria-label="展开右侧详情"')).toBeGreaterThan(
+      html.indexOf(">设定<"),
+    );
   });
 
   it("同一 URL 切回展开态：详情重新出现（URL 选中保留）", () => {
@@ -149,6 +156,22 @@ describe("设定页：右侧详情收起（卡 4）", () => {
     expect(html).toContain('aria-label="收起右侧详情"');
     expect(html).toContain('aria-expanded="true"');
     expect(html).not.toContain("展开右侧详情");
+    // 右钮在详情页头动作组末尾（保存 / 移入回收站之后）
+    expect(html.indexOf('aria-label="收起右侧详情"')).toBeGreaterThan(
+      html.indexOf('aria-label="移入回收站"'),
+    );
+  });
+
+  it("左栏收起态：rail 不渲染、左钮在详情页头 leading、右钮隐藏", () => {
+    railHook.collapsed = true;
+    const html = render("s-1");
+    expect(html).not.toContain('aria-label="设定树"');
+    expect(html).toContain('aria-label="展开设定树"');
+    expect(html).not.toContain('aria-label="收起设定树"');
+    expect(html).not.toContain('aria-label="收起右侧详情"');
+    expect(html).not.toContain('aria-label="展开右侧详情"');
+    // 左钮在详情页头标题行最左（在标题之前）
+    expect(html.indexOf('aria-label="展开设定树"')).toBeLessThan(html.indexOf(">…<"));
   });
 
   it("窄屏：不渲染详情收起 / 展开按钮（忽略持久化的收起态）", () => {

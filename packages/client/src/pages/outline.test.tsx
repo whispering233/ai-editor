@@ -311,15 +311,19 @@ describe("大纲页 · 桌面分栏壳", () => {
     expect(row).toContain('aria-label="移入回收站"');
   });
 
-  it("无 id（#/outline）：详情列页头「详情」+ 引导文案 + 页头最左的收起按钮", () => {
+  it("无 id（#/outline）：详情列页头「详情」+ 引导文案；左钮在 rail 页头、右钮在详情页头", () => {
     const html = render();
     expect(html).toContain(">详情<");
     expect(html).toContain("从左侧选择一个卷、章或场查看详情");
     expect(html).toContain('aria-label="收起大纲树"');
     expect(html).toContain('aria-expanded="true"');
     expect(html).not.toContain('aria-label="展开大纲树"');
-    // 位置 = 详情页头标题行最左（在「详情」标题之前）
-    expect(html.indexOf('aria-label="收起大纲树"')).toBeLessThan(html.indexOf(">详情<"));
+    // 外端锚定：两栏都开 ⇒ 左钮在 rail 页头标题行最左（「大纲」之前），右钮在详情页头最右端
+    expect(html.indexOf('aria-label="收起大纲树"')).toBeLessThan(html.indexOf(">大纲<"));
+    expect(html).toContain('aria-label="收起右侧详情"');
+    expect(html.indexOf('aria-label="收起右侧详情"')).toBeGreaterThan(
+      html.indexOf(">详情<"),
+    );
   });
 
   it("有 id（#/outline/:id）：同一壳里渲染节点详情（标题 / 保存 / 写正文），rail 照旧", () => {
@@ -329,8 +333,11 @@ describe("大纲页 · 桌面分栏壳", () => {
     expect(html).toContain('href="#/writing/ch-1"');
     expect(html).toContain("ant-btn-primary"); // 保存 = 唯一主操作（图标按钮）
     expect(html).not.toContain("从左侧选择一个卷、章或场查看详情");
-    // 详情页头也带收起按钮（四种详情形态同款）
-    expect(html).toContain('aria-label="收起大纲树"');
+    // 详情页头也带右钮（四种详情形态同款），排在动作组末尾（保存之后）
+    expect(html).toContain('aria-label="收起右侧详情"');
+    expect(html.indexOf('aria-label="收起右侧详情"')).toBeGreaterThan(
+      html.indexOf('aria-label="保存"'),
+    );
   });
 
   it("无项目 / 加载中 / 加载失败 / 空树 / 坏 id：详情列都有页头与引导（不先挂表单）", () => {
@@ -348,13 +355,17 @@ describe("大纲页 · 桌面分栏壳", () => {
     // 390px 窄屏：容器换行 + 两个出口不竖排（DESIGN.md `outline-page` 坏 id 空态）
     expect(missing).toContain("flex flex-wrap justify-center");
     expect(missing).toContain("whitespace-nowrap");
-    // 每种形态都保留页头与收起钮
+    // 每种形态都保留页头，且右钮都在详情页头最右端（左钮在 rail 页头）
     for (const html of [
       render({ config: null }),
       render({ outline: EMPTY_OUTLINE }),
       render({ nodeId: "ghost" }),
     ]) {
       expect(html).toContain(">详情<");
+      expect(html).toContain('aria-label="收起右侧详情"');
+      expect(html.indexOf('aria-label="收起右侧详情"')).toBeGreaterThan(
+        html.indexOf(">详情<"),
+      );
       expect(html).toContain('aria-label="收起大纲树"');
     }
   });
@@ -456,7 +467,7 @@ describe("大纲页 · rail 宽度与收起（持久化）", () => {
 // SSR 不派发点击事件：收起态 / 展开态由 localStorage 预置走查（同 setting / writing 惯例），
 // dirty 守卫（`toggleDetailWithGuard`）走浏览器核对。
 describe("大纲页 · 右侧详情收起", () => {
-  it("展开态：rail header 右端组最右端 = 「收起右侧详情」（右箭头 + aria-expanded），详情列照常", () => {
+  it("两栏都开：右钮在详情页头动作组末尾（左钮在 rail 页头，各在最外端）", () => {
     stubRailStorage({ width: 333, collapsed: false, detailCollapsed: false });
     const html = render({ nodeId: "ch-1" });
     expect(html).toContain('aria-label="收起右侧详情"');
@@ -464,11 +475,11 @@ describe("大纲页 · 右侧详情收起", () => {
     expect(html).not.toContain('aria-label="展开右侧详情"');
     // 图标 = 静态面板图形（右侧详情栏 ⇒ 竖线靠右）
     expect(html).toContain('d="M15 4 V20"');
-    // 位置 = [全部折叠][+ 新建卷] 之后、详情列页头之前
+    // 位置 = 详情页头动作组末尾（「保存」之后），不在 rail 页头
     expect(html.indexOf('aria-label="收起右侧详情"')).toBeGreaterThan(
-      html.indexOf('aria-label="新建卷"'),
+      html.indexOf('aria-label="保存"'),
     );
-    expect(html.indexOf('aria-label="收起右侧详情"')).toBeLessThan(
+    expect(html.indexOf('aria-label="收起右侧详情"')).toBeGreaterThan(
       html.indexOf("flex min-h-0 min-w-0 flex-1 flex-col p-6"),
     );
     // 正常两栏：rail 像素宽 + 手柄 + 详情列
@@ -515,13 +526,17 @@ describe("大纲页 · 右侧详情收起", () => {
     expect(html).toContain('aria-label="展开右侧详情"');
   });
 
-  it("rail 自身收起时详情列保留（两栏不会同时收起）：无详情钮", () => {
+  it("rail 自身收起时详情列保留（两栏不会同时收起）：左钮移到详情页头 leading、右钮隐藏", () => {
     stubRailStorage({ width: 333, collapsed: true, detailCollapsed: true });
     const html = render({ nodeId: "ch-1" });
     expect(html).toContain('aria-label="展开大纲树"');
     expect(html).not.toContain('aria-label="展开右侧详情"');
     expect(html).not.toContain('aria-label="收起右侧详情"');
     expect(html).toContain("min-w-0 flex-1 flex-col p-6");
+    // 左钮在详情页头标题行最左（在「雪夜出走」标题之前；rail 已不渲染）
+    expect(html.indexOf('aria-label="展开大纲树"')).toBeLessThan(
+      html.indexOf(">雪夜出走<"),
+    );
   });
 
   it("窄屏：不渲染右侧详情钮，存储的 detailCollapsed 不生效", () => {

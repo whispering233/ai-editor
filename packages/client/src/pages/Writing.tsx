@@ -106,6 +106,31 @@ export default function Writing({ chapterId }: { chapterId?: string }) {
   // rail 收起时正文列必须留着（两档收起各靠对侧那一栏的按钮，rail 不在时正文列保留）；
   // 专注模式无 rail / 页头，正文列不被该偏好隐藏。
   const detailHidden = isDesktop && !focusMode && !railCollapsed && railLayout.detailCollapsed;
+
+  // 面板开关外端锚定（DESIGN.md §Layout「工作台子栏页头」）：左钮只在最左可见列、右钮只在最右可见列；
+  // 同一页各只渲染一枚。窄屏（无子栏）与专注模式（页头不渲染）都不渲染。
+  // 图标 = 静态面板图形（`PanelToggleButton`，不随收起态换向）；状态由它统一生成的
+  // `aria-label` / `title` / `aria-expanded` 表达。
+  const railToggle =
+    isDesktop && !focusMode ? (
+      <PanelToggleButton
+        side="left"
+        collapsed={railCollapsed}
+        label="卷章导航栏"
+        onToggle={toggleRailCollapse}
+      />
+    ) : undefined;
+  // 左栏收起时右钮隐藏（两栏不会同时全空），左钮改由正文页头承载
+  const detailToggle =
+    isDesktop && !focusMode ? (
+      <PanelToggleButton
+        side="right"
+        collapsed={railLayout.detailCollapsed}
+        label="右侧详情"
+        onToggle={toggleRailDetail}
+      />
+    ) : undefined;
+
   const rail =
     !focusMode && (isDesktop || chapterId === undefined) && !railCollapsed ? (
       <ChapterRail
@@ -123,26 +148,16 @@ export default function Writing({ chapterId }: { chapterId?: string }) {
         // 无邻栏时抹掉 rail 自带的右边线（DESIGN.md §Layout「分栏边线单所有权」）；
         // 右侧详情收起时邻栏不在，同窄屏
         className={isDesktop && !detailHidden ? undefined : "w-full border-r-0"}
-        // 详情收起按钮只在桌面态传给 rail（窄屏无相邻正文列）
+        // 两栏都开时左钮在本 header 的 `leading`；详情收起时左钮隐藏、右钮回到本栏右端组（本栏成为唯一可见列）
+        leading={!detailHidden ? railToggle : undefined}
+        // 详情收起时右钮回到本 header 右端组末尾（详情展开时在正文页头动作组末尾）
         detailCollapsed={isDesktop ? railLayout.detailCollapsed : undefined}
-        onToggleDetail={isDesktop ? toggleRailDetail : undefined}
+        onToggleDetail={detailHidden ? toggleRailDetail : undefined}
       />
     ) : null;
 
-  // 卷章导航栏收起 / 展开入口：正文列页头标题行最左（`PanelHeader` `leading`；DESIGN.md `writing-page`
-  // 「宽度与收起」）。同一枚按钮进四种正文形态；窄屏（无子栏）与专注模式（页头不渲染）都不渲染。
-  // 图标 = 静态面板图形（`PanelToggleButton`，不随收起态换向）；状态由它统一生成的
-  // `aria-label` / `title` / `aria-expanded` 表达。
-  const railToggle =
-    isDesktop && !focusMode ? (
-      <PanelToggleButton
-        side="left"
-        collapsed={railCollapsed}
-        label="卷章导航栏"
-        onToggle={toggleRailCollapse}
-      />
-    ) : undefined;
-
+  // 卷章导航栏收起 / 展开入口：左栏收起时在正文列页头标题行最左（`PanelHeader` `leading`）。
+  // 两栏都开时它在 rail 页头（见上）；同一页只渲染一枚左钮。
   const outlineFailureBanner = (
     <div className={cn(errorBannerClass, "flex shrink-0 items-center gap-3")}>
       <span className="min-w-0 flex-1">大纲加载失败，章节目录暂不可用</span>
@@ -173,7 +188,8 @@ export default function Writing({ chapterId }: { chapterId?: string }) {
         <section className="flex min-h-0 flex-1 flex-col">
           <PanelHeader
             title="写作"
-            leading={railToggle}
+            leading={railCollapsed ? railToggle : undefined}
+            actions={!railCollapsed ? detailToggle : undefined}
             className="mb-4 -mx-6"
             insetClassName="px-6"
           />
@@ -192,7 +208,8 @@ export default function Writing({ chapterId }: { chapterId?: string }) {
         <section className="flex min-h-0 flex-1 flex-col">
           <PanelHeader
             title="写作"
-            leading={railToggle}
+            leading={railCollapsed ? railToggle : undefined}
+            actions={!railCollapsed ? detailToggle : undefined}
             className="mb-4 -mx-6"
             insetClassName="px-6"
           />
@@ -210,7 +227,8 @@ export default function Writing({ chapterId }: { chapterId?: string }) {
             outline={outline}
             chapterId={chapterId}
             basePath="/writing"
-            headerLeading={railToggle}
+            headerLeading={railCollapsed ? railToggle : undefined}
+            headerActions={!railCollapsed ? detailToggle : undefined}
             onSaved={({ charCount, updatedAt }) =>
               patchChapterMetadata(chapterId, { textLength: charCount, documentUpdatedAt: updatedAt })
             }
@@ -223,7 +241,8 @@ export default function Writing({ chapterId }: { chapterId?: string }) {
       <section className="flex min-h-0 flex-1 flex-col">
         <PanelHeader
           title="写作"
-          leading={railToggle}
+          leading={railCollapsed ? railToggle : undefined}
+          actions={!railCollapsed ? detailToggle : undefined}
           className="mb-4 -mx-6"
           insetClassName="px-6"
         />

@@ -140,7 +140,7 @@ describe("写作页 · 桌面（rail + 正文列）", () => {
     expect(html).toContain("第1卷");
     expect(html).toContain("第1章");
     expect(html).toContain("2章");
-    // 展开态 = 右边界 6px 手柄 + 页头标题行最左的收起按钮（DESIGN.md `writing-page`「宽度与收起」）
+    // 展开态 = 右边界 6px 手柄 + rail 页头标题行最左的收起按钮（外端锚定：两枚钮各在最外端）
     expect(html).toContain('aria-label="调整卷章导航栏宽度"');
     expect(html).toContain('role="separator"');
     expect(html).toContain('aria-label="收起卷章导航栏"');
@@ -150,9 +150,9 @@ describe("写作页 · 桌面（rail + 正文列）", () => {
     expect(html).toContain('d="M9 4 V20"');
     expect(html).not.toContain("ant-btn-circle");
     expect(html).not.toContain("anticon-double-left");
-    // 位置 = 标题行最左（在「写作」标题之前）
+    // 两栏都开：左钮 = 最左可见列（rail）页头标题行最左，在「卷章」标题之前
     expect(html.indexOf('aria-label="收起卷章导航栏"')).toBeLessThan(
-      html.indexOf(">写作<"),
+      html.indexOf(">卷章<"),
     );
   });
 
@@ -360,7 +360,7 @@ describe("写作页 · 右侧详情收起（设计：`writing-page`「宽度与�
     });
   }
 
-  it("展开态：rail header 右端组 = 「收起右侧详情」（右箭头 + aria-expanded），正文列照常", () => {
+  it("两栏都开：右钮在正文页头动作组末尾（左钮在 rail 页头、右钮在正文页头，各在最外端）", () => {
     stubRailStorage({ width: 333, collapsed: false, detailCollapsed: false });
     const html = render({ chapterId: "ch-1" });
     expect(html).toContain('aria-label="收起右侧详情"');
@@ -369,12 +369,12 @@ describe("写作页 · 右侧详情收起（设计：`writing-page`「宽度与�
     // 图标 = 静态面板图形（右侧详情栏 ⇒ 竖线靠右；不是圆钮 / 双箭头）
     expect(html).toContain('d="M15 4 V20"');
     expect(html).not.toContain("ant-btn-circle");
-    // 位置 = rail header（在正文列页头「收起卷章导航栏」之前），且排在 rail 标题「卷章」之后
-    expect(html.indexOf('aria-label="收起右侧详情"')).toBeLessThan(
-      html.indexOf('aria-label="收起卷章导航栏"'),
+    // 位置 = 正文页头动作组末尾（上一章 / 下一章 / 导入 / 导出之后），不在 rail 页头
+    expect(html.indexOf('aria-label="收起右侧详情"')).toBeGreaterThan(
+      html.indexOf('aria-label="导出"'),
     );
     expect(html.indexOf('aria-label="收起右侧详情"')).toBeGreaterThan(
-      html.indexOf(">卷章<"),
+      html.indexOf("flex min-h-0 min-w-0 flex-1 flex-col p-6"),
     );
     // 正常两栏：rail 像素宽 + 手柄 + 正文列
     expect(html).toContain("width:333px");
@@ -401,6 +401,13 @@ describe("写作页 · 右侧详情收起（设计：`writing-page`「宽度与�
     expect(html).not.toContain(">写作<");
     expect(html).not.toContain('aria-label="上一章"');
     expect(html).toContain('aria-current="page"');
+    // 右钮回到 rail 页头右端组（详情收起 = rail 是最右可见列）：标题之后、行区之前
+    expect(html.indexOf('aria-label="展开右侧详情"')).toBeGreaterThan(
+      html.indexOf(">卷章<"),
+    );
+    expect(html.indexOf('aria-label="展开右侧详情"')).toBeLessThan(
+      html.indexOf('data-chapter-id="ch-1"'),
+    );
   });
 
   it("无 id 时收起：不渲染正文列空态提示（只留 rail 全宽）", () => {
@@ -413,13 +420,17 @@ describe("写作页 · 右侧详情收起（设计：`writing-page`「宽度与�
     expect(html).toContain("w-full border-r-0");
   });
 
-  it("rail 自身收起时详情列保留（两栏不会同时收起）：无详情钮、正文列照常", () => {
+  it("rail 自身收起时详情列保留（两栏不会同时收起）：左钮移到正文页头 leading、右钮隐藏", () => {
     stubRailStorage({ width: 333, collapsed: true, detailCollapsed: true });
     const html = render({ chapterId: "ch-1" });
     expect(html).toContain('aria-label="展开卷章导航栏"');
     expect(html).not.toContain('aria-label="展开右侧详情"');
     expect(html).not.toContain('aria-label="收起右侧详情"');
     expect(html).toContain('aria-label="上一章"');
+    // 左钮在正文页头标题行最左（在「雪夜出走」标题之前）
+    expect(html.indexOf('aria-label="展开卷章导航栏"')).toBeLessThan(
+      html.indexOf(">雪夜出走<"),
+    );
   });
 
   it("专注模式：存储的 detailCollapsed 不生效，正文独占", () => {

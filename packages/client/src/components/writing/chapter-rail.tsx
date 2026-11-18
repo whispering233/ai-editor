@@ -3,13 +3,13 @@
 // **纯 presenter**：行数据由页面经 `lib/writing.ts` 派生，折叠 state 也由页面持有；本组件不发请求、
 // 不做结构编辑（无新建 / 改名 / 删除 / 拖拽 / 右键菜单——结构编辑唯一入口仍是大纲树）。
 // 宽度 / 收起态由页面持有（hooks/use-writing-rail）：本组件只消费 width；右侧拖拽手柄由页面作为
-// 兄弟渲染（不塞进 rail 宽度内），左栏收起 / 展开入口在正文列页头（`PanelHeader` `leading`）。
-// 本栏 header 只放「右侧详情收起 / 展开」（`detailCollapsed` / `onToggleDetail`，页面只在桌面且 rail
-// 未收起时传；不传 = 不渲染），见 DESIGN.md `writing-page`「宽度与收起」。
+// 兄弟渲染（不塞进 rail 宽度内）。面板开关外端锚定（DESIGN.md §Layout「工作台子栏页头」）：
+// 左钮走 `leading`（详情列可见时 = 最左可见列）、右钮走 `onToggleDetail`（详情收起时 = 最右可见列）；
+// 左栏收起时页面不渲染本栏，左钮改由正文列页头承载、右钮隐藏。
 //
 // 行几何与大纲树同密度：32px 行高、24px 折叠箭头盒、编号徽标 `min-w-14`（对齐口径见 DESIGN.md
 // §大纲页「缩进列对齐」）；章行是 `<a href="#/writing/:id">`，点击直接进正文，不渲染「写正文」按钮。
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, type ReactNode } from "react";
 import { Button } from "antd";
 import { RightOutlined } from "@ant-design/icons";
 import { formatTextLength } from "../../lib/manuscript";
@@ -38,9 +38,11 @@ export interface ChapterRailProps {
   className?: string;
   /** 展开态宽度（px）；不传 = 不设内联宽（窄屏 / 右侧详情收起时全宽走 className） */
   width?: number;
-  /** 右侧详情当前是否收起（只驱动 header 按钮图标 / 无障碍状态；正文列由页面决定是否渲染） */
+  /** 标题行最左的面板开关（详情列可见时 = 左钮；两页同一枚，见页面分发） */
+  leading?: ReactNode;
+  /** 右侧详情当前是否收起（只驱动 header 按钮 / 无障碍状态；正文列由页面决定是否渲染） */
   detailCollapsed?: boolean;
-  /** 切换右侧详情收起态；不传 = 不渲染该按钮（窄屏无相邻正文列） */
+  /** 切换右侧详情收起态；不传 = 不渲染该按钮（详情展开时右钮在正文页头、窄屏无相邻正文列） */
   onToggleDetail?: () => void;
 }
 
@@ -54,6 +56,7 @@ export function ChapterRail({
   onRetry,
   className,
   width,
+  leading,
   detailCollapsed,
   onToggleDetail,
 }: ChapterRailProps) {
@@ -76,13 +79,15 @@ export function ChapterRail({
       //（DESIGN.md §Layout「分栏边线单所有权」——手柄不画线，只有面板边线能覆盖抽屉 / 窄屏 / 收起）
       className={cn("flex shrink-0 flex-col border-r border-border", className)}
     >
-      {/* 子栏页头（40 + 24 + 分割线；左栏收起 / 展开入口在正文列页头，不在本栏）。
-          `mb-0`：行区紧随分割线（DESIGN.md §Layout「工作台子栏页头」内容起点口径）；
-          横向内距用默认 `px-3`（加在两行包装上，分割线仍全幅）。
-          右端组 = 仅「收起 / 展开右侧详情」（最右端，紧邻被收起的正文列）。 */}
+      {/* 子栏页头（40 + 24 + 分割线）。`mb-0`：行区紧随分割线（DESIGN.md §Layout
+          「工作台子栏页头」内容起点口径）；承载面板开关时横向内距用 `px-6`（加在两行包装上，
+          分割线仍全幅），无开关时保持默认 `px-3`。
+          左钮 = 详情列可见时的 `leading`；右钮 = 详情收起时的右端组（最右端，紧邻被收起的正文列）。 */}
       <PanelHeader
         title="卷章"
+        leading={leading}
         className="mb-0"
+        insetClassName={leading !== undefined || onToggleDetail !== undefined ? "px-6" : undefined}
         actions={
           onToggleDetail === undefined ? undefined : (
             <PanelToggleButton

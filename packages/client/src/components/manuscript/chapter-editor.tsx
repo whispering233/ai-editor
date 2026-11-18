@@ -98,11 +98,20 @@ export interface ChapterEditorProps {
   basePath: "/writing";
   /** 保存成功（自动 / 手动 / 409 覆盖）后回调：写作页据此不可变补丁 store 的章统计（不重拉大纲） */
   onSaved?: (info: { charCount: number; updatedAt: string }) => void;
-  /** 页头标题行最左的前置元素（写作页卷章栏的收起 / 展开按钮），透传给 `PanelHeader` 的 `leading` */
+  /** 页头标题行最左的前置元素（左栏收起时 = 卷章导航栏展开钮），透传给 `PanelHeader` 的 `leading` */
   headerLeading?: ReactNode;
+  /** 追加到页头操作组末尾的元素（右栏可见时 = 右侧详情收起钮），透传给 `PanelHeader` 的 `actions` */
+  headerActions?: ReactNode;
 }
 
-export function ChapterEditor({ outline, chapterId, basePath, onSaved, headerLeading }: ChapterEditorProps) {
+export function ChapterEditor({
+  outline,
+  chapterId,
+  basePath,
+  onSaved,
+  headerLeading,
+  headerActions,
+}: ChapterEditorProps) {
   // 正文：content 为 null = 尚未取到（加载中 / 加载失败）；loadError 非 null = 加载失败（码 + 文案）
   const [content, setContent] = useState<string | null>(null);
   const [loadError, setLoadError] = useState<LoadFailure | null>(null);
@@ -486,6 +495,7 @@ export function ChapterEditor({ outline, chapterId, basePath, onSaved, headerLea
                   aria-label="导出"
                 />
               </Dropdown>
+              {headerActions}
             </>
           }
           meta={statusText}
