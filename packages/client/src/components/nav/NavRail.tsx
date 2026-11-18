@@ -32,6 +32,7 @@ import { resolveWorkspaceKind } from "@whispering233/ai-editor-shared";
 import { AppMark } from "../brand/app-mark";
 import { NAV_RAIL_BY_KIND, TRASH_ITEM } from "./nav-items";
 import { ApiError, CLIENT_NETWORK_ERROR, createProjectBackup } from "../../lib/api";
+import { cn } from "../../lib/utils";
 import { cloudBadgeTone, useCloudStore } from "../../stores/cloud";
 import type { Route } from "../../hooks/use-route";
 import { navigate, useHashRoute } from "../../hooks/use-route";
@@ -50,9 +51,12 @@ function navKey(route: Route): string | null {
 
 export function NavRail({
   width,
+  reserveShellToggle = false,
 }: {
   /** 桌面态像素宽度（flex-basis 覆盖默认）；undefined = 小屏默认百分比布局 */
   width?: number;
+  /** 顶行左端让出视口顶带左纽的 48px 槽位（桌面态 = true；小屏无顶带开关） */
+  reserveShellToggle?: boolean;
 }) {
   const { theme: mode, toggleTheme } = useTheme();
   const config = useProjectStore((s) => s.config);
@@ -113,8 +117,14 @@ export function NavRail({
           : { flex: "1 1 10%" }
       }
     >
-      {/* 顶行：书架入口（点击回书架主页）；整栏收起/展开已归 `main-toolbar` 左端（2026-11） */}
-      <div className="flex h-12 shrink-0 items-center gap-1 border-b border-border px-2">
+      {/* 顶行：书架入口（点击回书架主页）；整栏左纽锚定视口顶带左上角（`ShellPanelToggles`，
+          坐标不随栏宽 / 收起态位移），故桌面上本行左端让出 48px 槽位——导航区起点不随收起态跳动 */}
+      <div
+        className={cn(
+          "flex h-12 shrink-0 items-center gap-1 border-b border-border pr-2",
+          reserveShellToggle ? "pl-12" : "pl-2",
+        )}
+      >
         <a
           href="#/"
           title="回到书架主页"

@@ -5,8 +5,8 @@
 // 约束（改几何/取色前先读该条目）：
 // - **色一律 `currentColor`**、`fill="none"`：色随 `{colors.primary}`，文件内不得出现任何字面色值。
 // - **无尺寸 / 色值 API**：24 viewBox + 固定 16px 显示（约 1.8 stroke），`className` 只做上下文附加类合并。
-// - **只服务面板开关**：main-toolbar 两端 + 写作 / 大纲 / 设定三页子栏（经 `PanelToggleButton`）；
-//   其余图标仍 `@ant-design/icons`，不得用于树行折叠 / accordion / 章节导航。
+// - **只服务面板开关**：视口顶带两角的整栏开关（`ShellPanelToggles`）+ 写作 / 大纲 / 设定三页子栏
+//   （经 `PanelToggleButton`）；其余图标仍 `@ant-design/icons`，不得用于树行折叠 / accordion / 章节导航。
 import { cn } from "../../lib/utils";
 
 export interface PanelToggleIconProps {
@@ -16,7 +16,7 @@ export interface PanelToggleIconProps {
   className?: string;
 }
 
-/** 整栏收起/展开图标（静态面板图形）：main-toolbar 左端 `side="left"`、右端 `side="right"` */
+/** 整栏收起/展开图标（静态面板图形）：顶带左角 `side="left"`、右角 `side="right"` */
 export function PanelToggleIcon({ side, className }: PanelToggleIconProps) {
   return (
     <svg

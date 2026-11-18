@@ -1,12 +1,14 @@
 // 应用外壳（§2）：三栏装配——左栏 Sidebar + 中栏 MainPanel + 右栏 ChatPanel
 // F7 修订（2026-08 用户反馈）：桌面态（≥1024px）三栏宽度可拖拽（像素）+ 左/右栏可收起/展开，
 // 宽度与收起态 localStorage 持久化（hooks/use-panels，同哲学——纯展示层不进数据文件）；
-// 2026-11 修订：**收起 = 0px**（不渲染该栏、无窄条、无占位）；整栏的收起/展开入口全部在 `main-toolbar` 两端
-// （两枚静态 `PanelToggleIcon`，状态经 `panelToggles` 下发），栏内不再有收起按钮。
+// 2026-11 修订：**收起 = 0px**（不渲染该栏、无窄条、无占位）；整栏的收起/展开入口不在任何栏里——
+// 两枚 `PanelToggleButton` 由 `ShellPanelToggles` 常驻渲染于视口顶带两角（绝对定位于本根容器，
+// 坐标只由视口决定 ⇒ 拖拽栏宽、收起 / 展开都不位移、不卸载，见 DESIGN.md §Layout「三栏」）。
+// 各栏顶行按可见性让出 48px 槽位（`reserveShellToggle`），内容起点不随收起态跳动。
 // 装配顺序 Sidebar（展开态）→ 拖拽手柄 → MainPanel（flex-1 弹性吸收剩余空间）→ 拖拽手柄 →
 // ChatPanel（展开态）；拖拽手柄仅在「桌面 + 该栏展开」时渲染（拖拽与收起互斥）。
-// <1024px 小屏不渲染手柄，三栏回退默认百分比类（右栏抽屉行为不变，开关在 MainToolbar 右侧，
-// 抽屉渲染在 ChatPanel；open 状态在此持有）
+// <1024px 小屏不渲染手柄、也不渲染顶带开关（右栏是抽屉），三栏回退默认百分比类
+// （右栏抽屉行为不变，开关在 MainToolbar 右侧，抽屉渲染在 ChatPanel；open 状态在此持有）
 import { useEffect, useState, type ReactNode } from "react";
 import type { Route } from "../hooks/use-route";
 import { usePanels } from "../hooks/use-panels";
@@ -15,12 +17,14 @@ import { useProjectStore } from "../stores/project";
 import { useSaveArchive } from "../hooks/use-save-archive";
 import { useUiStore } from "../stores/ui";
 import { cn } from "../lib/utils";
+import { panelShortcutFor } from "../lib/panel-shortcuts";
 import { ChatPanel } from "./chat/ChatPanel";
 import { FeedbackHost } from "./feedback/FeedbackHost";
 import { CloudConflictDialog } from "./settings/cloud-conflict-dialog";
 import { CloudPullConfirm } from "./settings/cloud-pull-confirm";
 import { CloudStaleBackupDialog } from "./settings/cloud-stale-backup-dialog";
 import { MainPanel } from "./main-panel/MainPanel";
+import { ShellPanelToggles } from "./main-panel/shell-panel-toggles";
 import { NavRail } from "./nav/NavRail";
 import { ResizeHandle } from "./ui/resize-handle";
 
@@ -36,6 +40,28 @@ export function AppShell({ route, children }: { route: Route; children: ReactNod
   // 全站 Ctrl/Cmd + S 的存档阶段（契约 DESIGN.md §设置页「快捷键」区）：
   // 挂在外壳层 = 任意页面（含专注模式、左栏收起）按快捷键都能生成存档；无项目时只保存不存档
   useSaveArchive();
+
+  // 整栏快捷键（卡 L2，DESIGN.md §Layout「三栏」）：仅桌面 + 非专注模式注册；
+  // 可编辑区不抢键（块编辑器 Mod+B 保持加粗），口径与判定同在 lib/panel-shortcuts
+  useEffect(() => {
+    if (!isDesktop || focusMode) return;
+    function onKeyDown(e: KeyboardEvent) {
+      // 逐字段取值：DOM 事件字段在原型上，展开（`{...e}`）会丢
+      const panel = panelShortcutFor({
+        key: e.key,
+        ctrlKey: e.ctrlKey,
+        metaKey: e.metaKey,
+        altKey: e.altKey,
+        shiftKey: e.shiftKey,
+        target: e.target instanceof Element ? e.target : null,
+      });
+      if (panel === null || e.repeat) return;
+      e.preventDefault();
+      toggleCollapse(panel);
+    }
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [isDesktop, focusMode, toggleCollapse]);
 
   // 云端状态的「打开项目时那次检查」挂在外壳层（卡 C）：左栏收起时 NavRail 不挂载，
   // 不能只挂在那里——自动推送会改服务端同步状态，收起左栏同样需要复查与清理。
@@ -53,16 +79,19 @@ export function AppShell({ route, children }: { route: Route; children: ReactNod
 
   return (
     // 拖拽期间根容器禁文本选中（指针已 capture 在手柄上，兜底防边缘选中）
-    <div className={cn("flex h-screen overflow-hidden", isDragging && "select-none")}>
+    <div className={cn("relative flex h-screen overflow-hidden", isDragging && "select-none")}>
       {/* 专注模式（卡 13.4，契约 DESIGN.md §Layout「专注模式」）：只渲染中栏——左栏 / 右栏 /
           两根拖拽手柄一律不渲染（退出来自工具条按钮或 Esc，整棵外壳即刻回来） */}
       {!focusMode && (
         <>
           {/* 左栏：桌面收起态 = 0px（整栏不渲染，无窄条/占位）；展开态 = NavRail + 拖拽手柄。
-              整栏收起/展开入口在 main-toolbar 左端（`panelToggles`），栏内无按钮。 */}
+              整栏开关锚定视口顶带（`ShellPanelToggles`），栏顶行让出 48px 槽位。 */}
           {(!isDesktop || !layout.collapsedSidebar) && (
             <>
-              <NavRail width={isDesktop ? layout.sidebarWidth : undefined} />
+              <NavRail
+                width={isDesktop ? layout.sidebarWidth : undefined}
+                reserveShellToggle={isDesktop}
+              />
               {/* 左|中拖拽手柄：仅桌面 + 左栏展开时渲染（收起态无处可拖） */}
               {isDesktop && (
                 <ResizeHandle
@@ -83,12 +112,8 @@ export function AppShell({ route, children }: { route: Route; children: ReactNod
         route={route}
         focusMode={focusMode}
         chatOpen={chatOpen}
-        panelToggles={{
-          sidebarCollapsed: layout.collapsedSidebar,
-          chatCollapsed: layout.collapsedChat,
-          onToggleSidebar: () => toggleCollapse("sidebar"),
-          onToggleChat: () => toggleCollapse("chat"),
-        }}
+        sidebarCollapsed={layout.collapsedSidebar}
+        chatCollapsed={layout.collapsedChat}
         onToggleChat={() => setChatOpen((v) => !v)}
         onOpenChat={() => {
           // 悬浮问 AI「点击必有反应」：小屏开抽屉；桌面右栏收起时展开（已展开则不动作 → false）
@@ -125,9 +150,20 @@ export function AppShell({ route, children }: { route: Route; children: ReactNod
               open={chatOpen}
               onClose={() => setChatOpen(false)}
               width={isDesktop ? layout.chatWidth : undefined}
+              reserveShellToggle={isDesktop}
             />
           )}
         </>
+      )}
+      {/* 整栏开关：绝对定位于本根容器顶带两角（y 恒 12px），不随栏宽 / 收起态位移、永不卸载——
+          放在三栏之后才能画在 `relative` 的中栏之上。窄屏（右栏是抽屉）与专注模式不渲染 */}
+      {!focusMode && isDesktop && (
+        <ShellPanelToggles
+          sidebarCollapsed={layout.collapsedSidebar}
+          chatCollapsed={layout.collapsedChat}
+          onToggleSidebar={() => toggleCollapse("sidebar")}
+          onToggleChat={() => toggleCollapse("chat")}
+        />
       )}
       {/* 云端两个对话框的单点宿主（卡 6）：左栏「同步云端」与设置页云端面板共用同一份状态；
           挂在外壳层——左栏收起（NavRail 不渲染）时也能弹 */}

@@ -17,7 +17,7 @@ export function ShortcutsSection() {
             key={item.id}
             className="flex items-center gap-3 border-b border-border/50 py-2 last:border-b-0"
           >
-            <TypeChip className="shrink-0">{formatShortcutKey(item.key, apple)}</TypeChip>
+            <TypeChip className="shrink-0">{formatShortcutKey(item.key, apple, item.shift)}</TypeChip>
             <span className="text-sm">{item.description}</span>
           </li>
         ))}
