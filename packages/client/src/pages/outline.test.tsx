@@ -243,7 +243,7 @@ describe("大纲页树视图：推演节点徽标", () => {
 });
 
 // 章行第三行 = 剧情线标签预览（DESIGN.md `outline-page`「章行标签预览」）：仅章、仅 `data.tags` 非空，
-// 固定前 2 个 + `+N`（不按 rail 宽度量算）；场景 / 卷即使带 tags 也不显示。
+// 固定前 `OUTLINE_TAG_PREVIEW_LIMIT` 个 + `+N`（不按 rail 宽度量算）；场景 / 卷即使带 tags 也不显示。
 describe("大纲树 · 章行标签预览", () => {
   const TAGGED: OutlineTree = {
     id: "root",
