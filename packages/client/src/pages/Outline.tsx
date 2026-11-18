@@ -38,8 +38,8 @@ import {
   BranchesOutlined,
   ClearOutlined,
   DeleteOutlined,
-  MenuFoldOutlined,
-  MenuUnfoldOutlined,
+  NodeCollapseOutlined,
+  NodeExpandOutlined,
   PlusOutlined,
   RightOutlined,
 } from "@ant-design/icons";
@@ -1369,9 +1369,9 @@ function OutlineRail({
               onClick={toggleAllCollapse}
               icon={
                 collapsed.size > 0 ? (
-                  <MenuUnfoldOutlined className="text-sm" />
+                  <NodeExpandOutlined className="text-sm" />
                 ) : (
-                  <MenuFoldOutlined className="text-sm" />
+                  <NodeCollapseOutlined className="text-sm" />
                 )
               }
             />
