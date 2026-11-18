@@ -15,7 +15,7 @@
 
 ### Fixed
 
-- **「全部折叠 / 全部展开」图标**：大纲 / 设定 rail 头改用 `NodeCollapseOutlined` / `NodeExpandOutlined`，不再使用 `MenuFoldOutlined` / `MenuUnfoldOutlined`（仅面向左侧，且与 `DESIGN.md` 的禁用条款冲突）。
+- **「全部折叠 / 全部展开」图标**：大纲 / 设定 rail 头改用 `MinusSquareOutlined` / `PlusSquareOutlined`（方框 − / +），不再使用 `MenuFoldOutlined` / `MenuUnfoldOutlined`（仅面向左侧，且与 `DESIGN.md` 的禁用条款冲突）。
 
 ## [v0.0.64] - 2026-11-17
 
