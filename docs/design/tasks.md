@@ -23,3 +23,17 @@
 - `pnpm typecheck` / `pnpm lint` / `pnpm --filter @whispering233/ai-editor-client test` 绿。
 - 浏览器实测（ui-verifier）：无状态无标签的卡高度 68、有状态的卡 92、行距 92 / 116 两分支、卡片无空行、远档仍只剩章号。
 - 硬判据：`git log -1` 有新 commit 且 `git status` 干净；汇报附 commit hash + 命令输出。
+### K5 — 标签表单值归一（修 400：末尾空行被提交）
+
+K4 的浏览器验收发现：章详情标签编辑器允许末行留空以便续输（`+ 添加` / 回车追加空行），保存时把空串一起提交 → `nodeTagsSchema` 的 `min(1)` 拒绝，服务端 400。
+
+#### 范围
+- `packages/client/src/lib/outline-detail.ts`：新增纯函数 `normalizeOutlineDataForm(data)`——`tags` 为数组时逐项 `trim`、丢弃空串（其它 key 原样）。
+- `packages/client/src/pages/OutlineDetail.tsx`：`handleSave` 用归一后的表单做 `diffData` 与提交，成功后把归一值回写 `dataForm` 与 `baseline`；`isOutlineDetailDirty` 也先归一（末尾空行不应把表单判成 dirty）。
+- 测试：`normalizeOutlineDataForm`（空串 / 前后空格 / 非数组 / 无 tags 键）；`isOutlineDetailDirty` 在 baseline `["a"]`、表单 `["a",""]`（及 `["a"," b "]`）时为 false；保存路径的 400 回归（若现有测试可直接断言 payload，否则补一条 `diffData(normalize(...))` 断言）。
+- 不动：`TagsEditor` 组件本身（实体页共用）、schema 的 5 条 / 24 字上限（超限仍由服务端 400 + 行内错误提示，属有意行为）。
+
+#### 完成判据
+- `pnpm typecheck` / `pnpm lint` / `pnpm --filter @whispering233/ai-editor-client test` 绿。
+- 浏览器实测（ui-verifier）：章详情 `+ 添加` → 输入「验收线」→ 回车（留一个空行）→ 保存 → **无 400**、控制台无 error、刷新后只剩「验收线」。
+- 硬判据：`git log -1` 有新 commit 且 `git status` 干净；汇报附 commit hash + 命令输出。
