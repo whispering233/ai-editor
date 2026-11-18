@@ -1,8 +1,9 @@
 // 大纲画布（`#/canvas`）的展示层纯函数（契约：docs/ui/DESIGN.md `outline-canvas`）。
 //
-// 三件事：
+// 四件事：
 // ① `canvasChapterCards`：大纲树 → 画布卡片（**节点 = 章**，卷 / 场景不上画布）。编号与卷号消费
-//    shared `numberVisibleOutline`（展示口径、只计可见节点），本模块不另算编号；
+//    shared `numberVisibleOutline`（展示口径、只计可见节点），本模块不另算编号；元信息列表
+//    （卷号 / 字数 / 场数 / 更新时间）同为纯函数 `canvasChapterMeta`，空段不产出；
 // ② `layoutCanvasChapters`：**确定性网格**——缺坐标的章按其可见章序每行 `CANVAS_CHAPTERS_PER_ROW`
 //    张补位（新章在可见序末尾 ⇒ 自然落在网格末尾），已有手工坐标的章不动（摆位优先）；
 // ③ 坐标 / 视口的 localStorage 读写（`ai-editor:canvas:{projectId}`）：展示层偏好，**不进
@@ -11,14 +12,15 @@
 // 写侧清理：`pruneCanvasPositions` 只留仍在可见大纲里的章（已删章 / 换书残留的条目不会越攒越多）。
 // 读侧防御：坏 JSON / 形状不对 → 空状态（画布照常按网格渲染，不抛错、不阻塞页面）。
 import type { OutlineTree } from "@whispering233/ai-editor-shared";
-import { numberVisibleOutline } from "@whispering233/ai-editor-shared";
+import { formatMonthDay, numberVisibleOutline } from "@whispering233/ai-editor-shared";
+import { formatTextLength } from "./manuscript";
 import { findNode } from "./outline-tree";
 
 /** 网格每行的章卡片数（换行档位常量单点；调它是布局决定，不是逐页参数） */
 export const CANVAS_CHAPTERS_PER_ROW = 8;
 /** 卡片宽 / 高 / 间距（像素）：网格步长与卡片几何**同源**——卡片尺寸也读这里，改一处两处一起变 */
 export const CANVAS_CARD_WIDTH = 220;
-export const CANVAS_CARD_HEIGHT = 84;
+export const CANVAS_CARD_HEIGHT = 92;
 export const CANVAS_CARD_GAP = 24;
 /** 缩放区间（DESIGN.md：缩放 0.25–2）——MiniMap / Controls / 读侧兜底共用 */
 export const CANVAS_MIN_ZOOM = 0.25;
@@ -44,16 +46,20 @@ export interface CanvasSavedState {
   viewport?: CanvasViewport;
 }
 
-/** 画布卡片（章级派生：编号徽标文案 + 场景数） */
+/** 画布卡片（章级派生：编号徽标文案 + 场景数 + 元信息） */
 export interface CanvasChapterCard {
   id: string;
   title: string;
-  /** 卷号徽标文案（`第N卷`）；**存量直挂 root 的章** = 空串（调用方不渲染该徽标） */
+  /** 卷号文案（`第N卷`）；**存量直挂 root 的章** = 空串（元信息行省略该段） */
   volumeLabel: string;
-  /** 章号徽标文案（`第N章`） */
+  /** 章号徽标文案（`第N章`）——画布上唯一徽标 */
   chapterLabel: string;
   /** 可见场景数（软删场景不计；0 不渲染） */
   sceneCount: number;
+  /** 正文字数（`metadata.textLength`；无统计 = 0，元信息行显示 `未写`） */
+  textLength: number;
+  /** 正文最近保存时刻（`metadata.documentUpdatedAt`；无文档 = 字段缺省，元信息行不产时间段） */
+  updatedAt?: string;
 }
 
 /** 大纲树 → 画布卡片（阅读序 = 可见章先序，与行编号同源）；`null` / 空树 → 空数组 */
@@ -62,14 +68,33 @@ export function canvasChapterCards(tree: OutlineTree | null): CanvasChapterCard[
   return chapters.map((chapter) => {
     const node = findNode(tree?.children ?? [], chapter.chapterId);
     const scenes = node?.type === "chapter" ? (node.children ?? []) : [];
+    // 字数 / 更新时间只在章节点的 `metadata`（with_metadata=true 的联查统计）：缺省按空处理，不新增请求
+    const updatedAt = node?.metadata?.documentUpdatedAt;
     return {
       id: chapter.chapterId,
       title: chapter.chapterTitle,
       volumeLabel: chapter.volumeLabel,
       chapterLabel: chapter.chapterLabel,
       sceneCount: scenes.filter((scene) => scene.deleted !== true).length,
+      textLength: node?.metadata?.textLength ?? 0,
+      ...(updatedAt === undefined ? {} : { updatedAt }),
     };
   });
+}
+
+/**
+ * 卡片的元信息段（按序拼接，空段整段不产出）：`第N卷` · 字数 · `N 场` · `更新 MM-DD`。
+ * - 卷号：存量直挂 root 的章没有卷号 → 省略；
+ * - 字数：`formatTextLength` 为空（0 / 非法）→ `未写`（**恒有一段**，空章也看得出没写）；
+ * - 场数：0 省略；更新时间：无正文（无 `documentUpdatedAt`）省略。
+ */
+export function canvasChapterMeta(card: CanvasChapterCard): string[] {
+  const meta: string[] = [];
+  if (card.volumeLabel !== "") meta.push(card.volumeLabel);
+  meta.push(formatTextLength(card.textLength) ?? "未写");
+  if (card.sceneCount > 0) meta.push(`${card.sceneCount} 场`);
+  if (card.updatedAt !== undefined) meta.push(`更新 ${formatMonthDay(card.updatedAt)}`);
+  return meta;
 }
 
 /**

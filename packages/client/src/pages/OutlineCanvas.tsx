@@ -3,7 +3,7 @@
 // 画布是**观察面**，不是第二个大纲页：结构与顺序的唯一编辑入口仍是大纲树——本页拖动卡片
 // **只改坐标**（`localStorage` `ai-editor:canvas:{projectId}`，不进 outline.json / 备份 / 云端包），
 // 不改父子 / 章序 / 卷归属。
-// 节点 = 章（唯一）：卷与场景不上画布，层级由卡片上的卷号徽标表达（components/outline-canvas/ChapterCard）。
+// 节点 = 章（唯一）：卷与场景不上画布，层级由卡片上的章号徽标 + 元信息行的卷号段表达（components/outline-canvas/ChapterCard）。
 // 摆位 = 确定性网格（lib/outline-canvas-layout 纯函数）：缺坐标的章按可见章序每行 8 张补位、
 // 已有手工坐标不动、新章落网格末尾；首次进入（无存量视口）→ fitView，有存量视口则恢复。
 //
@@ -88,10 +88,14 @@ interface CanvasFlowProps {
   projectId: string | null;
   cards: readonly CanvasChapterCard[];
   marks: Map<string, NodeHookMark[]> | null;
+  /** 在读章 id（`config.currentPosition`；null = 未设置） */
+  readingId: string | null;
+  /** 推演章 id 集（`config.deductionNodes`） */
+  deductionIds: ReadonlySet<string>;
 }
 
 /** 画布本体：坐标 / 视口只在挂载时读一次（换书 → 外层以 projectId 为 key 重挂） */
-function CanvasFlow({ projectId, cards, marks }: CanvasFlowProps) {
+function CanvasFlow({ projectId, cards, marks, readingId, deductionIds }: CanvasFlowProps) {
   const [saved, setSaved] = useState<CanvasSavedState>(() => readCanvasState(projectId));
   // 首帧视口二选一后**冻结**：落盘的视口不能让 `fitView` prop 翻转——否则 StoreUpdater 会清掉
   // 排队中的 fitView，首次进入就停在左上角（网格有 100 章时尤其明显）
@@ -104,11 +108,16 @@ function CanvasFlow({ projectId, cards, marks }: CanvasFlowProps) {
         id: card.id,
         type: "chapter",
         position: positions[card.id] ?? { x: 0, y: 0 },
-        data: { card, marks: marks?.get(card.id) ?? [] },
+        data: {
+          card,
+          marks: marks?.get(card.id) ?? [],
+          reading: card.id === readingId,
+          deduction: deductionIds.has(card.id),
+        },
         // 卡片尺寸 = lib 常量（网格步长与卡片几何同源；颜色仍全走主题表 / token 类）
         style: { width: CANVAS_CARD_WIDTH, height: CANVAS_CARD_HEIGHT },
       })),
-    [cards, positions, marks],
+    [cards, positions, marks, readingId, deductionIds],
   );
   const [nodes, setNodes, onNodesChange] = useNodesState<ChapterCardNode>(flowNodes);
   // 树 / 标记 / 坐标变化 → 收敛到 flowNodes（拖动中的位置由 onNodesChange 维护）
@@ -332,6 +341,10 @@ export default function OutlineCanvas() {
   const config = useProjectStore((s) => s.config);
   const configLoading = useProjectStore((s) => s.configLoading);
   const projectId = config?.id ?? null;
+  // 在读 / 推演：服务端二者均只接受章节点 → 直接按 id 命中，不做祖先映射（DESIGN.md `outline-canvas`）
+  const readingId = useProjectStore((s) => s.config?.currentPosition ?? null);
+  const deductionNodeIds = useProjectStore((s) => s.config?.deductionNodes);
+  const deductionIds = useMemo(() => new Set(deductionNodeIds ?? []), [deductionNodeIds]);
   const { retry: retryOutline } = useOutlineLoader({ withMetadata: true });
 
   // 伏笔徽标（同大纲页数据流）：树就绪后并行拉三类标记关系 → buildNodeHookMarks 聚合为
@@ -415,7 +428,16 @@ export default function OutlineCanvas() {
       </div>
     );
   } else {
-    body = <CanvasFlow key={projectId ?? "none"} projectId={projectId} cards={cards} marks={hookMarks} />;
+    body = (
+      <CanvasFlow
+        key={projectId ?? "none"}
+        projectId={projectId}
+        cards={cards}
+        marks={hookMarks}
+        readingId={readingId}
+        deductionIds={deductionIds}
+      />
+    );
   }
 
   return (

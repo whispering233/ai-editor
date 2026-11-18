@@ -1,7 +1,12 @@
 // 大纲画布摆位纯函数单测（卡 C6）：摆位规则与 localStorage 读侧兼容是「结构不得被展示层改写」的
 // 边界，坏了会让手工摆位被网格覆盖或旧坐标读不回来。
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { OutlineChapter, OutlineTree, OutlineVolume } from "@whispering233/ai-editor-shared";
+import type {
+  OutlineChapter,
+  OutlineNodeMetadata,
+  OutlineTree,
+  OutlineVolume,
+} from "@whispering233/ai-editor-shared";
 import {
   CANVAS_CARD_GAP,
   CANVAS_CARD_HEIGHT,
@@ -10,21 +15,31 @@ import {
   CANVAS_MAX_ZOOM,
   CANVAS_MIN_ZOOM,
   canvasChapterCards,
+  canvasChapterMeta,
   canvasStorageKey,
   layoutCanvasChapters,
   parseCanvasState,
   pruneCanvasPositions,
   readCanvasState,
   writeCanvasState,
+  type CanvasChapterCard,
 } from "./outline-canvas-layout";
+import { formatTextLength } from "./manuscript";
 
-function chapter(id: string, title: string, scenes: string[] = [], deleted = false): OutlineChapter {
+function chapter(
+  id: string,
+  title: string,
+  scenes: string[] = [],
+  deleted = false,
+  metadata?: OutlineNodeMetadata,
+): OutlineChapter {
   return {
     id,
     type: "chapter",
     title,
     deleted,
     updatedAt: "2026-01-01T00:00:00Z",
+    ...(metadata === undefined ? {} : { metadata }),
     children: scenes.map((sceneId) => ({
       id: sceneId,
       type: "scene" as const,
@@ -63,17 +78,91 @@ describe("canvasChapterCards（大纲树 → 画布卡片）", () => {
       ]),
     );
     expect(cards).toEqual([
-      { id: "ch-1", title: "开端", volumeLabel: "第1卷", chapterLabel: "第1章", sceneCount: 2 },
-      { id: "ch-2", title: "转折", volumeLabel: "第1卷", chapterLabel: "第2章", sceneCount: 0 },
-      { id: "ch-3", title: "收束", volumeLabel: "第2卷", chapterLabel: "第3章", sceneCount: 1 },
+      { id: "ch-1", title: "开端", volumeLabel: "第1卷", chapterLabel: "第1章", sceneCount: 2, textLength: 0 },
+      { id: "ch-2", title: "转折", volumeLabel: "第1卷", chapterLabel: "第2章", sceneCount: 0, textLength: 0 },
+      { id: "ch-3", title: "收束", volumeLabel: "第2卷", chapterLabel: "第3章", sceneCount: 1, textLength: 0 },
     ]);
   });
 
-  it("存量直挂 root 的章没有卷号（volumeLabel 空串 ⇒ 卡上不渲染卷徽标）", () => {
+  it("字数 / 更新时间取自章节点的 metadata（无 metadata → 0 字、无更新时间，不新增请求）", () => {
+    const cards = canvasChapterCards(
+      tree([
+        volume("vol-1", "第一卷", [
+          chapter("ch-1", "有正文", ["sc-1"], false, {
+            textLength: 1200,
+            documentUpdatedAt: "2026-03-05T10:00:00",
+          }),
+          chapter("ch-2", "空章"),
+        ]),
+      ]),
+    );
+    expect(cards).toEqual([
+      {
+        id: "ch-1",
+        title: "有正文",
+        volumeLabel: "第1卷",
+        chapterLabel: "第1章",
+        sceneCount: 1,
+        textLength: 1200,
+        updatedAt: "2026-03-05T10:00:00",
+      },
+      {
+        id: "ch-2",
+        title: "空章",
+        volumeLabel: "第1卷",
+        chapterLabel: "第2章",
+        sceneCount: 0,
+        textLength: 0,
+      },
+    ]);
+  });
+
+  it("存量直挂 root 的章没有卷号（volumeLabel 空串 ⇒ 元信息行省略卷号段）", () => {
     const cards = canvasChapterCards(tree([chapter("ch-1", "无卷章"), volume("vol-1", "第一卷")]));
     expect(cards).toEqual([
-      { id: "ch-1", title: "无卷章", volumeLabel: "", chapterLabel: "第1章", sceneCount: 0 },
+      { id: "ch-1", title: "无卷章", volumeLabel: "", chapterLabel: "第1章", sceneCount: 0, textLength: 0 },
     ]);
+  });
+});
+
+describe("canvasChapterMeta（元信息段：空段整段不产出）", () => {
+  function card(over: Partial<CanvasChapterCard> = {}): CanvasChapterCard {
+    return {
+      id: "ch-1",
+      title: "开端",
+      volumeLabel: "第1卷",
+      chapterLabel: "第1章",
+      sceneCount: 2,
+      textLength: 1200,
+      updatedAt: "2026-03-05T10:00:00",
+      ...over,
+    };
+  }
+
+  it("全量：卷号 · 字数 · 场数 · 更新时间（按序）", () => {
+    expect(canvasChapterMeta(card())).toEqual(["第1卷", "1.2 千字", "2 场", "更新 03-05"]);
+  });
+
+  it("空章：0 字 → 未写，无场数 / 无更新时间（字数段恒有一段）", () => {
+    expect(
+      canvasChapterMeta(card({ textLength: 0, sceneCount: 0, updatedAt: undefined })),
+    ).toEqual(["第1卷", "未写"]);
+  });
+
+  it("root 直挂章（无卷号）→ 首段省略，其余段顺位前移", () => {
+    expect(canvasChapterMeta(card({ volumeLabel: "" }))).toEqual([
+      "1.2 千字",
+      "2 场",
+      "更新 03-05",
+    ]);
+  });
+
+  it("字数段与 formatTextLength 同源（千字档 / 零字档都一致）", () => {
+    for (const textLength of [0, 1, 999, 1000, 12345]) {
+      expect(canvasChapterMeta(card({ textLength }))[1]).toBe(
+        formatTextLength(textLength) ?? "未写",
+      );
+    }
   });
 });
 
