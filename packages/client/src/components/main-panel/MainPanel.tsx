@@ -10,7 +10,7 @@ import { MIDDLE_MIN_WIDTH } from "../../hooks/use-panels";
 import { useProjectStore } from "../../stores/project";
 import { useChatStore } from "../../stores/chat";
 import { useUiStore } from "../../stores/ui";
-import { MainToolbar, type PanelToggles } from "./MainToolbar";
+import { MainToolbar } from "./MainToolbar";
 import { StatsHud } from "../stats/stats-hud";
 
 export function MainPanel({
@@ -19,7 +19,8 @@ export function MainPanel({
   onToggleChat,
   onOpenChat,
   isDesktop,
-  panelToggles,
+  sidebarCollapsed,
+  chatCollapsed,
   focusMode = false,
   children,
 }: {
@@ -31,8 +32,9 @@ export function MainPanel({
   onOpenChat: () => boolean;
   /** 桌面态标记（F7）：中栏 flex-1 弹性吸收左右栏固定宽之外的剩余空间；小屏回退默认 50% 百分比 */
   isDesktop: boolean;
-  /** 整栏收起/展开（桌面态）：直接透传给 `MainToolbar` 两端的 toggle */
-  panelToggles: PanelToggles;
+  /** 左栏 / 右栏收起态（桌面态）：`MainToolbar` 据此让出顶带开关的 48px 槽位 */
+  sidebarCollapsed: boolean;
+  chatCollapsed: boolean;
   /** 专注模式（卡 13.4，仅章正文页）：`MainToolbar` 与「问 AI」悬浮球均不渲染
    * （专注态 AI 入口整体不可达是有意口径，见 DESIGN.md §Layout「专注模式」）；
    * 内容区与滚动容器不变 */
@@ -72,7 +74,8 @@ export function MainPanel({
           chatOpen={chatOpen}
           onToggleChat={onToggleChat}
           isDesktop={isDesktop}
-          panelToggles={panelToggles}
+          sidebarCollapsed={sidebarCollapsed}
+          chatCollapsed={chatCollapsed}
         />
       )}
       {/* 页面内容区：溢出纵向滚动（原 AppShell p-6 保留，页面不自带 padding） */}

@@ -352,10 +352,13 @@ export function sessionItemMenu(
 function SessionTitleBar({
   disabled,
   onClose,
+  reserveShellToggle = false,
 }: {
   disabled: boolean;
   /** 小屏抽屉关闭（仅抽屉传入） */
   onClose?: () => void;
+  /** 顶行右端让出视口顶带右纽的 48px 槽位（桌面静态右栏 = true） */
+  reserveShellToggle?: boolean;
 }) {
   const sessions = useChatStore((s) => s.sessions);
   const currentSessionId = useChatStore((s) => s.currentSessionId);
@@ -383,7 +386,12 @@ function SessionTitleBar({
   );
 
   return (
-    <div className="flex h-12 shrink-0 items-center gap-1 border-b border-border px-2.5">
+    <div
+      className={cn(
+        "flex h-12 shrink-0 items-center gap-1 border-b border-border pl-2.5",
+        reserveShellToggle ? "pr-12" : "pr-2.5",
+      )}
+    >
       <MessageOutlined className="shrink-0 text-muted-foreground" />
       <AntDropdown
         disabled={disabled}
@@ -1430,16 +1438,23 @@ function MessageList({ disabled }: { disabled: boolean }) {
 
 function ChatPanelBody({
   onClose,
+  reserveShellToggle = false,
 }: {
   /** 小屏抽屉关闭（桌面静态栏不传） */
   onClose?: () => void;
+  /** 顶行右端让出顶带右纽的 48px 槽位（桌面静态右栏 = true，抽屉不传） */
+  reserveShellToggle?: boolean;
 }) {
   const config = useProjectStore((s) => s.config);
   const disabled = !config;
 
   return (
     <div className="flex h-full min-h-0 flex-col">
-      <SessionTitleBar disabled={disabled} onClose={onClose} />
+      <SessionTitleBar
+        disabled={disabled}
+        onClose={onClose}
+        reserveShellToggle={reserveShellToggle}
+      />
       {!disabled && (
         <>
           <DisconnectBanner />
@@ -1453,17 +1468,21 @@ function ChatPanelBody({
 }
 
 // ============ 外壳：桌面静态右栏（≥1024px） / 小屏抽屉（<1024px） ============
-// 整栏收起/展开已归 `main-toolbar` 右端（2026-11）：收起态由 `AppShell` 整栏不渲染（0px），本组件无收起按钮。
+// 整栏收起/展开由外壳 `ShellPanelToggles` 锚定视口顶带右上角（2026-11，坐标不随栏宽 / 收起态位移）：
+// 收起态由 `AppShell` 整栏不渲染（0px），本组件无收起按钮，只让顶行右端 48px 槽位（`reserveShellToggle`）。
 
 export function ChatPanel({
   open,
   onClose,
   width,
+  reserveShellToggle = false,
 }: {
   open: boolean;
   onClose: () => void;
   /** 桌面态像素宽度（flex-basis 覆盖默认 40%）；undefined = 小屏默认百分比布局（抽屉不参与 flex） */
   width?: number;
+  /** 顶行右端让出顶带右纽的 48px 槽位（桌面静态右栏 = true） */
+  reserveShellToggle?: boolean;
 }) {
   const isDesktop = useMediaQuery("(min-width: 1024px)");
 
@@ -1476,7 +1495,7 @@ export function ChatPanel({
           width !== undefined ? { flex: `0 1 ${width}px`, minWidth: CHAT_MIN_WIDTH } : undefined
         }
       >
-        <ChatPanelBody />
+        <ChatPanelBody reserveShellToggle={reserveShellToggle} />
       </aside>
     );
   }
