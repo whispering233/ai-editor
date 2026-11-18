@@ -145,8 +145,9 @@ describe("写作页 · 桌面（rail + 正文列）", () => {
     expect(html).toContain('role="separator"');
     expect(html).toContain('aria-label="收起卷章导航栏"');
     expect(html).not.toContain('aria-label="展开卷章导航栏"');
-    // 普通 `icon-button`（text 变体 + 单箭头），不是圆钮、也不是整栏双箭头
-    expect(html).toContain("anticon-left");
+    // 普通 `icon-button` 表皮 + 静态面板图形（左栏 ⇒ 竖线靠左），不是圆钮、也不是整栏双箭头
+    expect(html).toContain('viewBox="0 0 24 24"');
+    expect(html).toContain('d="M9 4 V20"');
     expect(html).not.toContain("ant-btn-circle");
     expect(html).not.toContain("anticon-double-left");
     // 位置 = 标题行最左（在「写作」标题之前）
@@ -311,7 +312,8 @@ describe("写作页 · 卷章导航栏宽度与收起（2b）", () => {
     const html = render({ chapterId: "ch-1" });
     expect(html).toContain('aria-label="展开卷章导航栏"');
     expect(html).toContain('aria-expanded="false"');
-    expect(html).toContain("anticon-right");
+    // 图标静态不换向（仍是左栏面板图形）
+    expect(html).toContain('d="M9 4 V20"');
     expect(html).not.toContain("ant-btn-circle");
     // 收起 = 0px：rail 完全不渲染（无 header 标题 / 无内联宽度）+ 无窄条占位 + 无手柄
     expect(html).not.toContain(">卷章<");
@@ -364,8 +366,8 @@ describe("写作页 · 右侧详情收起（设计：`writing-page`「宽度与�
     expect(html).toContain('aria-label="收起右侧详情"');
     expect(html).toContain('aria-expanded="true"');
     expect(html).not.toContain('aria-label="展开右侧详情"');
-    // 图标 = 当前点击动作（展开态收起 = 右箭头；不是圆钮 / 双箭头）
-    expect(html).toContain("anticon-right");
+    // 图标 = 静态面板图形（右侧详情栏 ⇒ 竖线靠右；不是圆钮 / 双箭头）
+    expect(html).toContain('d="M15 4 V20"');
     expect(html).not.toContain("ant-btn-circle");
     // 位置 = rail header（在正文列页头「收起卷章导航栏」之前），且排在 rail 标题「卷章」之后
     expect(html.indexOf('aria-label="收起右侧详情"')).toBeLessThan(
@@ -384,10 +386,10 @@ describe("写作页 · 右侧详情收起（设计：`writing-page`「宽度与�
   it("收起态：正文列整列不渲染、rail 全宽（无内联宽 / 无右边线 / 无手柄）、按钮转为展开", () => {
     stubRailStorage({ width: 333, collapsed: false, detailCollapsed: true });
     const html = render({ chapterId: "ch-1" });
-    // 按钮：左箭头 + 「展开右侧详情」
+    // 按钮：静态面板图形（不随收起态换向）+ 「展开右侧详情」
     expect(html).toContain('aria-label="展开右侧详情"');
     expect(html).toContain('aria-expanded="false"');
-    expect(html).toContain("anticon-left");
+    expect(html).toContain('d="M15 4 V20"');
     expect(html).not.toContain('aria-label="收起右侧详情"');
     // rail 吸收全宽：不传 width（无内联宽）+ `w-full border-r-0`（邻栏不在，不画分栏线）
     expect(html).not.toContain("width:333px");

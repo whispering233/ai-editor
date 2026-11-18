@@ -11,12 +11,13 @@
 // §大纲页「缩进列对齐」）；章行是 `<a href="#/writing/:id">`，点击直接进正文，不渲染「写正文」按钮。
 import { useEffect, useRef } from "react";
 import { Button } from "antd";
-import { LeftOutlined, RightOutlined } from "@ant-design/icons";
+import { RightOutlined } from "@ant-design/icons";
 import { formatTextLength } from "../../lib/manuscript";
 import { errorBannerClass, skeletonClass } from "../../lib/styles";
 import { cn } from "../../lib/utils";
 import type { WritingRailRow } from "../../lib/writing";
 import { PanelHeader } from "../ui/panel-header";
+import { PanelToggleButton } from "../ui/panel-toggle-button";
 import { TypeChip } from "../ui/tag-chip";
 
 export interface ChapterRailProps {
@@ -84,21 +85,11 @@ export function ChapterRail({
         className="mb-0"
         actions={
           onToggleDetail === undefined ? undefined : (
-            <Button
-              color="default"
-              variant="text"
-              size="small"
-              title={detailCollapsed ? "展开右侧详情" : "收起右侧详情"}
-              aria-label={detailCollapsed ? "展开右侧详情" : "收起右侧详情"}
-              aria-expanded={!detailCollapsed}
-              onClick={onToggleDetail}
-              icon={
-                detailCollapsed ? (
-                  <LeftOutlined className="text-sm" />
-                ) : (
-                  <RightOutlined className="text-sm" />
-                )
-              }
+            <PanelToggleButton
+              side="right"
+              collapsed={detailCollapsed ?? false}
+              label="右侧详情"
+              onToggle={onToggleDetail}
             />
           )
         }

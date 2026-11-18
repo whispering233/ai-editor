@@ -461,8 +461,8 @@ describe("大纲页 · 右侧详情收起", () => {
     expect(html).toContain('aria-label="收起右侧详情"');
     expect(html).toContain('aria-expanded="true"');
     expect(html).not.toContain('aria-label="展开右侧详情"');
-    // 图标 = 当前点击动作（展开态收起 = 右箭头）
-    expect(html).toContain("anticon-right");
+    // 图标 = 静态面板图形（右侧详情栏 ⇒ 竖线靠右）
+    expect(html).toContain('d="M15 4 V20"');
     // 位置 = [全部折叠][+ 新建卷] 之后、详情列页头之前
     expect(html.indexOf('aria-label="收起右侧详情"')).toBeGreaterThan(
       html.indexOf('aria-label="新建卷"'),
@@ -480,10 +480,10 @@ describe("大纲页 · 右侧详情收起", () => {
   it("收起态：详情列整列不渲染、rail 全宽（无内联宽 / 无右边线 / 无手柄）、不改存宽度", () => {
     stubRailStorage({ width: 333, collapsed: false, detailCollapsed: true });
     const html = render({ nodeId: "ch-1" });
-    // 按钮：左箭头 + 「展开右侧详情」
+    // 按钮：静态面板图形（不随收起态换向）+ 「展开右侧详情」
     expect(html).toContain('aria-label="展开右侧详情"');
     expect(html).toContain('aria-expanded="false"');
-    expect(html).toContain("anticon-left");
+    expect(html).toContain('d="M15 4 V20"');
     expect(html).not.toContain('aria-label="收起右侧详情"');
     // rail 吸收全宽：不传 width（无内联宽）+ `w-full border-r-0`
     expect(html).not.toContain("width:333px");

@@ -38,7 +38,6 @@ import {
   BranchesOutlined,
   ClearOutlined,
   DeleteOutlined,
-  LeftOutlined,
   MenuFoldOutlined,
   MenuUnfoldOutlined,
   PlusOutlined,
@@ -50,6 +49,7 @@ import { NodeHookMarkBadge } from "../components/outline/node-hook-badge";
 import { TypeChip } from "@/components/ui/tag-chip";
 import { DropIndicator } from "@/components/ui/drop-indicator";
 import { PanelHeader } from "@/components/ui/panel-header";
+import { PanelToggleButton } from "@/components/ui/panel-toggle-button";
 import { ResizeHandle } from "@/components/ui/resize-handle";
 import { useMediaQuery } from "../hooks/use-media-query";
 import {
@@ -238,21 +238,11 @@ export default function Outline({ nodeId }: { nodeId?: string }) {
 
   // 收起 / 展开入口：详情列页头标题行最左（`PanelHeader` `leading`，同写作页）；窄屏无相邻栏不渲染
   const railToggle = isDesktop ? (
-    <Button
-      color="default"
-      variant="text"
-      size="small"
-      onClick={toggleRailCollapse}
-      icon={
-        railCollapsed ? (
-          <RightOutlined className="text-sm" />
-        ) : (
-          <LeftOutlined className="text-sm" />
-        )
-      }
-      aria-label={railCollapsed ? "展开大纲树" : "收起大纲树"}
-      title={railCollapsed ? "展开大纲树" : "收起大纲树"}
-      aria-expanded={!railCollapsed}
+    <PanelToggleButton
+      side="left"
+      collapsed={railCollapsed}
+      label="大纲树"
+      onToggle={toggleRailCollapse}
     />
   ) : undefined;
 
@@ -1398,21 +1388,11 @@ function OutlineRail({
             />
             {/* 右侧详情收起 / 展开（右端组最右端，紧邻被收起的详情列；DESIGN.md `outline-page`「rail header」） */}
             {onToggleDetail !== undefined && (
-              <Button
-                color="default"
-                variant="text"
-                size="small"
-                title={detailCollapsed ? "展开右侧详情" : "收起右侧详情"}
-                aria-label={detailCollapsed ? "展开右侧详情" : "收起右侧详情"}
-                aria-expanded={!detailCollapsed}
-                onClick={onToggleDetail}
-                icon={
-                  detailCollapsed ? (
-                    <LeftOutlined className="text-sm" />
-                  ) : (
-                    <RightOutlined className="text-sm" />
-                  )
-                }
+              <PanelToggleButton
+                side="right"
+                collapsed={detailCollapsed ?? false}
+                label="右侧详情"
+                onToggle={onToggleDetail}
               />
             )}
           </>

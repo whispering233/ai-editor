@@ -13,8 +13,8 @@
 // （按钮在 rail header；不改存宽度、不改 URL、点行不自动展开），两栏不会同时收起。
 import { useEffect, useState } from "react";
 import type { ReactNode } from "react";
-import { Button } from "antd";
-import { ArrowLeftOutlined, LeftOutlined, RightOutlined } from "@ant-design/icons";
+import { ArrowLeftOutlined } from "@ant-design/icons";
+import { PanelToggleButton } from "@/components/ui/panel-toggle-button";
 import { SettingRail } from "../components/entity/setting-rail";
 import { PanelHeader } from "@/components/ui/panel-header";
 import { ResizeHandle } from "@/components/ui/resize-handle";
@@ -92,21 +92,11 @@ export default function SettingWorkbench({ id }: { id?: string }) {
 
   // 收起 / 展开入口：详情列页头标题行最左（`PanelHeader` `leading`，同写作页）；窄屏无相邻栏不渲染
   const railToggle = isDesktop ? (
-    <Button
-      color="default"
-      variant="text"
-      size="small"
-      onClick={toggleCollapse}
-      icon={
-        railCollapsed ? (
-          <RightOutlined className="text-sm" />
-        ) : (
-          <LeftOutlined className="text-sm" />
-        )
-      }
-      aria-label={railCollapsed ? "展开设定树" : "收起设定树"}
-      title={railCollapsed ? "展开设定树" : "收起设定树"}
-      aria-expanded={!railCollapsed}
+    <PanelToggleButton
+      side="left"
+      collapsed={railCollapsed}
+      label="设定树"
+      onToggle={toggleCollapse}
     />
   ) : undefined;
 

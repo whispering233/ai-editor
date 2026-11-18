@@ -11,7 +11,8 @@
 // `#/writing/:id` 只显示正文全宽 + 顶部「章节目录」返回条。专注模式隐藏 rail 与返回条。
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import { Button } from "antd";
-import { ArrowLeftOutlined, LeftOutlined, RightOutlined } from "@ant-design/icons";
+import { ArrowLeftOutlined } from "@ant-design/icons";
+import { PanelToggleButton } from "../components/ui/panel-toggle-button";
 import { ChapterEditor } from "../components/manuscript/chapter-editor";
 import { ChapterRail } from "../components/writing/chapter-rail";
 import { EmptyState } from "../components/ui/empty-state";
@@ -130,23 +131,15 @@ export default function Writing({ chapterId }: { chapterId?: string }) {
 
   // 卷章导航栏收起 / 展开入口：正文列页头标题行最左（`PanelHeader` `leading`；DESIGN.md `writing-page`
   // 「宽度与收起」）。同一枚按钮进四种正文形态；窄屏（无子栏）与专注模式（页头不渲染）都不渲染。
-  // 图标 = 当前点击动作（展开态收起 / 收起态展开）；状态由动态 `aria-label` / `title` / `aria-expanded` 表达。
+  // 图标 = 静态面板图形（`PanelToggleButton`，不随收起态换向）；状态由它统一生成的
+  // `aria-label` / `title` / `aria-expanded` 表达。
   const railToggle =
     isDesktop && !focusMode ? (
-      <Button
-        color="default" variant="text"
-        size="small"
-        onClick={toggleRailCollapse}
-        icon={
-          railCollapsed ? (
-            <RightOutlined className="text-sm" />
-          ) : (
-            <LeftOutlined className="text-sm" />
-          )
-        }
-        aria-label={railCollapsed ? "展开卷章导航栏" : "收起卷章导航栏"}
-        title={railCollapsed ? "展开卷章导航栏" : "收起卷章导航栏"}
-        aria-expanded={!railCollapsed}
+      <PanelToggleButton
+        side="left"
+        collapsed={railCollapsed}
+        label="卷章导航栏"
+        onToggle={toggleRailCollapse}
       />
     ) : undefined;
 

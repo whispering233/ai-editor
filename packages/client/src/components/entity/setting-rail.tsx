@@ -28,7 +28,6 @@ import { Button, Input, Select, Switch } from "antd";
 import {
   DeleteOutlined,
   DownOutlined,
-  LeftOutlined,
   MenuFoldOutlined,
   MenuUnfoldOutlined,
   PlusOutlined,
@@ -39,6 +38,7 @@ import {
 import { MAX_ENTITY_LIST_LIMIT } from "@whispering233/ai-editor-shared";
 import { RowContextMenu } from "./row-context-menu";
 import { PanelHeader } from "@/components/ui/panel-header";
+import { PanelToggleButton } from "@/components/ui/panel-toggle-button";
 import { TagChip } from "@/components/ui/tag-chip";
 import { DropIndicator } from "@/components/ui/drop-indicator";
 import { EmptyState } from "@/components/ui/empty-state";
@@ -1084,21 +1084,11 @@ export function SettingRail({
               icon={<PlusOutlined className="text-sm" />}
             />
             {onToggleDetail && (
-              <Button
-                color="default"
-                variant="text"
-                size="small"
-                title={detailCollapsed ? "展开右侧详情" : "收起右侧详情"}
-                aria-label={detailCollapsed ? "展开右侧详情" : "收起右侧详情"}
-                aria-expanded={!detailCollapsed}
-                onClick={onToggleDetail}
-                icon={
-                  detailCollapsed ? (
-                    <LeftOutlined className="text-sm" />
-                  ) : (
-                    <RightOutlined className="text-sm" />
-                  )
-                }
+              <PanelToggleButton
+                side="right"
+                collapsed={detailCollapsed ?? false}
+                label="右侧详情"
+                onToggle={onToggleDetail}
               />
             )}
           </>
