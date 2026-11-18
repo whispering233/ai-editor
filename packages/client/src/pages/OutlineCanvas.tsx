@@ -19,7 +19,10 @@ import "@xyflow/react/dist/base.css";
 import "../components/outline-canvas/canvas-theme.css";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
+  Background,
+  BackgroundVariant,
   Controls,
+  MarkerType,
   MiniMap,
   ReactFlow,
   useEdgesState,
@@ -75,6 +78,16 @@ import { useUiStore } from "../stores/ui";
 
 /** 节点类型表（模块级常量：每次渲染新建对象会让 React Flow 重挂全部节点） */
 const NODE_TYPES: NodeTypes = { chapter: ChapterCard };
+
+/** Controls 的中文无障碍标签（键名 = `@xyflow/system` 的 `AriaLabelConfig`）。
+ * 挂 ReactFlow 而不挂 Controls：v12 由 store 统一下发（`ControlProps` 没有这个 prop），
+ * 页面只传文案，不传色值 / 尺寸。 */
+const ARIA_LABEL_CONFIG = {
+  "controls.ariaLabel": "画布控件",
+  "controls.zoomIn.ariaLabel": "放大",
+  "controls.zoomOut.ariaLabel": "缩小",
+  "controls.fitView.ariaLabel": "适应视图",
+} as const;
 
 /**
  * 首帧 fitView 的缩放区间：
@@ -175,6 +188,8 @@ function CanvasFlow({ projectId, cards, marks, readingId, deductionIds }: Canvas
         target: edge.target,
         // 空标签不传：React Flow 收到 `undefined` 才不画文字（空串会留一个空文本框）
         label: edge.label === "" ? undefined : edge.label,
+        // 方向箭头：不传 color ⇒ 走 canvas-theme.css 的 `--xy-edge-stroke`（色值单源在那里）
+        markerEnd: { type: MarkerType.ArrowClosed, width: 12, height: 12 },
         style:
           focusedNodeId === null || adjacentEdgeIds.has(edge.id)
             ? undefined
@@ -305,9 +320,19 @@ function CanvasFlow({ projectId, cards, marks, readingId, deductionIds }: Canvas
           maxZoom={CANVAS_MAX_ZOOM}
           zoomOnDoubleClick={false}
           attributionPosition="bottom-left"
+          ariaLabelConfig={ARIA_LABEL_CONFIG}
         >
+          {/* 点阵底纹：不传 color ⇒ `--xy-background-pattern-dots-color-default`（canvas-theme.css） */}
+          <Background variant={BackgroundVariant.Dots} gap={24} size={1} />
           <Controls showInteractive={false} position="top-left" />
-          <MiniMap position="top-right" pannable zoomable ariaLabel="章节缩略图" />
+          {/* 尺寸走 style：v12 的 MiniMap 用 `style.width/height` 决定 SVG 尺寸（props 已废弃） */}
+          <MiniMap
+            position="top-right"
+            pannable
+            zoomable
+            ariaLabel="章节缩略图"
+            style={{ width: 160, height: 108 }}
+          />
         </ReactFlow>
       </div>
       {editingRelation !== undefined && (

@@ -10,9 +10,11 @@
 // 卡片不碰项目配置。
 // 左右两个 handle 是连线的落点（source 在右、target 在左，与卡片从左到右的网格顺向一致）：
 // 尺寸 / 配色只在 canvas-theme.css 映射，本组件不写色值。
+// 选中态只换描边：选中 / 聚焦 = primary，否则 hairline + hover hairline-strong（不填充、不加阴影）。
 import { Handle, Position, type Node, type NodeProps } from "@xyflow/react";
 import { canvasChapterMeta, type CanvasChapterCard } from "../../lib/outline-canvas-layout";
 import type { NodeHookMark } from "../../lib/outline-hooks";
+import { cn } from "../../lib/utils";
 import { NodeHookMarkBadge } from "../outline/node-hook-badge";
 import { TypeChip } from "../ui/tag-chip";
 
@@ -28,12 +30,16 @@ export type ChapterCardData = {
 export type ChapterCardNode = Node<ChapterCardData, "chapter">;
 
 /** 章卡片（内容只读：拖动只改坐标、不改层级；连线走两侧 handle） */
-export function ChapterCard({ data }: NodeProps<ChapterCardNode>) {
+export function ChapterCard({ data, selected }: NodeProps<ChapterCardNode>) {
   const { card, marks, reading, deduction } = data;
   const meta = canvasChapterMeta(card).join(" · ");
   return (
     <div
-      className="relative flex h-full w-full flex-col gap-1 rounded-md border border-border bg-card px-3 py-2"
+      className={cn(
+        "relative flex h-full w-full flex-col gap-1 rounded-md border bg-card px-3 py-2",
+        // 选中 / 聚焦 = primary 描边；hover = hairline-strong（不填充、不加阴影）
+        selected ? "border-primary" : "border-border hover:border-input",
+      )}
       title={`${card.volumeLabel === "" ? "" : `${card.volumeLabel}·`}${card.chapterLabel} ${card.title}`}
     >
       {/* 在读条：绝对定位（不占布局）、左侧圆角跟卡片一致（不把外框角磨方） */}

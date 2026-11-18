@@ -3,7 +3,7 @@
    （守卫 design-discipline.test.ts 的 hardcoded-color 扫色值 ⇒ 颜色只能出现在这里）。
 
    只引 `@xyflow/react/dist/base.css`（结构样式，无颜色）⇒ 可见部分全部靠这张表；
-   映射目标 = index.css 语义变量（--background / --card / --border / --muted-foreground）与
+   映射目标 = index.css 语义变量（--background / --card / --border / --input / --muted-foreground）与
    antd token（--ant-color-*）。深浅两态由 html.dark 翻转这些变量跟随，**不写两份色值**。
    选择器：库的深色默认值挂在 `.react-flow.dark`（只有 colorMode="dark"/"system" 时才出现），
    并列进同一张表压住它（本页用默认 colorMode，`.react-flow` 一支即生效）。
@@ -23,14 +23,23 @@
   --xy-background-pattern-dots-color-default: var(--border);
   --xy-minimap-background-color-default: var(--card);
   --xy-minimap-mask-background-color-default: color-mix(in oklab, var(--background) 55%, transparent);
-  --xy-minimap-mask-stroke-color-default: var(--border);
-  --xy-minimap-node-background-color-default: var(--muted-foreground);
-  --xy-minimap-node-stroke-color-default: var(--card);
+  --xy-minimap-mask-stroke-color-default: var(--input);
+  --xy-minimap-node-background-color-default: var(--border);
+  --xy-minimap-node-stroke-color-default: transparent;
   --xy-attribution-background-color-default: transparent;
   --xy-edge-stroke-default: var(--muted-foreground);
   --xy-edge-stroke-selected-default: var(--foreground);
   --xy-connectionline-stroke-default: var(--muted-foreground);
   --xy-handle-background-color-default: var(--card);
+}
+
+/* MiniMap：底 / 节点色 / 遮罩色全由上面那一族变量承担，这里只补 base.css 缺的外框
+   （1px 结构描边 + {rounded.sm}；尺寸由页面的 style 给，见 OutlineCanvas）。 */
+.react-flow__minimap {
+  box-sizing: border-box;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 6px;
 }
 
 /* 右下角的库署名（base.css 把链接色硬编码成灰、背景留变量）：只补字色，位置与文案不动 */
@@ -39,19 +48,22 @@
 }
 
 /* 连线落点：base.css 只给 5px 方块 + 背景色（无圆角 / 无描边、pointer-events 靠库加的
-   `connectionindicator` 类放行），这里补成贴着卡片边线的小圆点。 */
+   `connectionindicator` 类放行），这里补成贴着卡片边线的小圆点；静止态压淡（不抢卡片内容），
+   hover / 拖线中恢复不透明，让「从这里拖」这件事可见。 */
 .react-flow__handle {
   width: 8px;
   height: 8px;
   border: 1px solid var(--border);
   border-radius: 9999px;
+  opacity: 0.45;
 }
 
-/* 拖线中 / 悬停：落点染成线色，让「从这里拖」这件事可见（默认底色是卡片色，等于隐形） */
+/* 拖线中 / 悬停：落点染成线色并恢复不透明（默认底色是卡片色，等于隐形） */
 .react-flow__handle:hover,
 .react-flow__handle.connectingfrom,
 .react-flow__handle.connectingto {
   background: var(--muted-foreground);
+  opacity: 1;
 }
 
 /* 边上的短标签（`metadata.label`）：fill 与字号只在 style.css 里有（本页只引 base.css）
@@ -65,8 +77,8 @@
   fill: var(--background);
 }
 
-/* Controls：base.css 给了面板定位与 26px 按钮尺寸，**配色没有变量**（在未引的 style.css 里）
-   ⇒ 在本文件自补 chrome；圆角 / 描边 / 底与卡片同一套语义变量。 */
+/* Controls：base.css 只给了面板定位与按钮尺寸（26px），**配色没有变量**（在未引的 style.css 里）
+   ⇒ 在本文件自补 chrome：按钮 28px、圆角 / 描边 / 底与卡片同一套语义变量。 */
 .react-flow__controls {
   overflow: hidden;
   border: 1px solid var(--border);
@@ -76,6 +88,8 @@
 }
 
 .react-flow__controls-button {
+  width: 28px;
+  height: 28px;
   border-bottom: 1px solid var(--border);
   background: var(--card);
   color: var(--foreground);
