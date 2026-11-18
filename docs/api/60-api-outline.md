@@ -40,7 +40,7 @@
 }
 ```
 
-> **节点 `data`（2026-08 新增）**：按层级 schema（`OUTLINE_NODE_DATA_SCHEMAS`，shared 单一来源）校验——scene：`goal`/`conflict_levels`/`value_from`/`value_to`；chapter：`reversal`/`climax_scene`；volume：`climax_scene`/`inciting_scene`。引用字段（`climax_scene`/`inciting_scene`）宽松校验（任意场景节点 id），MVP 不校验引用范围。编辑 data 不自动生成 Delta。
+> **节点 `data`（2026-08 新增）**：按层级 schema（`OUTLINE_NODE_DATA_SCHEMAS`，shared 单一来源）校验——scene：`goal`/`conflict_levels`/`value_from`/`value_to`；chapter：`reversal`/`climax_scene` + **2026-11 工作面四字段** `status`(`draft`/`revision`/`final`)、`tags`(≤5 个，单值 1–24 字，trim)、`function`(`setup`/`advance`/`turn`/`resolve`/`breather`)、`tension`(`low`/`mid`/`high`)；scene：`tags` 同 schema（仅开放读写，UI 本轮只编辑章）；volume：`climax_scene`/`inciting_scene`。`tags` 是**章级剧情线标记**（自由文本），与 `advances` 等关系是两层语义：标签说「属于哪条线」，关系说「推进了哪条线」，不互相转换。引用字段（`climax_scene`/`inciting_scene`）宽松校验（任意场景节点 id），MVP 不校验引用范围。编辑 data 不自动生成 Delta。
 >
 > **节点 `metadata.textLength`（2026-09）**：仅 `with_metadata=true` 时返回的**章**统计——正文字数（= `document_records.content_text` 长度），大纲树与写作页卷章导航栏据此展示「已写 / 字数」而**不拉取正文全文**。与既有 `metadata.charCount`（关联角色数）不是同一字段，勿混用。
 >
