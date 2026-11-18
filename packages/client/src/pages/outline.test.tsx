@@ -39,19 +39,31 @@ vi.mock("../hooks/use-outline-loader", () => ({
 
 /** 节点更新时间（真实 ISO：元信息行只显示 `MM-DD`，完整时间进 `title`，两者都可断言） */
 const UPDATED_AT = "2026-01-05T08:05:00";
-const chapter = (id: string, title: string, children?: OutlineScene[]): OutlineChapter => ({
+const chapter = (
+  id: string,
+  title: string,
+  children?: OutlineScene[],
+  data?: Record<string, unknown>,
+): OutlineChapter => ({
   id,
   type: "chapter",
   title,
   updatedAt: UPDATED_AT,
   children,
+  ...(data === undefined ? {} : { data }),
 });
-const volume = (id: string, title: string, children: OutlineChapter[]): OutlineVolume => ({
+const volume = (
+  id: string,
+  title: string,
+  children: OutlineChapter[],
+  data?: Record<string, unknown>,
+): OutlineVolume => ({
   id,
   type: "volume",
   title,
   updatedAt: UPDATED_AT,
   children,
+  ...(data === undefined ? {} : { data }),
 });
 
 /** 卷1（ch-1（含场景 sc-1）、ch-2）+ 卷2（ch-3） */
@@ -227,6 +239,64 @@ describe("大纲页树视图：推演节点徽标", () => {
     expect(deduction).toBeGreaterThan(-1);
     expect(current).toBeGreaterThan(-1);
     expect(deduction).toBeLessThan(current);
+  });
+});
+
+// 章行第三行 = 剧情线标签预览（DESIGN.md `outline-page`「章行标签预览」）：仅章、仅 `data.tags` 非空，
+// 固定前 2 个 + `+N`（不按 rail 宽度量算）；场景 / 卷即使带 tags 也不显示。
+describe("大纲树 · 章行标签预览", () => {
+  const TAGGED: OutlineTree = {
+    id: "root",
+    type: "root",
+    schemaVersion: 1,
+    children: [
+      volume(
+        "vol-1",
+        "第一卷",
+        [
+          chapter(
+            "ch-1",
+            "雪夜出走",
+            [
+              {
+                id: "sc-1",
+                type: "scene",
+                title: "城外",
+                updatedAt: UPDATED_AT,
+                data: { tags: ["场景标签"] },
+              },
+            ],
+            { tags: ["复仇"] },
+          ),
+          chapter("ch-2", "旧盟友", undefined, { tags: ["复仇", "成长线", "伏笔"] }),
+          chapter("ch-3", "入城"),
+        ],
+        { tags: ["卷标签"] },
+      ),
+    ],
+  };
+
+  it("1 个标签：出 `#标签`（title = 完整标签名），不出现 `+N`", () => {
+    const row = rowHtml(render({ outline: TAGGED }), "ch-1");
+    expect(row).toContain(">#复仇<");
+    expect(row).toContain('title="复仇"');
+    expect(row).not.toContain("+1");
+  });
+
+  it("3 个标签：前 2 个 + `+1`，`+1` 的 title 含全部标签", () => {
+    const row = rowHtml(render({ outline: TAGGED }), "ch-2");
+    expect(row).toContain(">#复仇<");
+    expect(row).toContain(">#成长线<");
+    expect(row).not.toContain(">#伏笔<");
+    expect(row).toContain(">+1<");
+    expect(row).toContain('title="#复仇 #成长线 #伏笔"');
+  });
+
+  it("无标签的章 / 场景行 / 卷行：不渲染标签行（带 tags 也不显示）", () => {
+    const html = render({ outline: TAGGED });
+    expect(rowHtml(html, "ch-3")).not.toContain("#");
+    expect(rowHtml(html, "sc-1")).not.toContain("#场景标签");
+    expect(rowHtml(html, "vol-1")).not.toContain("#卷标签");
   });
 });
 

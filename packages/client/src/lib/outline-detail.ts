@@ -12,6 +12,7 @@ import {
   OUTLINE_STATUS_LABEL,
 } from "@whispering233/ai-editor-shared";
 import type { OutlineNodeType } from "./api";
+import { outlineTagsFromData } from "./outline-tags";
 
 /** 场景冲突层次 → 中文（麦基冲突三层次；checkbox 组标签） */
 export const CONFLICT_LEVEL_LABEL: Record<string, string> = {
@@ -105,13 +106,8 @@ export function chapterTagPool(tree: OutlineNode[]): Array<{ value: string; coun
   const walk = (nodes: OutlineNode[]): void => {
     for (const node of nodes) {
       if (node.type === "chapter" || node.type === "scene") {
-        const tags = node.data?.tags;
-        if (Array.isArray(tags)) {
-          for (const tag of tags) {
-            if (typeof tag === "string" && tag !== "") {
-              counts.set(tag, (counts.get(tag) ?? 0) + 1);
-            }
-          }
+        for (const tag of outlineTagsFromData(node.data)) {
+          counts.set(tag, (counts.get(tag) ?? 0) + 1);
         }
       }
       if (node.type !== "scene" && node.children) walk(node.children);

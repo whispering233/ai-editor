@@ -17,6 +17,7 @@ import { OUTLINE_STATUS_LABEL } from "@whispering233/ai-editor-shared";
 import type { CanvasChapterCard } from "../../lib/outline-canvas-layout";
 import type { NodeHookMark } from "../../lib/outline-hooks";
 import { tagTintClass } from "../../lib/tag-tint";
+import { previewOutlineTags } from "../../lib/outline-tags";
 import { cn } from "../../lib/utils";
 import { NodeHookMarkBadge } from "../outline/node-hook-badge";
 import { TypeChip } from "../ui/tag-chip";
@@ -49,8 +50,7 @@ export function ChapterCard({ data, selected }: NodeProps<ChapterCardNode>) {
     card.status === "revision" || card.status === "final"
       ? OUTLINE_STATUS_LABEL[card.status]
       : null;
-  const visibleTags = card.tags.slice(0, 2);
-  const tagOverflow = card.tags.length - visibleTags.length;
+  const { visible: visibleTags, overflow: tagOverflow } = previewOutlineTags(card.tags);
   return (
     <div
       data-written={card.written ? "true" : "false"}
