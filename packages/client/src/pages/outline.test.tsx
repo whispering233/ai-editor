@@ -662,4 +662,22 @@ describe("大纲详情表单 dirty 判定", () => {
     expect(isOutlineDetailDirty(withStatus, node.title, "", { status: "final" })).toBe(false);
     expect(isOutlineDetailDirty(withStatus, node.title, "", { status: "draft" })).toBe(true);
   });
+
+  // K5：TagsEditor 保留末行空串续输 ⇒ 空行 / 前后空格不算未提交变更（否则脏标记与「没有变更」互相打架）
+  describe("tags 归一", () => {
+    const tagged = { ...node, data: { tags: ["验收线"] } };
+
+    it("末行空串不算 dirty", () => {
+      expect(isOutlineDetailDirty(tagged, node.title, "", { tags: ["验收线", ""] })).toBe(false);
+    });
+
+    it("前后空格归一后不算 dirty", () => {
+      const spaced = { ...node, data: { tags: ["验收线", "支线"] } };
+      expect(isOutlineDetailDirty(spaced, node.title, "", { tags: [" 验收线 ", "支线"] })).toBe(false);
+    });
+
+    it("新增非空标签仍 dirty", () => {
+      expect(isOutlineDetailDirty(tagged, node.title, "", { tags: ["验收线", "支线"] })).toBe(true);
+    });
+  });
 });

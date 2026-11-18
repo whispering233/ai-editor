@@ -46,6 +46,7 @@ import { diffData } from "../lib/entity-detail";
 import {
   chapterTagPool,
   detailFieldsForNodeType,
+  normalizeOutlineDataForm,
   sceneNodeOptions,
   sceneSelectValue,
   toggleConflictLevel,
@@ -75,10 +76,15 @@ export function isOutlineDetailDirty(
   summaryValue: string,
   dataForm: Record<string, unknown>,
 ): boolean {
+  // 两侧都归一：末尾空行（TagsEditor 续输用）不算 dirty，基线里带空格的旧值也不会一进表单就脏
+  const baselineData = normalizeOutlineDataForm(baseline.data ?? {});
   return (
     shouldCommitTitle(baseline.title, titleValue) ||
     shouldCommitSummary(baseline.summary, summaryValue) ||
-    diffData(baseline.data ?? {}, normalizeDefaultStatus(baseline.data ?? {}, dataForm)) !== null
+    diffData(
+      baselineData,
+      normalizeDefaultStatus(baselineData, normalizeOutlineDataForm(dataForm)),
+    ) !== null
   );
 }
 
@@ -220,7 +226,9 @@ export default function OutlineDetail({
     const patch: UpdateOutlineBody = {};
     if (shouldCommitTitle(baseline.title, titleValue)) patch.title = title;
     if (shouldCommitSummary(baseline.summary, summaryValue)) patch.summary = summaryValue.trim();
-    const dataDiff = diffData(baseline.data ?? {}, dataForm);
+    // 归一后再 diff / 提交：tags 末尾空行不能进 payload（nodeTagsSchema min(1) 会 400）
+    const normalizedData = normalizeOutlineDataForm(dataForm);
+    const dataDiff = diffData(baseline.data ?? {}, normalizedData);
     if (dataDiff !== null) patch.data = dataDiff;
     if (Object.keys(patch).length === 0) {
       // 表单已与基线同值：node 可能被外部改名（rail）/ AI 写库更新，先让表单跟随服务端再归零基线，
@@ -236,10 +244,11 @@ export default function OutlineDetail({
     setSaveError(null);
     try {
       await updateOutlineNode(node.id, patch);
-      // 回写 trimmed 值并把基线前移到刚提交的值：保存后 dirty 立即归零（重拉的新 node 走同步 effect 收敛）
+      // 回写 trimmed / 归一值并把基线前移到刚提交的值：保存后 dirty 立即归零（重拉的新 node 走同步 effect 收敛）
       setTitleValue(title);
       setSummaryValue(summaryValue.trim());
-      setBaseline({ ...node, title, summary: summaryValue.trim(), data: dataForm });
+      setDataForm(normalizedData);
+      setBaseline({ ...node, title, summary: summaryValue.trim(), data: normalizedData });
       useUiStore.getState().showToast("已保存");
       await onReload();
     } catch (err) {

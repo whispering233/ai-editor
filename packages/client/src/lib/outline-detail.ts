@@ -152,6 +152,20 @@ export function sceneNodeOptions(
 }
 
 /**
+ * data 表单归一（保存提交与 dirty 判定共用）：`tags` 为数组时逐项 trim、丢弃空串——TagsEditor
+ * 为续输故意保留末行空串（回车 / `+ 添加`），原样提交会被 `nodeTagsSchema`（trim 后 min(1)）判 400。
+ * 其它 key 原样；无 tags 键或非数组时返回入参同一对象（不白造新对象）。
+ */
+export function normalizeOutlineDataForm(data: Record<string, unknown>): Record<string, unknown> {
+  if (!Array.isArray(data.tags)) return data;
+  const tags = data.tags
+    .filter((tag): tag is string => typeof tag === "string")
+    .map((tag) => tag.trim())
+    .filter((tag) => tag !== "");
+  return { ...data, tags };
+}
+
+/**
  * 引用字段「未设置」提交值：空串 ""（服务端 schema z.string.optional 不接受 null——
  * 部分合并传 null 会被 400 拒绝；空串合法且浅合并即覆盖清除）。表单值归一：
  * 缺失/空串 → ""（「（未设置）」选项），有值 → id。

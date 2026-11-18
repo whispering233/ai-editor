@@ -6,10 +6,12 @@ import {
   CONFLICT_LEVEL_LABEL,
   chapterTagPool,
   detailFieldsForNodeType,
+  normalizeOutlineDataForm,
   sceneNodeOptions,
   sceneSelectValue,
   toggleConflictLevel,
 } from "./outline-detail";
+import { diffData } from "./entity-detail";
 
 /** 造树：卷1（章1（场1/场2）、章2）+ 根直挂章3（无场景） */
 const tree: OutlineNode[] = [
@@ -170,5 +172,29 @@ describe("sceneSelectValue（引用字段「未设置」值归一）", () => {
     expect(sceneSelectValue("")).toBe("");
     expect(sceneSelectValue(42)).toBe("");
     expect(sceneSelectValue("sc-5")).toBe("sc-5");
+  });
+});
+
+describe("normalizeOutlineDataForm（tags 归一：末行空串 / 前后空格）", () => {
+  it("tags 数组：trim + 丢弃空串，其它 key 原样", () => {
+    expect(normalizeOutlineDataForm({ tags: ["验收线", "", "  b  "], status: "draft" })).toEqual({
+      tags: ["验收线", "b"],
+      status: "draft",
+    });
+    expect(normalizeOutlineDataForm({ tags: ["", "   "] })).toEqual({ tags: [] });
+  });
+
+  it("无 tags 键 / tags 非数组 → 返回入参同一对象", () => {
+    const noTags = { status: "draft" };
+    expect(normalizeOutlineDataForm(noTags)).toBe(noTags);
+    const scalarTags = { tags: "a" };
+    expect(normalizeOutlineDataForm(scalarTags)).toBe(scalarTags);
+  });
+
+  // K5 回归：TagsEditor 保留末行空串续输 → 归一后 payload 里不得再出现空串（schema min(1) 会 400）
+  it("diffData(normalize(...)) 提交的 tags 不含空串", () => {
+    const form = { tags: ["验收线", ""] };
+    expect(diffData({}, normalizeOutlineDataForm(form))).toEqual({ tags: ["验收线"] });
+    expect(diffData({ tags: ["验收线"] }, normalizeOutlineDataForm(form))).toBeNull();
   });
 });
