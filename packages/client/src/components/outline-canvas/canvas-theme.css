@@ -103,6 +103,18 @@
   background: var(--accent);
 }
 
+/* 左上工具条（筛选按钮 + Controls）：库给每个 Panel 15px 外边距 + 绝对定位；嵌套时内层
+   会再吃一份外距并叠在按钮上 ⇒ 内层归零外距、回到文档流，外距只留外层一份。 */
+.canvas-toolbar .react-flow__panel {
+  position: static;
+  margin: 0;
+}
+
+/* 筛选未命中：整卡透明度降到 25%（保留坐标与拖拽 / 选中交互，不删除、不重排） */
+.react-flow [data-filtered="true"] {
+  opacity: 0.25;
+}
+
 /* ===== 缩放分级（LOD，契约：DESIGN.md `outline-canvas`「缩放分级（LOD）」）=====
    档位类挂在包 ReactFlow 的容器上（`.lod-full` / `.lod-compact` / `.lod-far`，页面按
    `canvasLodLevel` 只在跨档时切换），显隐规则只在这一处：卡片组件只提供 `data-lod` 钩子。

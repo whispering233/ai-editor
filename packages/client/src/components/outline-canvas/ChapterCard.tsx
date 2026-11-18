@@ -28,13 +28,15 @@ export type ChapterCardData = {
   reading: boolean;
   /** 推演节点（= `config.deductionNodes` 命中本章）：章徽标旁的圆点 */
   deduction: boolean;
+  /** 未命中画布筛选：整卡降透明（坐标与拖拽 / 选中交互保留，不重排） */
+  filtered: boolean;
 };
 
 export type ChapterCardNode = Node<ChapterCardData, "chapter">;
 
 /** 章卡片（内容只读：拖动只改坐标、不改层级；连线走两侧 handle） */
 export function ChapterCard({ data, selected }: NodeProps<ChapterCardNode>) {
-  const { card, marks, reading, deduction } = data;
+  const { card, marks, reading, deduction, filtered } = data;
   const title = [
     `${card.volumeLabel === "" ? "" : `${card.volumeLabel}·`}${card.chapterLabel} ${card.title}`,
     card.sceneCount > 0 ? `${card.sceneCount} 场` : "",
@@ -52,6 +54,7 @@ export function ChapterCard({ data, selected }: NodeProps<ChapterCardNode>) {
   return (
     <div
       data-written={card.written ? "true" : "false"}
+      data-filtered={filtered ? "true" : "false"}
       className={cn(
         "relative flex h-full w-full flex-col gap-1 rounded-md border bg-card px-3 py-2",
         // 选中 / 聚焦 = primary 描边；hover = hairline-strong（不填充、不加阴影）

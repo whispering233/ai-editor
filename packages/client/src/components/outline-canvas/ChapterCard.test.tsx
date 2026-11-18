@@ -22,7 +22,7 @@ function card(over: Partial<CanvasChapterCard> = {}): CanvasChapterCard {
 function render(data: Partial<ChapterCardData> & { card: CanvasChapterCard }): string {
   const props = {
     id: data.card.id,
-    data: { marks: [], reading: false, deduction: false, ...data },
+    data: { marks: [], reading: false, deduction: false, filtered: false, ...data },
     selected: false,
   } as unknown as NodeProps<ChapterCardNode>;
   return renderToString(
@@ -61,5 +61,10 @@ describe("ChapterCard 第三行（状态 + 剧情线标签）", () => {
     expect(html).toContain("第1卷·第3章 开端 · 5 场");
     expect(html).toContain('data-written="true"');
     expect(render({ card: card() })).toContain('data-written="false"');
+  });
+
+  it("筛选未命中 → data-filtered=\"true\"（透明度钩子在 canvas-theme.css）", () => {
+    expect(render({ card: card(), filtered: true })).toContain('data-filtered="true"');
+    expect(render({ card: card() })).toContain('data-filtered="false"');
   });
 });
