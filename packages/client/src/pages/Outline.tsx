@@ -98,6 +98,8 @@ import {
   type DragTarget,
 } from "../lib/outline-tree";
 import { cn } from "../lib/utils";
+import { tagTintClass } from "../lib/tag-tint";
+import { outlineTagsFromData, previewOutlineTags } from "../lib/outline-tags";
 import { focusNewItem } from "../lib/new-item-focus";
 import { useSaveShortcut } from "../lib/save-shortcut";
 import { navigate } from "../hooks/use-route";
@@ -1084,6 +1086,9 @@ function OutlineRail({
       const numberLabel = labels.get(node.id);
       // 推演标记（§15；非章 / 未标记 → undefined，不渲染徽标）
       const deductionMark = deduction.byNode.get(node.id);
+      // 剧情线标签（DESIGN.md「章行标签预览」）：固定条数（`OUTLINE_TAG_PREVIEW_LIMIT`）+ `+N`，仅章行、仅非空时出第三行
+      const chapterTags = node.type === "chapter" ? outlineTagsFromData(node.data) : [];
+      const tagPreview = previewOutlineTags(chapterTags);
       // 行级新建子级：子类型由本行层级推导；null = 叶子（场），无按钮
       const childType = CHILD_TYPE[node.type];
       // 行根元素 props（右键菜单 trigger 与普通 div 共用；编辑态退化为普通 div）
@@ -1110,7 +1115,7 @@ function OutlineRail({
         style: { paddingLeft: depth * 20 + 8 },
         title: "拖动到目标行即可移动（上半=插前、下半=插后；目标行可承载时整行=落为子级）",
       };
-      // 行内容（第一行 + 摘要第二行 + 插入指示线）
+      // 行内容（第一行 + 摘要第二行 + 标签第三行 + 插入指示线）
       const rowChildren = (
         <>
           {/* 第一行：折叠箭头 | 类型徽标 | 标题 | 伏笔标记 | 右端操作区（阅读进度徽标 + 删除按钮，删除贴行尾）
@@ -1268,6 +1273,35 @@ function OutlineRail({
               )}
             </div>
           ) : null}
+          {/* 第三行：剧情线标签预览（仅章；缩进同摘要行占位链；标签只读——点标签 = 点行体进详情） */}
+          {chapterTags.length > 0 && (
+            <div className="mt-0.5 flex min-w-0 items-center gap-2">
+              <span className="-ml-2 w-6 shrink-0" />
+              <span className={cn("shrink-0", numberLabel !== undefined ? "min-w-14" : "w-7")} />
+              <span className="flex min-w-0 items-center gap-1">
+                {tagPreview.visible.map((tag) => (
+                  <span
+                    key={tag}
+                    title={tag}
+                    className={cn(
+                      "min-w-0 truncate rounded-sm px-1 text-xs text-foreground",
+                      tagTintClass(tag),
+                    )}
+                  >
+                    #{tag}
+                  </span>
+                ))}
+                {tagPreview.overflow > 0 && (
+                  <span
+                    className="shrink-0 text-xs text-muted-foreground"
+                    title={chapterTags.map((tag) => `#${tag}`).join(" ")}
+                  >
+                    +{tagPreview.overflow}
+                  </span>
+                )}
+              </span>
+            </div>
+          )}
           {/* 插入指示线（S13.1）：目标行上边缘（插前）/下边缘（插后）；共享 DropIndicator（primary 3px + 圆点） */}
           {insertBefore && <DropIndicator position="top" />}
           {insertAfter && <DropIndicator position="bottom" />}
@@ -1275,7 +1309,7 @@ function OutlineRail({
       );
       return (
         <div key={node.id}>
-          {/* 节点块（第一行 + 摘要第二行；整块可拖拽：编辑态/自身拖拽中禁用 draggable，避免文本选择与嵌套拖动）；
+          {/* 节点块（第一行 + 摘要第二行 + 标签第三行；整块可拖拽：编辑态/自身拖拽中禁用 draggable，避免文本选择与嵌套拖动）；
               data-node-id 为跨页定位锚点（U4：概览页点击阅读进度 → scrollIntoView 定位）；
               tabIndex=-1 使行可聚焦（URL 选中后按 Enter 触发新建子级 onKeyDown）；
               行级右键菜单（RowContextMenu）——注入会话上下文（focus_node_id）+ 建立关联

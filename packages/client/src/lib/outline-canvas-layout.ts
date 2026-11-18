@@ -28,6 +28,7 @@ import {
   numberVisibleOutline,
 } from "@whispering233/ai-editor-shared";
 import { findNode } from "./outline-tree";
+import { outlineTagsFromData } from "./outline-tags";
 
 /** 网格每行的章卡片数（换行档位常量单点；调它是布局决定，不是逐页参数） */
 export const CANVAS_CHAPTERS_PER_ROW = 5;
@@ -128,12 +129,6 @@ function enumField<T extends string>(value: unknown, allowed: readonly T[]): T |
     : undefined;
 }
 
-/** 标签窄化：非数组 / 空串 / 非字符串元素丢弃（长度与条数在写侧 schema 已限） */
-function tagList(value: unknown): string[] {
-  if (!Array.isArray(value)) return [];
-  return value.filter((tag): tag is string => typeof tag === "string" && tag !== "");
-}
-
 /** 大纲树 → 画布卡片（阅读序 = 可见章先序，与行编号同源）；`null` / 空树 → 空数组 */
 export function canvasChapterCards(tree: OutlineTree | null): CanvasChapterCard[] {
   const { chapters } = numberVisibleOutline(tree);
@@ -152,7 +147,7 @@ export function canvasChapterCards(tree: OutlineTree | null): CanvasChapterCard[
       chapterLabel: chapter.chapterLabel,
       sceneCount: scenes.filter((scene) => scene.deleted !== true).length,
       written: (node?.metadata?.textLength ?? 0) > 0,
-      tags: tagList(data.tags),
+      tags: outlineTagsFromData(data),
       ...(status === undefined ? {} : { status }),
       ...(narrFunction === undefined ? {} : { function: narrFunction }),
       ...(tension === undefined ? {} : { tension }),
