@@ -17,6 +17,7 @@ import { useProjectStore } from "../stores/project";
 import { useSaveArchive } from "../hooks/use-save-archive";
 import { useUiStore } from "../stores/ui";
 import { cn } from "../lib/utils";
+import { panelShortcutFor } from "../lib/panel-shortcuts";
 import { ChatPanel } from "./chat/ChatPanel";
 import { FeedbackHost } from "./feedback/FeedbackHost";
 import { CloudConflictDialog } from "./settings/cloud-conflict-dialog";
@@ -39,6 +40,28 @@ export function AppShell({ route, children }: { route: Route; children: ReactNod
   // 全站 Ctrl/Cmd + S 的存档阶段（契约 DESIGN.md §设置页「快捷键」区）：
   // 挂在外壳层 = 任意页面（含专注模式、左栏收起）按快捷键都能生成存档；无项目时只保存不存档
   useSaveArchive();
+
+  // 整栏快捷键（卡 L2，DESIGN.md §Layout「三栏」）：仅桌面 + 非专注模式注册；
+  // 可编辑区不抢键（块编辑器 Mod+B 保持加粗），口径与判定同在 lib/panel-shortcuts
+  useEffect(() => {
+    if (!isDesktop || focusMode) return;
+    function onKeyDown(e: KeyboardEvent) {
+      // 逐字段取值：DOM 事件字段在原型上，展开（`{...e}`）会丢
+      const panel = panelShortcutFor({
+        key: e.key,
+        ctrlKey: e.ctrlKey,
+        metaKey: e.metaKey,
+        altKey: e.altKey,
+        shiftKey: e.shiftKey,
+        target: e.target instanceof Element ? e.target : null,
+      });
+      if (panel === null || e.repeat) return;
+      e.preventDefault();
+      toggleCollapse(panel);
+    }
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [isDesktop, focusMode, toggleCollapse]);
 
   // 云端状态的「打开项目时那次检查」挂在外壳层（卡 C）：左栏收起时 NavRail 不挂载，
   // 不能只挂在那里——自动推送会改服务端同步状态，收起左栏同样需要复查与清理。
