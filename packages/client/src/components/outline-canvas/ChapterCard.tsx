@@ -1,6 +1,6 @@
 // 大纲画布卡片（画布上**唯一**的节点类型 = 章；契约：docs/ui/DESIGN.md `outline-canvas`）。
 //
-// 形态 = 平铺卡、三行：① `第N章`（`TypeChip` `tone="soft"`，**画布上唯一徽标**）+ 状态标记
+// 形态 = 平铺卡、三行：① `第N章`（`TypeChip` `tone="soft"`，**全量档画布上唯一徽标**）+ 状态标记
 // （在读 = 左侧 2px 内嵌条；推演 = 4px 圆点）+ 伏笔徽标（复用 `hook-mark`，可点跳伏笔详情，右对齐）；
 // ② 章名（14px 单行 truncate）；③ 写作状态（`draft` = 不显示、`revision` = 修正中、`final` = 定稿
 // + primary 圆点）+ 剧情线标签（`#标签` ≤ 2 个、超出 `+N`，色相复用 `tagTintClass`）——
