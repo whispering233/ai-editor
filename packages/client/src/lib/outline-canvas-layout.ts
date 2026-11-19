@@ -9,7 +9,7 @@
 //    行距按行算 = 该行最高卡片（`canvasCardHeight`）+ 间距，短卡行不从高卡行借高度；
 // ③ `canvasContentBounds` / `resolveInitialViewport`：首次进入（无存量视口）的落点——内容装得下就居中，
 //    装不下则钳到全量档下界并从左上角起步（居中裁切会把首列卡片推出画布外）；
-// ④ `canvasLodLevel`：缩放分级（全量 / 只留大章号）两档，阈值常量同在本模块；
+// ④ `canvasLodLevel`：缩放分级（全量 / far = 章名 + 数字角标）两档，阈值常量同在本模块；
 // ⑤ 坐标 / 视口的 localStorage 读写（`ai-editor:canvas:{projectId}`）：展示层偏好，**不进
 //    outline.json / 备份 / 云端包**（跨设备不同步是有意取舍，见 docs/design/config.md）。
 //
@@ -41,7 +41,7 @@ export const CANVAS_CARD_GAP = 24;
 /** 缩放区间（DESIGN.md：缩放 0.25–2）——MiniMap / Controls / 读侧兜底共用 */
 export const CANVAS_MIN_ZOOM = 0.25;
 export const CANVAS_MAX_ZOOM = 2;
-/** 全量档（完整卡面）的最小缩放；更低只留 26px 章号 */
+/** 全量档（完整卡面）的最小缩放；更低切 far 档（26px 章名 + 数字角标） */
 export const CANVAS_LOD_FULL_MIN_ZOOM = 0.72;
 /**
  * 首次进入视口的缩放下界：首屏必须落在「全量」档且卡面不被压到最小——一进来就是半截卡面，
@@ -79,7 +79,7 @@ export interface CanvasBounds {
   height: number;
 }
 
-/** 缩放分级档位（DESIGN.md `outline-canvas`「缩放分级（LOD）」）：全量 / 只留大章号 */
+/** 缩放分级档位（DESIGN.md `outline-canvas`「缩放分级（LOD）」）：全量 / far（章名 + 数字角标） */
 export type CanvasLodLevel = "full" | "far";
 
 /** 卡片高度的判据输入（第三行有无）；布局与页面共用同一处推导 */
@@ -106,7 +106,9 @@ export interface CanvasChapterCard {
   title: string;
   /** 卷号文案（`第N卷`）；**存量直挂 root 的章** = 空串（title 里省略该段） */
   volumeLabel: string;
-  /** 章号徽标文案（`第N章`）——画布上唯一徽标 */
+  /** 章号数值（1-based，与 `chapterLabel` 同源）：far 档左上角角标只显示它 */
+  chapterNumber: number;
+  /** 章号徽标文案（`第N章`）——全量档画布上唯一徽标 */
   chapterLabel: string;
   /** 可见场景数（软删场景不计；0 不进 title） */
   sceneCount: number;
@@ -144,6 +146,7 @@ export function canvasChapterCards(tree: OutlineTree | null): CanvasChapterCard[
       id: chapter.chapterId,
       title: chapter.chapterTitle,
       volumeLabel: chapter.volumeLabel,
+      chapterNumber: chapter.chapterNumber,
       chapterLabel: chapter.chapterLabel,
       sceneCount: scenes.filter((scene) => scene.deleted !== true).length,
       written: (node?.metadata?.textLength ?? 0) > 0,
@@ -181,7 +184,7 @@ export function layoutCanvasChapters(
   return positions;
 }
 
-/** 缩放到档位（阈值单源在本模块：`>= 0.72` 全量、更低只留大章号） */
+/** 缩放到档位（阈值单源在本模块：`>= 0.72` 全量、更低 far（章名 + 数字角标）） */
 export function canvasLodLevel(zoom: number): CanvasLodLevel {
   return zoom >= CANVAS_LOD_FULL_MIN_ZOOM ? "full" : "far";
 }

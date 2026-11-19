@@ -17,6 +17,7 @@ function card(over: Partial<CanvasChapterCard> = {}): CanvasChapterCard {
     id: "ch-1",
     title: "开端",
     volumeLabel: "第1卷",
+    chapterNumber: 1,
     chapterLabel: "第1章",
     sceneCount: 0,
     written: false,

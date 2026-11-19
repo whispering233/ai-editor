@@ -206,6 +206,8 @@
 
 - **画布交互矩阵扩张（2026-11 有意不做）** — 现状：只有单卡选中、拖摆、拖连、删边、MiniMap / Controls；无框选、多选、对齐吸附、边重连（改端点）。触发条件：用户要求批量整理（移动 / 删除 / 改连）。最小修法：先评估库自带能力（`selectionOnDrag` / `snapToGrid` / `reconnectable`）是否够用，够则开关 + token 调整，不够再补自研——不为此换库。
 
+- **画布远档恒定屏幕字号（2026-11-19 有意不做）** — 现状：far 档 26px 章名 / 14px 数字角标在 0.25 倍率下屏幕约 6.5 / 3.5px，仍不可读；等比缩放的物理下限。触发条件：用户在 0.25 附近仍需要读章名 / 章号。最小修法：far 档标题与角标按 `calc(1 / zoom)` 反向缩放并夹上限（需把 zoom 写到 CSS 变量或节点级 `useStore` 订阅），先做像素核对，不要先加第三档。
+
 - **antd 组件上的 `absolute` 定位（2026-11 实测）** — 现状：antd 会给 `.ant-btn` 等组件注入 `position: relative`，与 Tailwind 的 `.absolute` 同特异性但注入更晚 ⇒ 直接写在 antd 组件的 `className` 上会被压回 `relative`，元素静默贴到错误位置（类型检查与单测全绿，只有像素能发现）。当前靠约定：定位一律挂外层 `div`。触发条件：同类缺陷再现一次 ⇒ 在 `design-discipline.test.ts` 加源码扫描规则（antd 组件的 `className` 里出现 `absolute` / `fixed` / `sticky`）。
 
 - **码字悬浮面板的两处观感短板（2026-11 UI 实测登记，P3）**

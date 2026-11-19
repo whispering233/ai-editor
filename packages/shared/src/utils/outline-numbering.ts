@@ -21,6 +21,8 @@ export interface OutlineVolumeNumber {
 export interface OutlineChapterNumber {
   chapterId: string;
   chapterTitle: string;
+  /** 章号数值（1-based，与 `chapterLabel` 同源）：画布 far 档只显示这个数字，不从标签文案解析 */
+  chapterNumber: number;
   /** 章编号徽标文案（`第M章`） */
   chapterLabel: string;
   /** 所属卷 id；**存量直挂 root 的章** = `""` */
@@ -87,6 +89,7 @@ export function numberVisibleOutline(tree: DeductionTreeLike | null): VisibleOut
     if (owner === undefined) return; // 无归属的章：不成行（章号仍按其先序下标，不因跳过而重排）
     chapters.push({
       chapterId,
+      chapterNumber: i + 1,
       chapterLabel: `第${i + 1}章`,
       chapterTitle: owner.chapterTitle,
       volumeId: owner.volumeId,

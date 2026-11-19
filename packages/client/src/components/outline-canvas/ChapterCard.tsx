@@ -1,6 +1,6 @@
 // 大纲画布卡片（画布上**唯一**的节点类型 = 章；契约：docs/ui/DESIGN.md `outline-canvas`）。
 //
-// 形态 = 平铺卡、三行：① `第N章`（`TypeChip` `tone="soft"`，**画布上唯一徽标**）+ 状态标记
+// 形态 = 平铺卡、三行：① `第N章`（`TypeChip` `tone="soft"`，**全量档画布上唯一徽标**）+ 状态标记
 // （在读 = 左侧 2px 内嵌条；推演 = 4px 圆点）+ 伏笔徽标（复用 `hook-mark`，可点跳伏笔详情，右对齐）；
 // ② 章名（14px 单行 truncate）；③ 写作状态（`draft` = 不显示、`revision` = 修正中、`final` = 定稿
 // + primary 圆点）+ 剧情线标签（`#标签` ≤ 2 个、超出 `+N`，色相复用 `tagTintClass`）——
@@ -12,6 +12,8 @@
 // 左右两个 handle 是连线的落点（source 在右、target 在左，与卡片从左到右的网格顺向一致）：
 // 尺寸 / 配色只在 canvas-theme.css 映射，本组件不写色值。
 // 选中态只换描边：选中 / 聚焦 = primary，否则 hairline + hover hairline-strong（不填充、不加阴影）。
+// far 档（容器类 `lod-far`）另在左上角常显纯数字章号（`data-lod="far-number"`，只给数值不给「第/章」；
+// 显隐与配色全在 canvas-theme.css）。
 import { Handle, Position, type Node, type NodeProps } from "@xyflow/react";
 import { OUTLINE_STATUS_LABEL } from "@whispering233/ai-editor-shared";
 import type { CanvasChapterCard } from "../../lib/outline-canvas-layout";
@@ -68,6 +70,8 @@ export function ChapterCard({ data, selected }: NodeProps<ChapterCardNode>) {
       )}
       <Handle type="target" position={Position.Left} />
       <Handle type="source" position={Position.Right} />
+      {/* far 档左上角纯数字章号（默认 `display: none`，见 canvas-theme.css） */}
+      <span data-lod="far-number">{card.chapterNumber}</span>
       <span data-lod="head" className="flex min-w-0 items-center gap-1">
         <TypeChip tone="soft" className="min-w-14 justify-center tabular-nums">
           {card.chapterLabel}
@@ -110,8 +114,6 @@ export function ChapterCard({ data, selected }: NodeProps<ChapterCardNode>) {
           {tagOverflow > 0 && <span className="shrink-0">+{tagOverflow}</span>}
         </span>
       )}
-      {/* far 档的大章号（非 far 档由 CSS 隐藏）：缩到很小后唯一可读的信息 */}
-      <span data-lod="far-label">{card.chapterLabel}</span>
     </div>
   );
 }

@@ -74,11 +74,11 @@ describe("numberVisibleOutline（展示口径编号：卷序 + 全局章序）",
 
   it("章号 = 可见章先序（跨卷连续，含存量直挂 root 的章）；场景不编号", () => {
     const { chapters } = numberVisibleOutline(tree());
-    expect(chapters.map((c) => [c.chapterId, c.chapterLabel, c.chapterTitle])).toEqual([
-      ["ch-1", "第1章", "第一章"],
-      ["ch-2", "第2章", "第二章"],
-      ["ch-3", "第3章", "第三章"],
-      ["ch-9", "第4章", "旧根级章"],
+    expect(chapters.map((c) => [c.chapterId, c.chapterNumber, c.chapterLabel, c.chapterTitle])).toEqual([
+      ["ch-1", 1, "第1章", "第一章"],
+      ["ch-2", 2, "第2章", "第二章"],
+      ["ch-3", 3, "第3章", "第三章"],
+      ["ch-9", 4, "第4章", "旧根级章"],
     ]);
   });
 
@@ -100,6 +100,7 @@ describe("numberVisibleOutline（展示口径编号：卷序 + 全局章序）",
     const rootChapter = numberVisibleOutline(tree()).chapters.find((c) => c.chapterId === "ch-9");
     expect(rootChapter).toEqual({
       chapterId: "ch-9",
+      chapterNumber: 4,
       chapterLabel: "第4章",
       chapterTitle: "旧根级章",
       volumeId: "",

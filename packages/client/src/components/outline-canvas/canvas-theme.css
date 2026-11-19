@@ -120,28 +120,40 @@
    `canvasLodLevel` 只在跨档时切换），显隐规则只在这一处：卡片组件只提供 `data-lod` 钩子。
    视口缩放**不改字号**（14px × 0.5 = 7px 不可读），换的是卡面颗粒度：两档。 */
 
-/* 大章号：只在 far 档出现（全量档恒隐藏；它始终在 DOM 里，显隐不靠 JS） */
-[data-lod="far-label"] {
-  display: none;
-}
-
-/* far：只留大章号（+ 在读条，它在布局外、不属这三段） */
+/* far：章名 + 左上角纯数字章号（+ 在读条，它在布局外、不属这几段） */
 .lod-far [data-lod="head"],
-.lod-far [data-lod="title"],
 .lod-far [data-lod="status"] {
   display: none;
 }
 
-.lod-far [data-lod="far-label"] {
-  display: flex;
-  flex: 1;
-  align-items: center;
-  justify-content: center;
+/* 章号角标：默认（全量档）不显示，far 档才占左上角。纯数字、无底色 / 无描边——它只回答
+   「这是第几章」，不能抢 26px 章名；数字与全量档徽标同源（卡片 `chapterNumber`）。 */
+[data-lod="far-number"] {
+  display: none;
+}
+
+.lod-far [data-lod="far-number"] {
+  display: block;
+  position: absolute;
+  top: 2px;
+  left: 8px;
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+  color: var(--muted-foreground);
+}
+
+/* 章名 = far 档唯一的内容行：单行居中、放大到 26px（`truncate` 由卡片类的
+   overflow / text-overflow / white-space 承担）；`margin-block: auto` 让它在
+   68 / 92 两种卡高里都垂直居中 */
+.lod-far [data-lod="title"] {
+  display: block;
+  margin-block: auto;
   font-size: 26px;
   font-weight: 600;
-  font-variant-numeric: tabular-nums;
-  line-height: 1;
-  color: var(--foreground);
+  line-height: 1.2;
+  text-align: center;
 }
 
 /* 未写章在 far 档换底色（surface-muted = --accent）：两档底色的对比让「哪几章还空着」在缩略规模上仍可辨。
