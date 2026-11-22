@@ -139,7 +139,7 @@ describe("canvasChapterCards（大纲树 → 画布卡片）", () => {
         volume("vol-1", "第一卷", [
           {
             ...chapter("ch-1", "开端"),
-            data: { status: "final", tags: ["伏笔", "转折"], function: "turn", tension: "high" },
+            data: { status: "final", tags: ["伏笔", "转折"] },
           },
         ]),
       ]),
@@ -154,8 +154,6 @@ describe("canvasChapterCards（大纲树 → 画布卡片）", () => {
       written: false,
       tags: ["伏笔", "转折"],
       status: "final",
-      function: "turn",
-      tension: "high",
     });
   });
 
@@ -165,7 +163,7 @@ describe("canvasChapterCards（大纲树 → 画布卡片）", () => {
         volume("vol-1", "第一卷", [
           {
             ...chapter("ch-1", "开端"),
-            data: { status: "unknown", tags: "伏笔", function: 42, tension: "extreme" },
+            data: { status: "unknown", tags: "伏笔" },
           },
           {
             ...chapter("ch-2", "转折"),

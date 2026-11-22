@@ -15,18 +15,8 @@
 //
 // 写侧清理：`pruneCanvasPositions` 只留仍在可见大纲里的章（已删章 / 换书残留的条目不会越攒越多）。
 // 读侧防御：坏 JSON / 形状不对 → 空状态（画布照常按网格渲染，不抛错、不阻塞页面）。
-import type {
-  ChapterFunction,
-  ChapterTension,
-  OutlineStatus,
-  OutlineTree,
-} from "@whispering233/ai-editor-shared";
-import {
-  CHAPTER_FUNCTIONS,
-  CHAPTER_TENSIONS,
-  OUTLINE_STATUS,
-  numberVisibleOutline,
-} from "@whispering233/ai-editor-shared";
+import type { OutlineStatus, OutlineTree } from "@whispering233/ai-editor-shared";
+import { OUTLINE_STATUS, numberVisibleOutline } from "@whispering233/ai-editor-shared";
 import { findNode } from "./outline-tree";
 import { outlineTagsFromData } from "./outline-tags";
 
@@ -118,10 +108,6 @@ export interface CanvasChapterCard {
   tags: string[];
   /** 写作状态（`data.status`；缺省 = 草稿，非法枚举按未设置处理） */
   status?: OutlineStatus;
-  /** 叙事功能（`data.function`；卡面不展示，筛选用） */
-  function?: ChapterFunction;
-  /** 张力度（`data.tension`；卡面不展示，筛选用） */
-  tension?: ChapterTension;
 }
 
 /** 枚举字段窄化：`node.data` 是宽松 record，非法值一律按未设置处理 */
@@ -140,8 +126,6 @@ export function canvasChapterCards(tree: OutlineTree | null): CanvasChapterCard[
     // 只读章节点的 `data` / `metadata`（with_metadata=true 的联查统计）：缺省按空处理，不新增请求
     const data = node?.data ?? {};
     const status = enumField(data.status, OUTLINE_STATUS);
-    const narrFunction = enumField(data.function, CHAPTER_FUNCTIONS);
-    const tension = enumField(data.tension, CHAPTER_TENSIONS);
     return {
       id: chapter.chapterId,
       title: chapter.chapterTitle,
@@ -152,8 +136,6 @@ export function canvasChapterCards(tree: OutlineTree | null): CanvasChapterCard[
       written: (node?.metadata?.textLength ?? 0) > 0,
       tags: outlineTagsFromData(data),
       ...(status === undefined ? {} : { status }),
-      ...(narrFunction === undefined ? {} : { function: narrFunction }),
-      ...(tension === undefined ? {} : { tension }),
     };
   });
 }
