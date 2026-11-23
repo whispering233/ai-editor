@@ -845,6 +845,13 @@ function historicalProposalCalls(
 
 // ============ 消息条目：user 气泡 / assistant 无气泡排版 + 思维链 + 历史工具折叠记录 ============
 
+/** 正文 markdown 的流式口径（DESIGN.md `chat-message-stream`）：只开 `hasNextChunk`（「还有后续」，流结束才一次性定稿）
+ * 与「未闭合语法按已写完显示」。**不用 `streaming={true}` 布尔预设**——它同时打开 `incremental` 和 `typewriter`：
+ * typewriter 与 delta 逐段到达叠加成双动画；`incremental` 只在顶格标题处切段，散文正文没有切分点。
+ * 对象提到模块级：每帧新建字面量会破坏 x-markdown 的 props 引用稳定性（内置 memo 失效）。 */
+const MARKDOWN_STREAMING = { hasNextChunk: true, incompleteMarkdown: "complete" } as const;
+const MARKDOWN_DONE = { hasNextChunk: false, incompleteMarkdown: "complete" } as const;
+
 /** 历史 tool 消息按 toolCallId 挂到 assistant.toolCalls 行（成对；孤儿半对不渲染；导出供渲染走查测试）
  *
  * 工具行的结果/状态有**两个来源**（同一条消息两种时期）：
@@ -859,11 +866,14 @@ export function MessageItem({
   toolResults,
   liveTools,
   liveProposalToolCallIds,
+  streaming = false,
 }: {
   message: ChatMessageView;
   toolResults: Map<string, ChatMessageView>;
   liveTools?: Map<string, StreamToolRecord>;
   liveProposalToolCallIds?: ReadonlySet<string>;
+  /** 本条还在流式生成（只有尾条可能为真）：决定正文 markdown 的 `hasNextChunk` */
+  streaming?: boolean;
 }) {
   const { token } = theme.useToken();
   if (message.role === "user") {
@@ -885,8 +895,8 @@ export function MessageItem({
     );
   }
   if (message.role === "tool") return null; // tool 消息仅在所属 assistant 调用行内渲染
-  // assistant：x-markdown 流式正文（增量渲染内建：已完成消息 content 引用稳定，React.memo 不重渲；
-  // 流式尾部块由 x-markdown streaming 优化处理）
+  // assistant：x-markdown 流式正文（已完成消息 content 引用稳定，React.memo 不重渲；
+  // 流式尾条由 x-markdown 的渲染期缓存承接，口径 = 上面两个 MARKDOWN_* 常量）
   const toolCalls = Array.isArray(message.toolCalls) ? message.toolCalls : [];
   const proposalCalls = historicalProposalCalls(toolCalls, liveProposalToolCallIds);
   const content = message.content ?? "";
@@ -931,7 +941,11 @@ export function MessageItem({
         );
       })}
       {content.trim() !== "" ? (
-        <Bubble content={<Markdown>{content}</Markdown>} />
+        <Bubble
+          content={
+            <Markdown streaming={streaming ? MARKDOWN_STREAMING : MARKDOWN_DONE}>{content}</Markdown>
+          }
+        />
       ) : // 空内容（流式占位 / 空消息）：不渲染（流式思考指示器由 MessageList 提供）
       null}
       {/* 历史提案卡：正文之后（只读；live 组卡按 toolCallId 去重） */}
@@ -1411,6 +1425,8 @@ function MessageList({ disabled }: { disabled: boolean }) {
             <MessageItem
               key={m.id}
               message={m}
+              // 正文 markdown 的流式标记只对尾条生效（历史消息已是定稿，不需要渲染期缓存）
+              streaming={streaming && m.id === messages[messages.length - 1]?.id}
               toolResults={toolResults}
               // 运行态状态只对**尾条**消息生效：工具 id 全局唯一，但状态表是「本轮」的，
               // 下发给历史消息只会在 id 复用时错误改写旧行的 ✓/✗

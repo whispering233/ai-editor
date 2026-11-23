@@ -684,7 +684,7 @@ components:
 ### 会话（右栏）
 
 **`chat-bubble-user`** — user 消息：`{colors.surface-muted}` 灰底（`colorFillTertiary`）+ `{rounded.md}` + `{colors.primary}` 字色。**禁止用 `colorPrimaryBg`**：主色 seed 是深墨（`#37352f`），antd 派生的 `colorPrimaryBg` 实测为 `#787771`（中灰）——灰底上压墨字，对比度 ~1.9:1，不可读（历史 bug）。
-**`chat-bubble-assistant`** — assistant 消息：无底透明 + 正文排版（长文本可读性优先，不用气泡包）。
+**`chat-bubble-assistant`** — assistant 消息：无底透明 + 正文排版（长文本可读性优先，不用气泡包）。正文 markdown = `@ant-design/x-markdown`，流式口径 = `streaming={{ hasNextChunk: 尾条流式中, incompleteMarkdown: 'complete' }}`（单一来源 = `ChatPanel` 的 `MARKDOWN_STREAMING` / `MARKDOWN_DONE`）：流**结束才一次性定稿**，未闭合的强调 / 行内代码 / 链接文字按已写完显示（不扣住不说）。**不用 `streaming={true}` 布尔预设**：它连开 `incremental`（只在顶格标题处切段，散文无切分点）与 `typewriter`（与 delta 到达叠加成双动画）；也**不开 `tail` 光标**（不新增视觉语言）。
 **`chat-message-stream`（消息流顺序与滚动跟随，2026-09）** — 一条 assistant 消息内部的顺序 = **思维链 → 工具调用行（按调用顺序）→ 正文**；**流式期与重载后同序**（运行时不得另起一份「消息之后的工具行」列表——两份渲染会出现「答案在工具行上方」的错序与同 id 重复行）。运行态与落库后同一份数据：`tool_execution_start` 把内部形状 `{id, tool, args}` 并入流式消息的 `toolCalls`（按 id 防重），`message_end` 按 id **合并**（不是覆盖）。两种形状由 `asToolCall` 归一——**服务端投影形状** `{id, name, arguments}`（SSE `message_end` 帧与历史接口的**同一份**投影：pi 原生 toolCall 块 `{type:"toolCall",id,name,arguments}` 只去掉 `type`）与**运行态内部形状** `{id, tool, args}`；**新增工具行来源一律走这个归一入口**，否则展开态摘要拿不到 args（只显动词短语，2026-09 oracle 实测）。
 - **贴底跟随**：内容增长只在「用户当前贴底」时把滚动条带到末尾（阈值 = `STICK_BOTTOM_THRESHOLD_PX`，单一来源在 `ChatPanel.tsx`，此处不复述数字）；用户上滚即脱离跟随、停在原地读完，滚回底部自动恢复；发送新一轮 / 切换会话与历史加载时**强制恢复跟随**。**不设「回到底部」按钮**（滚到底即恢复，有意不加）。
 - **为什么不是「工具行放思维链上方」**：真实时序是 思考→工具→思考→工具→正文，倒置只把尾巴换成思维链，抖动根因（无条件贴底 + 逐次调用折/展思维链）仍在。

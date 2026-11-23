@@ -9,6 +9,11 @@
 
 ## [Unreleased]
 
+### Changed
+
+- **`@ant-design/x` 与 `@ant-design/x-markdown` 升到 2.10.0**（`^2.9.0` → `^2.10.0`，peerDependencies 未变，无破坏性变更）。
+- **助手正文的流式 markdown 渲染**：chat 正文改用 x-markdown 的 `streaming` 配置（`hasNextChunk` 跟随尾条流式状态 + 未闭合语法按已写完显示），流结束才一次性定稿；不启用 `typewriter` / `incremental` / `tail`（与 delta 到达双动画、散文无标题切分点、不新增视觉语言）。
+
 ## [v0.0.65] - 2026-11-22
 
 ### Added

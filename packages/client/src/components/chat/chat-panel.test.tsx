@@ -36,9 +36,14 @@ vi.mock("../../hooks/use-sse", () => ({
 }));
 
 // x-markdown 的 CJS lib 包内 require css，vitest node 直跑会 SyntaxError——
-// mock 为纯文本渲染（真实渲染路径由 vite build 管线验证，见 antd-smoke.test 注记）
+// mock 为纯文本渲染（真实渲染路径由 vite build 管线验证，见 antd-smoke.test 注记）；
+// 收到的 props 记一份，供正文流式口径用例断言（组件内部不可从 HTML 观测）
+const markdownCalls = vi.hoisted(() => [] as Array<{ streaming?: Record<string, unknown> }>);
 vi.mock("@ant-design/x-markdown", () => ({
-  default: ({ children }: { children?: string }) => children ?? null,
+  default: (props: { children?: string; streaming?: Record<string, unknown> }) => {
+    markdownCalls.push(props);
+    return props.children ?? null;
+  },
 }));
 
 import {
@@ -292,6 +297,28 @@ describe("thinking-block 契约（默认折叠摘要 / 展开正文 / 流式自�
     expect(out).toContain("思考过程 · 10 字");
     // 折叠态不渲染正文（全量文本仍保留在 message.thinkingText，展开后才可见）
     expect(out).not.toContain("本轮累积的全量思维链");
+  });
+
+  it("正文 markdown 的流式口径：尾条 hasNextChunk 随流式开关，且不用 `streaming={true}` 预设（会附带 typewriter）", () => {
+    const message = {
+      id: "local-3",
+      sessionId: "",
+      role: "assistant" as const,
+      content: "正文",
+      createdAt: "2026-08-01T10:00:00Z",
+    };
+    markdownCalls.length = 0;
+    html(<MessageItem message={message} toolResults={new Map()} streaming />);
+    expect(markdownCalls.at(-1)?.streaming).toEqual({
+      hasNextChunk: true,
+      incompleteMarkdown: "complete",
+    });
+    // 历史 / 已结束的消息：关掉 hasNextChunk（一次性定稿），其余口径同一份
+    html(<MessageItem message={message} toolResults={new Map()} />);
+    expect(markdownCalls.at(-1)?.streaming).toEqual({
+      hasNextChunk: false,
+      incompleteMarkdown: "complete",
+    });
   });
 });
 
