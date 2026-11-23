@@ -509,10 +509,11 @@ function ErrorBar() {
 // ============ 工具调用链（历史 assistant.toolCalls 与运行时 streamTools 共用） ============
 
 /** 工具行的 ThoughtChain 状态：只给「进行中 / 失败」染色——成功不传（x 会把整行文字染成
- * colorSuccess，一轮五六个调用就把右栏刷成一片绿；成功 = 常态，不需信号）。 */
-function toolItemStatus(err: boolean, ok: boolean): "error" | "loading" | undefined {
-  if (err) return "error";
-  return ok ? undefined : "loading";
+ * colorSuccess，一轮五六个调用就把右栏刷成一片绿；成功 = 常态，不需信号）。
+ * `status` 缺省 = 尚无结果（既无本轮 live 记录、也无配对的 tool 消息）⇒ loading。 */
+function toolItemStatus(status?: "running" | "ok" | "error"): "error" | "loading" | undefined {
+  if (status === "error") return "error";
+  return status === "ok" ? undefined : "loading";
 }
 
 /** 展开区的参数摘要：**挂载即解析**（展开才请求，收起即卸载重置）；id 经 names/resolve 换名称，
@@ -564,12 +565,11 @@ function ToolArgs({ toolName, args }: { toolName: string; args?: unknown }) {
   );
 }
 
-/** 一条 assistant 消息的全部工具调用 → ThoughtChain 项（顺序 = 调用顺序，链线把它们串起来；
- * 导出供渲染走查测试）。
+/** 一条 assistant 消息的全部工具调用 → ThoughtChain 项（顺序 = 调用顺序，链线把它们串起来）。
  * **不用 x 的 `collapsible`**：它的折叠头是 `<div onClick>`，无 `role`/`tabIndex`/`aria-expanded`
  * （键盘不可操作）⇒ 折叠态由我们自己的 `<button>` + 条件 `content` 承担（让掉它的折叠动画）。
  * 折叠头之下另有联网来源卡片（`chat-source-cards`）：进 `footer`——该槽位**恒显**，无需展开。 */
-export function toolChainItems({
+function toolChainItems({
   calls,
   toolResults,
   liveTools,
@@ -588,18 +588,15 @@ export function toolChainItems({
     const live = liveTools?.get(callId);
     const resultMsg = callId ? toolResults.get(callId) : undefined;
     const result = live?.result ?? resultMsg?.content;
+    // 结果状态：显式 `status` 优先（运行态来自本轮事件；历史行由 tool 消息推导）
     const status =
       live?.status ?? (resultMsg?.isError === true ? "error" : resultMsg ? "ok" : undefined);
-    // 结果状态：显式 `status` 优先（运行态来自本轮事件；历史行由 tool 消息推导）；
-    // 无 `status` 时以「result 挂载即成功」兜底（供直接构造项的场景）
-    const err = status === "error";
-    const ok = status === undefined ? result !== undefined : status === "ok";
     const open = openKeys.has(callId);
     const toolName = call.tool ?? call.name ?? "工具";
     const cards = parseSourceCards(toolName, result);
     return {
       key: callId,
-      status: toolItemStatus(err, ok),
+      status: toolItemStatus(status),
       title: (
         <button
           type="button"
