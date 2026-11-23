@@ -16,7 +16,7 @@
 | **前端框架** | React 19 | 生态成熟，组件化 |
 | **前端构建** | Vite 7 | 快速 HMR，Tree-shaking |
 | **状态管理** | Zustand 5 | 轻量、TypeScript 优秀、selector 自动优化 |
-| **前端组件基座** | antd v6（ConfigProvider zhCN + 双主题 algorithm + **Notion 工作区暖灰 token 覆盖**）+ `@ant-design/icons`（**全站图标集**；功能性自绘例外 `PanelToggleIcon` 与品牌标记见 `docs/ui/DESIGN.md`）；会话场景 `@ant-design/x`（Bubble/Sender/Thought）+ `@ant-design/x-markdown`；**块文档编辑器 `@blocknote/core` + `@blocknote/react` + `@blocknote/ariakit`（exact pin）** | 成熟组件红利统一视觉与交互；主题 = antd token 派发（**视觉契约见 `docs/ui/DESIGN.md`**）；颜色一律经 antd token，禁止硬编码色值/色类；块编辑器是**受控的第二套表皮**（只改 `--bn-*` 变量，见 DESIGN.md） |
+| **前端组件基座** | antd v6（ConfigProvider zhCN + 双主题 algorithm + **Notion 工作区暖灰 token 覆盖**）+ `@ant-design/icons`（**全站图标集**；功能性自绘例外 `PanelToggleIcon` 与品牌标记见 `docs/ui/DESIGN.md`）；会话场景 `@ant-design/x`（`Bubble`/`Sender`/`Conversations`）+ `@ant-design/x-markdown`；**块文档编辑器 `@blocknote/core` + `@blocknote/react` + `@blocknote/ariakit`（exact pin）** | 成熟组件红利统一视觉与交互；主题 = antd token 派发（**视觉契约见 `docs/ui/DESIGN.md`**）；颜色一律经 antd token，禁止硬编码色值/色类；块编辑器是**受控的第二套表皮**（只改 `--bn-*` 变量，见 DESIGN.md） |
 | **样式** | Tailwind CSS 4（**仅布局 utility，不含颜色**）+ `docs/ui/DESIGN.md` 视觉契约 + `design-discipline.test.ts` 源码扫描 | v4 CSS-first 配置；**antd 样式是运行时无层 CSS，会静默压掉 Tailwind 工具类**——antd 组件根元素上不挂 `w-/h-/px-/py-/justify-/rounded-/text-*` |
 | **Schema 验证** | Zod 4 | 运行时类型安全，**仅 API 入参**（工具参数改用 TypeBox） |
 | **路由** | 轻量 hash-based（自制 `useHashRoute`） | 单页桌面应用不需要 React Router；路由一级化（见 `ui/DESIGN.md`） |
