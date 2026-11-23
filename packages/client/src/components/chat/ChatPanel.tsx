@@ -2,7 +2,7 @@
 // 常驻右栏（桌面态宽度 = clamp(视口×40%, 240, 960)，中栏吸收剩余——1:5:4 在 1600-2400 视口精确成立，
 // 见 DESIGN.md §Layout），<1024px 折叠为抽屉（fixed + 遮罩，开关在 main-toolbar 右侧）
 // 结构（自上而下）：会话标题行（下拉切换同项目会话 + 新会话）→ 断连横幅 → 错误条 →
-// 消息流（user 气泡 / assistant 无气泡宋体排版 / 历史工具折叠记录与运行时工具行同位置——
+// 消息流（user 气泡 / assistant 无气泡宋体排版 / 历史与运行态工具行同位置（一条 ThoughtChain）——
 // 消息内 思考 → 工具行 → 正文 → 历史提案卡，见 DESIGN.md `chat-message-stream` / 提案卡）→
 // focus 小条 → 输入区（Enter 发送 / Shift+Enter 换行）
 // 无项目打开时整体禁用（灰显 + 「打开项目后可用」，不请求会话数据，「位置与形态」）
@@ -506,7 +506,7 @@ function ErrorBar() {
   );
 }
 
-// ============ 工具调用折叠记录行（历史 assistant.toolCalls 与运行时 streamTools 共用） ============
+// ============ 工具调用链（历史 assistant.toolCalls 与运行时 streamTools 共用） ============
 
 /** 工具行的 ThoughtChain 状态：只给「进行中 / 失败」染色——成功不传（x 会把整行文字染成
  * colorSuccess，一轮五六个调用就把右栏刷成一片绿；成功 = 常态，不需信号）。 */
@@ -850,7 +850,7 @@ function historicalProposalCalls(
     .map((call) => ({ id: call.id, tool: call.tool, args: call.args }));
 }
 
-// ============ 消息条目：user 气泡 / assistant 无气泡排版 + 思维链 + 历史工具折叠记录 ============
+// ============ 消息条目：user 气泡 / assistant 无气泡排版 + 思维链 + 工具调用链 ============
 
 /** 正文 markdown 的流式口径（DESIGN.md `chat-message-stream`）：只开 `hasNextChunk`（「还有后续」，流结束才一次性定稿）
  * 与「未闭合语法按已写完显示」。**不用 `streaming={true}` 布尔预设**——它同时打开 `incremental` 和 `typewriter`：

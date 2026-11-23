@@ -121,9 +121,3 @@ export function SourceCardList({ cards }: { cards: SourceCardView[] }) {
     </div>
   );
 }
-
-/** 来源卡片（导出供渲染走查测试）：顺序 = 工具返回顺序；整卡新窗口外链。 */
-export function SourceCards({ toolName, result }: { toolName: string; result?: unknown }) {
-  const cards = parseSourceCards(toolName, result);
-  return cards === null ? null : <SourceCardList cards={cards} />;
-}

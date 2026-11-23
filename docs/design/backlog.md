@@ -228,8 +228,8 @@
   - 现状：单测只覆盖纯函数 `isNearBottom`（真值表）；`ChatPanel.tsx` 的三处接线——`onScroll` 同步意图、`stickRef` 的上升沿复位（`streaming` / `messagesLoading`）、滚动 effect 里的 `if (stickRef.current)` 守卫——**一起删掉也不会红**（oracle 变异探针 6：38 passed 全绿），即「抖动 / 停不住」的修复本体只靠浏览器核对。
   - 触发条件：再改这三个 effect / 事件时，或需要回归护栏时。
   - 最小修法：把「贴底意图」抽成纯函数（如 `nextStick(prev, { nearBottom, streamingRise, loadingRise })`）配真值表测试；容器赋值本身仍需浏览器核对（无 jsdom）。**同一面还包括**：`MessageList` 里 `liveTools` 只下发尾条消息的收紧（oracle 变异探针 8：回退成全量下发仍全绿，无咬合）。
-- **已完结轮的工具行 ✓/✗ 在再发一轮后回落成灰点（2026-09 消息流 oracle 登记，已知口径）**
-  - 现状：工具状态（ok/error）只存在于本轮瞬态的 `streamTools`，`sendMessage` 会清空它；而历史 `role=tool` 消息要重载会话才有 ⇒ 上一轮的工具行在下一轮开始后显示回「调用中」灰点（直到重载）。与改动前同口径（非回归），但视觉上像「又在跑」。
+- **已完结轮的工具行在再发一轮后回落成「进行中」（2026-09 消息流 oracle 登记，已知口径）**
+  - 现状：工具状态（ok/error）只存在于本轮瞬态的 `streamTools`，`sendMessage` 会清空它；而历史 `role=tool` 消息要重载会话才有 ⇒ 上一轮的工具行在下一轮开始后回落成「进行中」（转圈 + 主色行，旧实现是灰点，直到重载）。与改动前同口径（非回归），但视觉上像「又在跑」。
   - 触发条件：用户盯着上一轮的工具行看下一轮生成时。
   - 最小修法：把「已完结轮的 callId → status」挂在消息上（随流式消息一起存，重载后被历史 `toolResults` 接管），**不新增全局表**。
 - **`agent_end` 之后的同流重试帧被整段丢弃（2026-09 消息流 oracle 登记，既有）**
@@ -237,10 +237,10 @@
   - 触发条件：真机遇到「报错重试后回答不上屏」。
   - 最小修法：先真机复现确认帧序，再定是延后清 `currentStreamMsgId`（守卫改成「本轮序号」）还是让重试事件在清空后仍被接受。
 
-- **工具调用状态点只有颜色，无可读文案（2026-09 消息流 oracle 登记，低危）**
-  - 现状：`ChatPanel.tsx` 的 `ToolCallRow` 写的是 `<Badge status=… title="调用中/调用成功/调用失败" />`，而 **antd 6 的 status 型 Badge 不渲染 `title`**（SSR 实测产物只有 `<span class="ant-badge-status-dot ant-badge-status-processing">`）——运行中/成功/失败三态**除颜色外无任何可读信号**（悬停无提示、屏幕阅读器无文本）。
+- **工具行状态无可读中文文案（2026-09 登记，2026-11 部分收口）**
+  - 现状：工具行改用 x `ThoughtChain` 的状态轴后，失败 / 进行中带的是 antd 图标自带的 `role="img"` + `aria-label`（`close-circle` / `loading`，英文）；**成功有意不发任何信号**（回落序号），因此「这次调用成功了吗」仍只能从「不是红叉/不是转圈」反推。
   - 触发条件：做无障碍收口，或用户反馈「看不出这次调用成功没有」。
-  - 最小修法：状态点补 `aria-label`（或换成 `title` 生效的包裹元素），测试断可访问名而非类名。
+  - 最小修法：在工具行标题里给状态补充中文可访问名（`aria-label` / `sr-only` 文案），测试断可访问名而非类名。
 
 - **云端恢复框的「导入路径 409 CLOUD_NOT_CONFIGURED」无去设置页入口（2026-09 云端恢复 oracle 登记，低危）**
   - 现状：`cloud-remote-books-dialog.tsx` 只在**列表拉取**失败时置 `loadNotConfigured`；若打开框后凭据被清（罕见），点「导入」得到 409，文案承诺「去设置页」但框内没有那个按钮。

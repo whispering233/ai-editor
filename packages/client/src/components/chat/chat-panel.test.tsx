@@ -4,7 +4,7 @@
 // SSR 限制（重要）：zustand v5 useStore 的 getServerSnapshot = 创建时初始态（hydration 一致性设计），
 // renderToString 只能渲染「初始态」而看不到 setState 后的当前态——因此激活会话→newSession 的
 // 状态迁移在 store 层验证（stores/chat.test.ts「setCurrentSession / newSession」既有用例 + 本文件
-// 下方走查），组件渲染层用「叶子组件直渲染富数据」覆盖（ToolCallRow/MessageItem/ProposalCardView，
+// 下方走查），组件渲染层用「叶子组件直渲染富数据」覆盖（MessageItem/ProposalCardView/工具行，
 // 即任务侦察标注的 ChatPanel 200-280 行未读路径——已导出供测试）。
 // 走查结论（根因评估）：静态走查未见确定性崩溃点——setCurrentSession(null) 清空
 // messages/proposals/streamTools/streaming 后各渲染分支均落在空值守卫（MessageItem 的
@@ -615,7 +615,7 @@ describe("新会话路径叶子组件富数据渲染走查（问题 3）+ 提案
     const html = renderToString(<MessageItem message={wireMsg} toolResults={new Map()} />);
     expect(html).toContain("调用了"); // 名称自 function.name（不再回退「工具」；SSR 词间含注释节点，分开断言）
     expect(html).toContain("get_entity");
-    // args 解析由 asToolCall 单测覆盖（ToolCallRow 展开态为 client state，SSR 不可达）
+    // args 解析由 asToolCall 单测覆盖（工具行展开态为 client state，SSR 不可达）
     const call = asToolCall(wireMsg.toolCalls![0]);
     expect(call).toEqual({
       id: "call-w1",
@@ -661,7 +661,7 @@ describe("新会话路径叶子组件富数据渲染走查（问题 3）+ 提案
     const call = asToolCall(message.toolCalls![0]);
     expect(call.args).toEqual({ id: "char-1" }); // 非 undefined：展开态摘要能渲染「查询实体：实体「…」」
     expect(call.tool).toBe("get_entity");
-    // 展开态渲染由 summarizeToolCall 单测覆盖（ToolCallRow 展开为 client state，SSR 不可达）
+    // 展开态渲染由 summarizeToolCall 单测覆盖（工具行展开为 client state，SSR 不可达）
   });
 
   it("MessageItem：tool 消息本身返回 null（成对渲染，不单独出现）", () => {
