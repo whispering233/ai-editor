@@ -204,10 +204,10 @@ importers:
         specifier: ^6.3.4
         version: 6.3.4(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
       '@ant-design/x':
-        specifier: ^2.10.0
+        specifier: 2.10.0
         version: 2.10.0(antd@6.6.2(react-dom@19.2.8(react@19.2.8))(react@19.2.8))(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
       '@ant-design/x-markdown':
-        specifier: ^2.10.0
+        specifier: 2.10.0
         version: 2.10.0(@types/react@19.2.18)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
       '@blocknote/ariakit':
         specifier: 0.54.2

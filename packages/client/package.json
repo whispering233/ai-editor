@@ -13,8 +13,8 @@
   },
   "dependencies": {
     "@ant-design/icons": "^6.3.4",
-    "@ant-design/x": "^2.10.0",
-    "@ant-design/x-markdown": "^2.10.0",
+    "@ant-design/x": "2.10.0",
+    "@ant-design/x-markdown": "2.10.0",
     "@blocknote/ariakit": "0.54.2",
     "@blocknote/core": "0.54.2",
     "@blocknote/react": "0.54.2",

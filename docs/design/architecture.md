@@ -153,8 +153,8 @@ shared（纯类型/常量/工具，零 Node 依赖，可被 client 安全 tree-s
     "react-dom": "^19.0.0",
     "antd": "^6.6.2",                          // 组件基座（token 派发 + cssVar 双算法）
     "@ant-design/icons": "^6.3.4",             // 全站图标集（功能性自绘例外见 DESIGN.md）
-    "@ant-design/x": "^2.10.0",                // 会话组件族（Bubble/Sender/Conversations/ThoughtChain）
-    "@ant-design/x-markdown": "^2.10.0",       // 流式 markdown 渲染
+    "@ant-design/x": "2.10.0",                  // 会话组件族（Bubble/Sender/Conversations/ThoughtChain；exact pin）
+    "@ant-design/x-markdown": "2.10.0",         // 流式 markdown 渲染（exact pin）
     "@blocknote/core": "0.54.2",              // 块文档模型/编辑器内核（exact pin）
     "@blocknote/react": "0.54.2",             // React 绑定（useCreateBlockNote / BlockNoteView）
     "@blocknote/ariakit": "0.54.2",           // 表皮变体（自带 54KB CSS；无额外 UI 库 peer）

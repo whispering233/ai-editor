@@ -28,7 +28,7 @@
 
 ### 依赖与运行时
 
-- 第三方运行时依赖一律**精确版本**（`@earendil-works/*`、`@blocknote/core|react|ariakit`、`electron`、`electron-updater`；禁 `^` / `~`）。升级 = 一个显式 commit 齐抬版本 + 全量测试 + **无锁安装冒烟**（`pnpm pack:test` + `pnpm start:test`；`pnpm test` 绿不代表装得上）+ 该包的浏览器 / 打包态核对。
+- **精确版本（禁 `^` / `~`）** = 与我们代码咬合的第三方包：`@earendil-works/*`、`@blocknote/core|react|ariakit`、`@ant-design/x`、`@ant-design/x-markdown`（我们依赖其内部结构——`ThoughtChain` 标题字重 / `footer` 槽位 / `div onClick` 折叠头，patch 漂移会静默改掉这些前提）、`@xyflow/react`、`drizzle-orm`、`undici`、`electron`、`electron-updater`；其余运行时库（`react` / `antd` / `hono` / `zod` / `better-sqlite3` 等）沿用 `^`。升级 = 一个显式 commit 齐抬版本 + 全量测试 + **无锁安装冒烟**（`pnpm pack:test` + `pnpm start:test`；`pnpm test` 绿不代表装得上）+ 该包的浏览器 / 打包态核对。
 - typebox 的 `Type` / `Static` 经 `pi-ai` 重导出，不单独装 typebox。传递依赖不需要自建解析锁（上游内部 pi 依赖均为精确版本）。**声明位置按 import 性质**：运行时 import 进 `dependencies`。
 - 升级 pi 后复查三处「与 pi 同构」断言：`packages/server/src/http-dispatcher.ts` 与 pi `core/http-dispatcher.ts` 的差异只允许「不跟踪 `installedGlobalFetch`」；pi-ai 凭据解析顺序；会话文件类型（`session-manager.d.ts`）。
 - 升级后复核模型目录：provider 家集合有增删改名要同步 `PROVIDER_ICONS`；`resolveDefaultModel` 对取不到的已选模型静默回落首个可用模型（不是缺陷）。
