@@ -204,11 +204,11 @@ importers:
         specifier: ^6.3.4
         version: 6.3.4(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
       '@ant-design/x':
-        specifier: ^2.9.0
-        version: 2.9.0(antd@6.6.2(react-dom@19.2.8(react@19.2.8))(react@19.2.8))(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
+        specifier: ^2.10.0
+        version: 2.10.0(antd@6.6.2(react-dom@19.2.8(react@19.2.8))(react@19.2.8))(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
       '@ant-design/x-markdown':
-        specifier: ^2.9.0
-        version: 2.9.0(@types/react@19.2.18)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
+        specifier: ^2.10.0
+        version: 2.10.0(@types/react@19.2.18)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
       '@blocknote/ariakit':
         specifier: 0.54.2
         version: 0.54.2(@floating-ui/dom@1.8.0)(@types/hast@3.0.5)(@types/react-dom@19.2.4(@types/react@19.2.18))(@types/react@19.2.18)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)(refractor@5.0.0)
@@ -436,14 +436,14 @@ packages:
       react: ^0.14.0 || ^15.0.1 || ^16.0.0 || ^17.0.0 || ^18.0.0 || ^19.0.0
       react-dom: ^0.14.0 || ^15.0.1 || ^16.0.0 || ^17.0.0 || ^18.0.0 || ^19.0.0
 
-  '@ant-design/x-markdown@2.9.0':
-    resolution: {integrity: sha512-IwYUky9Fi3y86wouFQ3rjx/DyKFUm/eAidiU/leVD0u6hAfN4INDWltWuZqe1FRRwOE7DJdSxweDyD6+/B6oQg==}
+  '@ant-design/x-markdown@2.10.0':
+    resolution: {integrity: sha512-R49v405eZ/Z/rvv6Vp3Fo7TmI9gERwNOsFtIpK+DwKcueHm69sk58yCKhg2zMQ9R6i5pWkNIEtxPkdMAPS7M0w==}
     peerDependencies:
       react: '>=18.0.0'
       react-dom: '>=18.0.0'
 
-  '@ant-design/x@2.9.0':
-    resolution: {integrity: sha512-m3N2nprrPG/D0n93B/fBFhjpvSaJAb2IDF6w0rX0ycYXSGxtgrJQvqSI33Jhx6gxUHj495zdIzqA1NMFld9iQA==}
+  '@ant-design/x@2.10.0':
+    resolution: {integrity: sha512-OxBCe9zLRqP/reRbEefGhU8/7inGQ1I5hDTF4GfgaY7+X0kGYON20fl+YCu5bsWDCT1eXl5d9VfmHyoNvWk1XQ==}
     peerDependencies:
       antd: ^6.1.1
       react: '>=18.0.0'
@@ -3748,11 +3748,6 @@ packages:
     peerDependencies:
       marked: '>=15.0.0'
 
-  marked@15.0.12:
-    resolution: {integrity: sha512-8dD6FusOQSrpv9Z1rdNMdlSgQOIP880DHqnohobOmYLElGEqAL/JvxvuxZO16r4HtjTlfPRDC1hbvxC9dPN2nA==}
-    engines: {node: '>= 18'}
-    hasBin: true
-
   marked@16.4.2:
     resolution: {integrity: sha512-TI3V8YYWvkVf3KJe1dRkpnjs68JUPyEa5vjKrp1XEEJUAOaQc+Qj+L1qWbPd0SJuAdQkFU0h73sXXqwDYxsiDA==}
     engines: {node: '>= 20'}
@@ -5011,19 +5006,19 @@ snapshots:
       react-dom: 19.2.8(react@19.2.8)
       throttle-debounce: 5.0.2
 
-  '@ant-design/x-markdown@2.9.0(@types/react@19.2.18)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)':
+  '@ant-design/x-markdown@2.10.0(@types/react@19.2.18)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)':
     dependencies:
       clsx: 2.1.1
       dompurify: 3.4.14
       html-react-parser: 5.2.17(@types/react@19.2.18)(react@19.2.8)
       katex: 0.16.47
-      marked: 15.0.12
+      marked: 16.4.2
       react: 19.2.8
       react-dom: 19.2.8(react@19.2.8)
     transitivePeerDependencies:
       - '@types/react'
 
-  '@ant-design/x@2.9.0(antd@6.6.2(react-dom@19.2.8(react@19.2.8))(react@19.2.8))(react-dom@19.2.8(react@19.2.8))(react@19.2.8)':
+  '@ant-design/x@2.10.0(antd@6.6.2(react-dom@19.2.8(react@19.2.8))(react@19.2.8))(react-dom@19.2.8(react@19.2.8))(react@19.2.8)':
     dependencies:
       '@ant-design/colors': 8.0.1
       '@ant-design/cssinjs': 2.1.2(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
@@ -8791,8 +8786,6 @@ snapshots:
   marked-cjk-friendly@0.1.2(marked@18.0.11):
     dependencies:
       marked: 18.0.11
-
-  marked@15.0.12: {}
 
   marked@16.4.2: {}
 

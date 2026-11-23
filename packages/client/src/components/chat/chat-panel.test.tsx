@@ -4,7 +4,7 @@
 // SSR 限制（重要）：zustand v5 useStore 的 getServerSnapshot = 创建时初始态（hydration 一致性设计），
 // renderToString 只能渲染「初始态」而看不到 setState 后的当前态——因此激活会话→newSession 的
 // 状态迁移在 store 层验证（stores/chat.test.ts「setCurrentSession / newSession」既有用例 + 本文件
-// 下方走查），组件渲染层用「叶子组件直渲染富数据」覆盖（ToolCallRow/MessageItem/ProposalCardView，
+// 下方走查），组件渲染层用「叶子组件直渲染富数据」覆盖（MessageItem/ProposalCardView/工具行，
 // 即任务侦察标注的 ChatPanel 200-280 行未读路径——已导出供测试）。
 // 走查结论（根因评估）：静态走查未见确定性崩溃点——setCurrentSession(null) 清空
 // messages/proposals/streamTools/streaming 后各渲染分支均落在空值守卫（MessageItem 的
@@ -36,9 +36,14 @@ vi.mock("../../hooks/use-sse", () => ({
 }));
 
 // x-markdown 的 CJS lib 包内 require css，vitest node 直跑会 SyntaxError——
-// mock 为纯文本渲染（真实渲染路径由 vite build 管线验证，见 antd-smoke.test 注记）
+// mock 为纯文本渲染（真实渲染路径由 vite build 管线验证，见 antd-smoke.test 注记）；
+// 收到的 props 记一份，供正文流式口径用例断言（组件内部不可从 HTML 观测）
+const markdownCalls = vi.hoisted(() => [] as Array<{ streaming?: Record<string, unknown> }>);
 vi.mock("@ant-design/x-markdown", () => ({
-  default: ({ children }: { children?: string }) => children ?? null,
+  default: (props: { children?: string; streaming?: Record<string, unknown> }) => {
+    markdownCalls.push(props);
+    return props.children ?? null;
+  },
 }));
 
 import {
@@ -61,7 +66,6 @@ import {
   ProposalRow,
   STICK_BOTTOM_THRESHOLD_PX,
   ThinkingBlock,
-  ToolCallRow,
   MENU_KEY_DELETE_SESSION,
   sessionItemMenu,
   sessionItems,
@@ -293,6 +297,28 @@ describe("thinking-block 契约（默认折叠摘要 / 展开正文 / 流式自�
     // 折叠态不渲染正文（全量文本仍保留在 message.thinkingText，展开后才可见）
     expect(out).not.toContain("本轮累积的全量思维链");
   });
+
+  it("正文 markdown 的流式口径：尾条 hasNextChunk 随流式开关，且不用 `streaming={true}` 预设（会附带 typewriter）", () => {
+    const message = {
+      id: "local-3",
+      sessionId: "",
+      role: "assistant" as const,
+      content: "正文",
+      createdAt: "2026-08-01T10:00:00Z",
+    };
+    markdownCalls.length = 0;
+    html(<MessageItem message={message} toolResults={new Map()} streaming />);
+    expect(markdownCalls.at(-1)?.streaming).toEqual({
+      hasNextChunk: true,
+      incompleteMarkdown: "complete",
+    });
+    // 历史 / 已结束的消息：关掉 hasNextChunk（一次性定稿），其余口径同一份
+    html(<MessageItem message={message} toolResults={new Map()} />);
+    expect(markdownCalls.at(-1)?.streaming).toEqual({
+      hasNextChunk: false,
+      incompleteMarkdown: "complete",
+    });
+  });
 });
 
 describe("ChatPanel 挂载渲染冒烟（SSR 初始态：zustand v5 getServerSnapshot = 初始态，覆盖挂载路径崩溃）", () => {
@@ -494,12 +520,12 @@ describe("消息流顺序与滚动跟随（DESIGN.md `chat-message-stream`）", 
     expect(iThinking).toBeGreaterThanOrEqual(0);
     expect(iThinking).toBeLessThan(iTool);
     expect(iTool).toBeLessThan(iText);
-    // 运行态优先于历史结果（Badge status 型不渲染 title，故按状态点类名断言）
-    expect(html).toContain("ant-badge-status-processing");
-    expect(html).not.toContain("ant-badge-status-success");
+    // 运行态优先于历史结果（状态轴按状态类名断言：进行中 = loading）
+    expect(html).toContain("ant-thought-chain-status-loading");
+    expect(html).not.toContain("ant-thought-chain-status-error");
   });
 
-  it("MessageItem：liveTools 的完成态与失败态映射到 ✓ / ✗（与历史 toolResults 同口径）", () => {
+  it("MessageItem：liveTools 的完成态不染色、失败态走 error 状态轴（与历史 toolResults 同口径）", () => {
     const calls: unknown[] = [
       { id: "call-ok", tool: "get_entity", args: {} },
       { id: "call-err", tool: "get_outline", args: {} },
@@ -519,8 +545,9 @@ describe("消息流顺序与滚动跟随（DESIGN.md `chat-message-stream`）", 
     const html = renderToString(
       <MessageItem message={message} toolResults={new Map()} liveTools={liveTools} />,
     );
-    expect(html).toContain("ant-badge-status-success");
-    expect(html).toContain("ant-badge-status-error");
+    // 成功不染绿（成功 = 常态，gutter 回落序号），失败才走 error 状态轴
+    expect(html).not.toContain("ant-thought-chain-status-success");
+    expect(html.split("ant-thought-chain-status-error").length - 1).toBe(1);
   });
 });
 
@@ -588,7 +615,7 @@ describe("新会话路径叶子组件富数据渲染走查（问题 3）+ 提案
     const html = renderToString(<MessageItem message={wireMsg} toolResults={new Map()} />);
     expect(html).toContain("调用了"); // 名称自 function.name（不再回退「工具」；SSR 词间含注释节点，分开断言）
     expect(html).toContain("get_entity");
-    // args 解析由 asToolCall 单测覆盖（ToolCallRow 展开态为 client state，SSR 不可达）
+    // args 解析由 asToolCall 单测覆盖（工具行展开态为 client state，SSR 不可达）
     const call = asToolCall(wireMsg.toolCalls![0]);
     expect(call).toEqual({
       id: "call-w1",
@@ -634,7 +661,7 @@ describe("新会话路径叶子组件富数据渲染走查（问题 3）+ 提案
     const call = asToolCall(message.toolCalls![0]);
     expect(call.args).toEqual({ id: "char-1" }); // 非 undefined：展开态摘要能渲染「查询实体：实体「…」」
     expect(call.tool).toBe("get_entity");
-    // 展开态渲染由 summarizeToolCall 单测覆盖（ToolCallRow 展开为 client state，SSR 不可达）
+    // 展开态渲染由 summarizeToolCall 单测覆盖（工具行展开为 client state，SSR 不可达）
   });
 
   it("MessageItem：tool 消息本身返回 null（成对渲染，不单独出现）", () => {
@@ -649,56 +676,137 @@ describe("新会话路径叶子组件富数据渲染走查（问题 3）+ 提案
     expect(renderToString(<MessageItem message={toolMsg} toolResults={new Map()} />)).toBe("");
   });
 
-  it("ToolCallRow：running / ok / error 三态渲染不抛异常（含 args 字符串与对象两种形状）", () => {
+  it("工具行：running / ok / error 三态（ThoughtChain 状态轴：进行中 = loading、失败 = error、成功不染色）", () => {
+    const assistant = (calls: unknown[]): ChatMessageView => ({
+      id: "m-tool",
+      sessionId: "sess-1",
+      role: "assistant",
+      content: "",
+      toolCalls: calls,
+      createdAt: "t0",
+    });
+    const live = (record: StreamToolRecord): Map<string, StreamToolRecord> =>
+      new Map([[record.id, record]]);
+
     const running = renderToString(
-      <ToolCallRow toolName="get_entity" args={{ id: "char-1" }} status="running" />,
-    );
-    expect(running).toContain("get_entity");
-    const ok = renderToString(
-      <ToolCallRow
-        toolName="get_entity"
-        args={JSON.stringify({ id: "char-1" })}
-        result={'{"name":"张三"}'}
-        status="ok"
+      <MessageItem
+        message={assistant([{ id: "c1", tool: "get_entity", args: { id: "char-1" } }])}
+        toolResults={new Map()}
+        liveTools={live({ id: "c1", tool: "get_entity", status: "running" })}
       />,
     );
-    expect(ok).toContain("get_entity");
-    expect(ok).toContain("ant-badge-status-success"); // 成功标记（antd Badge dot，替代旧 ✓ 字符）
+    expect(running).toContain("get_entity");
+    expect(running).toContain("ant-thought-chain-status-loading"); // 进行中
+
     const error = renderToString(
-      <ToolCallRow
-        toolName="update_entity"
-        args={undefined}
-        result="错误：实体不存在"
-        status="error"
+      <MessageItem
+        message={assistant([{ id: "c2", tool: "update_entity" }])}
+        toolResults={new Map()}
+        liveTools={live({
+          id: "c2",
+          tool: "update_entity",
+          status: "error",
+          result: "错误：实体不存在",
+        })}
       />,
     );
     expect(error).toContain("update_entity");
-    expect(error).toContain("ant-badge-status-error"); // 失败标记（替代旧 ✗ 字符）
-    const running2 = renderToString(
-      <ToolCallRow toolName="get_entity" args={{ id: "char-1" }} status="running" />,
+    expect(error).toContain("ant-thought-chain-status-error"); // 失败
+
+    // 成功：不传 status（成功 = 常态）⇒ gutter 回落序号，行文字不被染绿
+    const ok = renderToString(
+      <MessageItem
+        message={assistant([{ id: "c3", name: "get_entity", arguments: { id: "char-1" } }])}
+        toolResults={
+          new Map([
+            [
+              "c3",
+              {
+                id: "t3",
+                sessionId: "sess-1",
+                role: "tool",
+                toolCallId: "c3",
+                content: '{"name":"张三"}',
+                createdAt: "t1",
+              },
+            ],
+          ])
+        }
+      />,
     );
-    expect(running2).toContain("ant-badge-status-processing"); // 进行中
+    expect(ok).not.toContain("ant-thought-chain-status-");
+    // 折叠头仍是我们自己的 button（x 的 collapsible 是 div onClick，键盘不可操作）
+    expect(ok.split('aria-expanded="false"').length - 1).toBe(1);
   });
 
-  it("ToolCallRow：联网来源卡片在折叠头之后、无需展开即可见（非来源工具零影响）", () => {
+  it("工具行：联网来源卡片在折叠头之后、无需展开即可见（非来源工具零影响）", () => {
     // 数据源 = 工具结果文本（`stringifyToolResult` 产物）
     const result = JSON.stringify([
       { title: "第一条命中", url: "https://www.example.com/a", summary: "摘要" },
       { title: "第二条命中", url: "https://example.org/b" },
     ]);
     const html = renderToString(
-      <ToolCallRow toolName="web_search" args={{ query: "测试" }} result={result} status="ok" />,
+      <MessageItem
+        message={{
+          id: "m-src",
+          sessionId: "sess-1",
+          role: "assistant",
+          content: "",
+          toolCalls: [{ id: "c1", name: "web_search", arguments: { query: "测试" } }],
+          createdAt: "t0",
+        }}
+        toolResults={
+          new Map([
+            [
+              "c1",
+              {
+                id: "t1",
+                sessionId: "sess-1",
+                role: "tool",
+                toolCallId: "c1",
+                content: result,
+                createdAt: "t1",
+              },
+            ],
+          ])
+        }
+      />,
     );
     const header = html.indexOf("调用了"); // SSR 在文本与表达式间插 <!-- -->，断言分片
     const card = html.indexOf("第一条命中");
     expect(header).toBeGreaterThan(-1);
     expect(html).toContain("web_search");
     expect(card).toBeGreaterThan(header); // 折叠头之下
-    // 折叠态 children（原始 JSON 区）不渲染 ⇒ 卡片出现即“无需展开”
+    // 折叠态内容（原始 JSON 区）不渲染 ⇒ 卡片出现即“无需展开”
     expect(html).not.toContain("max-h-40");
     expect(html).toContain(">example.com</span>"); // 域名（本条无 date → meta 只有域名）
+
     const other = renderToString(
-      <ToolCallRow toolName="get_entity" args={{ id: "char-1" }} result={result} status="ok" />,
+      <MessageItem
+        message={{
+          id: "m-other",
+          sessionId: "sess-1",
+          role: "assistant",
+          content: "",
+          toolCalls: [{ id: "c9", name: "get_entity", arguments: { id: "char-1" } }],
+          createdAt: "t0",
+        }}
+        toolResults={
+          new Map([
+            [
+              "c9",
+              {
+                id: "t9",
+                sessionId: "sess-1",
+                role: "tool",
+                toolCallId: "c9",
+                content: result,
+                createdAt: "t1",
+              },
+            ],
+          ])
+        }
+      />,
     );
     expect(other).not.toContain("第一条命中");
   });

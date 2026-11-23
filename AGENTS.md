@@ -91,6 +91,8 @@
 - **设定页（master-detail）实现侧**：壳 = `pages/SettingWorkbench`，`SettingRail` 不自持选中（`nodeId` prop + `onSelect`，**选中唯一来源 = URL**）；树内写操作成功后经 `onMutated` 通知宿主走 `notifyDataChanged()`，**详情 dirty 时不发**（不得静默重置表单）；详情收起 = 整列不渲染且不改存宽度、点行不自动展开；rail 默认宽 / 边界 / 持久化 key 只在 `hooks/use-setting-rail.ts` 定义（窄屏两级互斥）。契约见 `DESIGN.md` `setting-page`。
 - **工作台子栏页头单源 = `components/ui/panel-header.tsx`**（仅写作 / 大纲 / 设定的两列）：标题行 40 + 元信息行 24 + 分割线（`PageDivider` 必须是 header 直接子节点、横向内距挂 `insetClassName`，否则线两端内缩）；rail 头 `mb-0`、详情头 `-mx-6` + `insetClassName="px-6"`；操作一律 24px 图标、保存是唯一 `primary`；子栏面板开关唯一实现 = `components/ui/panel-toggle-button.tsx`（外端锚定：最左可见列 `leading` / 最右可见列 `actions` 末尾；rail 头承载开关时同样 `px-6`）。契约见 `DESIGN.md` §Layout「工作台子栏页头」。
 - 聊天链路：SSE 解析唯一实现 = `hooks/use-sse.ts`；store 的 loadSeq / msgSeq 竞态、事件级流身份守卫、中止在途 SSE 的约定不得回退；工具行归一唯一入口 = `ChatPanel` 的 `asToolCall`。
+- **工具行 = 每条 assistant 消息一条 `@ant-design/x` `ThoughtChain`**（`items` 顺序 = 调用顺序）：状态轴**只标进行中 / 失败**（成功回落序号，不整轮染绿）；**不用 x 的 `collapsible`**（它的折叠头是 `div onClick`，无键盘语义）——折叠头是我们自己的 `<button aria-expanded>` + 条件 `content`；来源卡片进**恒显的 `footer`**（不新增第二处挂载点），无卡片时不传 `footer`（空槽位白占一行高）。契约见 `DESIGN.md` `tool-row`。
+- **正文 markdown 流式口径单源 = `ChatPanel` 的 `MARKDOWN_STREAMING` / `MARKDOWN_DONE`**（`hasNextChunk` 跟随尾条流式 + `incompleteMarkdown: 'complete'`）；**不用 `streaming={true}` 布尔预设**（会一并打开 `typewriter` / `incremental`，与 delta 到达叠成双动画）。
 - 提案 UI：`PROPOSAL_TYPE_LABELS` 必须覆盖 `PROPOSAL_TOOLS` 全集；历史只读卡从 `toolCalls` 重建并按 `toolCallId` 与 live 去重，不新增表 / API。
 - 推演标记提交基底必须用可见标记（`lib/deduction.ts` 的 `toggledDeductionNodes`）——拿 raw `config.deductionNodes` 回传会把失效 id 送回服务端，严格 400 会让该书标记操作永久锁死。
 - 写作面：工具条不得自任滚动容器（`sticky` 已是库 tooltip / 下拉的包含块）；高度链三处接通，中间不得用 `items-start` / `self-start` 截断（下游 `flex: 1` 拿不到剩余高度）。

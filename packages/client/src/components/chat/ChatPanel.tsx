@@ -2,7 +2,7 @@
 // 常驻右栏（桌面态宽度 = clamp(视口×40%, 240, 960)，中栏吸收剩余——1:5:4 在 1600-2400 视口精确成立，
 // 见 DESIGN.md §Layout），<1024px 折叠为抽屉（fixed + 遮罩，开关在 main-toolbar 右侧）
 // 结构（自上而下）：会话标题行（下拉切换同项目会话 + 新会话）→ 断连横幅 → 错误条 →
-// 消息流（user 气泡 / assistant 无气泡宋体排版 / 历史工具折叠记录与运行时工具行同位置——
+// 消息流（user 气泡 / assistant 无气泡宋体排版 / 历史与运行态工具行同位置（一条 ThoughtChain）——
 // 消息内 思考 → 工具行 → 正文 → 历史提案卡，见 DESIGN.md `chat-message-stream` / 提案卡）→
 // focus 小条 → 输入区（Enter 发送 / Shift+Enter 换行）
 // 无项目打开时整体禁用（灰显 + 「打开项目后可用」，不请求会话数据，「位置与形态」）
@@ -11,9 +11,9 @@
 // store 驱动状态迁移：confirmed/rejected/stale 终态 + 404 移除卡片）
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { ComponentRef } from "react";
-import { Bubble, Conversations, Sender } from "@ant-design/x";
-import type { ConversationItemType } from "@ant-design/x";
-import { Alert, Badge, Button, Collapse, Dropdown as AntDropdown, Select, Switch, Tag, theme } from "antd";
+import { Bubble, Conversations, Sender, ThoughtChain } from "@ant-design/x";
+import type { ConversationItemType, ThoughtChainItemType } from "@ant-design/x";
+import { Alert, Button, Dropdown as AntDropdown, Select, Switch, Tag, theme } from "antd";
 import type { MenuProps } from "antd";
 import {
   BulbOutlined,
@@ -52,7 +52,7 @@ import {
   type StreamToolRecord,
 } from "../../stores/chat";
 import { SessionStatusBar } from "./session-status-bar";
-import { SourceCards } from "./source-cards";
+import { parseSourceCards, SourceCardList } from "./source-cards";
 import type { ChatSessionSummary } from "@whispering233/ai-editor-shared";
 
 import {
@@ -506,50 +506,29 @@ function ErrorBar() {
   );
 }
 
-// ============ 工具调用折叠记录行（历史 assistant.toolCalls 与运行时 streamTools 共用） ============
+// ============ 工具调用链（历史 assistant.toolCalls 与运行时 streamTools 共用） ============
 
-/** 工具调用行：折叠态「调用了 {tool}」，展开显示 args 摘要与结果状态（「工具调用折叠记录」；导出供渲染走查测试）
- * 展开态摘要渲染——id 参数经 names/resolve 解析为名称（不显示裸 id）；
- * 解析失败/未知工具 → 回退原始 JSON（不丢信息）。
- * 折叠头之下另有联网来源卡片（`chat-source-cards`，无需展开；仅 `web_search` / `fetch_content`）。 */
-export function ToolCallRow({
-  toolName,
-  args,
-  result,
-  status,
-}: {
-  toolName: string;
-  args?: unknown;
-  result?: unknown;
-  status?: "running" | "ok" | "error";
-}) {
-  // 展开态（受控——懒解析依赖 open；Collapse onChange 驱动）
-  const [open, setOpen] = useState(false);
-  /** id 批量解析结果（null = 未展开/解析中）；解析请求失败 → resolveFailed → 回退原始 JSON */
+/** 工具行的 ThoughtChain 状态：只给「进行中 / 失败」染色——成功不传（x 会把整行文字染成
+ * colorSuccess，一轮五六个调用就把右栏刷成一片绿；成功 = 常态，不需信号）。 */
+function toolItemStatus(err: boolean, ok: boolean): "error" | "loading" | undefined {
+  if (err) return "error";
+  return ok ? undefined : "loading";
+}
+
+/** 展开区的参数摘要：**挂载即解析**（展开才请求，收起即卸载重置）；id 经 names/resolve 换名称，
+ * 未知工具 / 解析请求失败 → 原始 JSON 兜底（不丢信息）。 */
+function ToolArgs({ toolName, args }: { toolName: string; args?: unknown }) {
+  /** null = 解析中（id 字段暂省略，完成后补全） */
   const [names, setNames] = useState<ResolvedNames | null>(null);
   const [resolveFailed, setResolveFailed] = useState(false);
-  // 结果状态：显式 `status` 优先（运行态来自本轮事件；历史行由 MessageItem 从 tool 消息推导）；
-  // 无 `status` 时以「result 挂载即成功」兜底（供直接使用本组件的场景）
-  const err = status === "error";
-  const ok = status === undefined ? result !== undefined : status === "ok";
 
-  // 展开时收集 args 中的 id 候选 → names/resolve 批量解析（历史回放/流式同路径）；
-  // 无候选不发请求；折叠/参数变化 → 重置（重新展开再解析）
   useEffect(() => {
-    if (!open) {
-      setNames(null);
-      setResolveFailed(false);
-      return;
-    }
     const candidates = collectIdCandidates(args);
     if (candidates.length === 0) {
       setNames({});
-      setResolveFailed(false);
       return;
     }
     let cancelled = false;
-    setNames(null); // 重新展开 → 解析中（id 字段暂省略，完成后补全）
-    setResolveFailed(false);
     void resolveNames(candidates)
       .then((res) => {
         if (!cancelled) setNames(res.names);
@@ -560,7 +539,7 @@ export function ToolCallRow({
     return () => {
       cancelled = true;
     };
-  }, [open, args]);
+  }, [args]);
 
   // 摘要行：names=null（解析中）时 id 字段省略、非 id 字段照常（解析完成后自动补全）
   const summary = useMemo(
@@ -570,49 +549,77 @@ export function ToolCallRow({
   );
 
   return (
-    // 折叠头 + 其下的来源卡片（`web_search` / `fetch_content`；无需展开即可见，原始 JSON 上移一层）
-    <>
-      <Collapse
-        ghost
-        size="small"
-        activeKey={open ? ["args"] : []}
-        onChange={(keys) => setOpen(keys.includes("args"))}
-        items={[
-          {
-            key: "args",
-            label: (
-              <span className="flex min-w-0 items-center gap-1.5 text-xs text-muted-foreground">
-                <ToolOutlined className="shrink-0" />
-                <span className="min-w-0 flex-1 truncate">调用了 {toolName}</span>
-                {err ? (
-                  <Badge status="error" title="调用失败" />
-                ) : ok ? (
-                  <Badge status="success" title="调用成功" />
-                ) : (
-                  <Badge status="processing" title="调用中" />
-                )}
-              </span>
-            ),
-            children: (
-              <div className="max-h-40 overflow-auto text-xs whitespace-pre-wrap text-muted-foreground">
-                {/* 摘要渲染优先；未知工具 / 解析请求失败 → 原始 JSON 兜底 */}
-                {resolveFailed || summary === null ? (
-                  <pre>{typeof args === "string" ? args : JSON.stringify(args ?? {}, null, 2)}</pre>
-                ) : (
-                  <ul className="space-y-0.5">
-                    {summary.map((line) => (
-                      <li key={line}>{line}</li>
-                    ))}
-                  </ul>
-                )}
-              </div>
-            ),
-          },
-        ]}
-      />
-      <SourceCards toolName={toolName} result={result} />
-    </>
+    <div className="max-h-40 overflow-auto text-xs whitespace-pre-wrap text-muted-foreground">
+      {/* 摘要渲染优先；未知工具 / 解析请求失败 → 原始 JSON 兜底 */}
+      {resolveFailed || summary === null ? (
+        <pre>{typeof args === "string" ? args : JSON.stringify(args ?? {}, null, 2)}</pre>
+      ) : (
+        <ul className="space-y-0.5">
+          {summary.map((line) => (
+            <li key={line}>{line}</li>
+          ))}
+        </ul>
+      )}
+    </div>
   );
+}
+
+/** 一条 assistant 消息的全部工具调用 → ThoughtChain 项（顺序 = 调用顺序，链线把它们串起来；
+ * 导出供渲染走查测试）。
+ * **不用 x 的 `collapsible`**：它的折叠头是 `<div onClick>`，无 `role`/`tabIndex`/`aria-expanded`
+ * （键盘不可操作）⇒ 折叠态由我们自己的 `<button>` + 条件 `content` 承担（让掉它的折叠动画）。
+ * 折叠头之下另有联网来源卡片（`chat-source-cards`）：进 `footer`——该槽位**恒显**，无需展开。 */
+export function toolChainItems({
+  calls,
+  toolResults,
+  liveTools,
+  openKeys,
+  onToggle,
+}: {
+  calls: unknown[];
+  toolResults: Map<string, ChatMessageView>;
+  liveTools?: Map<string, StreamToolRecord>;
+  openKeys: ReadonlySet<string>;
+  onToggle: (key: string) => void;
+}): ThoughtChainItemType[] {
+  return calls.map((c, i) => {
+    const call = asToolCall(c);
+    const callId = call.id ?? `hist-${i}`;
+    const live = liveTools?.get(callId);
+    const resultMsg = callId ? toolResults.get(callId) : undefined;
+    const result = live?.result ?? resultMsg?.content;
+    const status =
+      live?.status ?? (resultMsg?.isError === true ? "error" : resultMsg ? "ok" : undefined);
+    // 结果状态：显式 `status` 优先（运行态来自本轮事件；历史行由 tool 消息推导）；
+    // 无 `status` 时以「result 挂载即成功」兜底（供直接构造项的场景）
+    const err = status === "error";
+    const ok = status === undefined ? result !== undefined : status === "ok";
+    const open = openKeys.has(callId);
+    const toolName = call.tool ?? call.name ?? "工具";
+    const cards = parseSourceCards(toolName, result);
+    return {
+      key: callId,
+      status: toolItemStatus(err, ok),
+      title: (
+        <button
+          type="button"
+          aria-expanded={open}
+          onClick={() => onToggle(callId)}
+          className="flex w-full min-w-0 items-center gap-1.5 text-left text-xs text-muted-foreground"
+        >
+          <ToolOutlined className="shrink-0" />
+          {/* 标题容器由 x 给 500 字重（`.ant-thought-chain-node-title`）：压回常规走内联，
+              不去覆盖它的内部类 */}
+          <span className="min-w-0 flex-1 truncate" style={{ fontWeight: 400 }}>
+            调用了 {toolName}
+          </span>
+          <RightOutlined className="shrink-0 text-xs" rotate={open ? 90 : 0} />
+        </button>
+      ),
+      content: open ? <ToolArgs toolName={toolName} args={call.args} /> : undefined,
+      footer: cards === null ? undefined : <SourceCardList cards={cards} />,
+    };
+  });
 }
 
 // ============ 思维链（DESIGN.md `thinking-block`：默认折叠为一行摘要，本轮流式期间自动展开） ============
@@ -843,7 +850,14 @@ function historicalProposalCalls(
     .map((call) => ({ id: call.id, tool: call.tool, args: call.args }));
 }
 
-// ============ 消息条目：user 气泡 / assistant 无气泡排版 + 思维链 + 历史工具折叠记录 ============
+// ============ 消息条目：user 气泡 / assistant 无气泡排版 + 思维链 + 工具调用链 ============
+
+/** 正文 markdown 的流式口径（DESIGN.md `chat-message-stream`）：只开 `hasNextChunk`（「还有后续」，流结束才一次性定稿）
+ * 与「未闭合语法按已写完显示」。**不用 `streaming={true}` 布尔预设**——它同时打开 `incremental` 和 `typewriter`：
+ * typewriter 与 delta 逐段到达叠加成双动画；`incremental` 只在顶格标题处切段，散文正文没有切分点。
+ * 对象提到模块级：每帧新建字面量会破坏 x-markdown 的 props 引用稳定性（内置 memo 失效）。 */
+const MARKDOWN_STREAMING = { hasNextChunk: true, incompleteMarkdown: "complete" } as const;
+const MARKDOWN_DONE = { hasNextChunk: false, incompleteMarkdown: "complete" } as const;
 
 /** 历史 tool 消息按 toolCallId 挂到 assistant.toolCalls 行（成对；孤儿半对不渲染；导出供渲染走查测试）
  *
@@ -859,13 +873,25 @@ export function MessageItem({
   toolResults,
   liveTools,
   liveProposalToolCallIds,
+  streaming = false,
 }: {
   message: ChatMessageView;
   toolResults: Map<string, ChatMessageView>;
   liveTools?: Map<string, StreamToolRecord>;
   liveProposalToolCallIds?: ReadonlySet<string>;
+  /** 本条还在流式生成（只有尾条可能为真）：决定正文 markdown 的 `hasNextChunk` */
+  streaming?: boolean;
 }) {
   const { token } = theme.useToken();
+  // 工具行展开态：每条调用一个 key（收进 ThoughtChain 的 items 后，展开态只能由本组件持有）
+  const [openKeys, setOpenKeys] = useState<ReadonlySet<string>>(() => new Set());
+  const toggleTool = (key: string): void =>
+    setOpenKeys((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
   if (message.role === "user") {
     // user 气泡：右对齐（Bubble placement=end）；底色 = DESIGN.md `chat-bubble-user` 的
     // {colors.surface-muted}（= colorFillTertiary）。⚠ 不用 colorPrimaryBg：主色 seed 是深墨
@@ -885,8 +911,8 @@ export function MessageItem({
     );
   }
   if (message.role === "tool") return null; // tool 消息仅在所属 assistant 调用行内渲染
-  // assistant：x-markdown 流式正文（增量渲染内建：已完成消息 content 引用稳定，React.memo 不重渲；
-  // 流式尾部块由 x-markdown streaming 优化处理）
+  // assistant：x-markdown 流式正文（已完成消息 content 引用稳定，React.memo 不重渲；
+  // 流式尾条由 x-markdown 的渲染期缓存承接，口径 = 上面两个 MARKDOWN_* 常量）
   const toolCalls = Array.isArray(message.toolCalls) ? message.toolCalls : [];
   const proposalCalls = historicalProposalCalls(toolCalls, liveProposalToolCallIds);
   const content = message.content ?? "";
@@ -912,26 +938,23 @@ export function MessageItem({
           />
         ))
       )}
-      {toolCalls.map((c, i) => {
-        const call = asToolCall(c);
-        const callId = call.id ?? `hist-${i}`;
-        const live = liveTools?.get(callId);
-        const resultMsg = callId ? toolResults.get(callId) : undefined;
-        const result = live?.result ?? resultMsg?.content;
-        const status =
-          live?.status ?? (resultMsg?.isError === true ? "error" : resultMsg ? "ok" : undefined);
-        return (
-          <ToolCallRow
-            key={callId}
-            toolName={call.tool ?? call.name ?? "工具"}
-            args={call.args}
-            result={result}
-            status={status}
-          />
-        );
-      })}
+      {toolCalls.length > 0 && (
+        <ThoughtChain
+          items={toolChainItems({
+            calls: toolCalls,
+            toolResults,
+            liveTools,
+            openKeys,
+            onToggle: toggleTool,
+          })}
+        />
+      )}
       {content.trim() !== "" ? (
-        <Bubble content={<Markdown>{content}</Markdown>} />
+        <Bubble
+          content={
+            <Markdown streaming={streaming ? MARKDOWN_STREAMING : MARKDOWN_DONE}>{content}</Markdown>
+          }
+        />
       ) : // 空内容（流式占位 / 空消息）：不渲染（流式思考指示器由 MessageList 提供）
       null}
       {/* 历史提案卡：正文之后（只读；live 组卡按 toolCallId 去重） */}
@@ -1411,6 +1434,8 @@ function MessageList({ disabled }: { disabled: boolean }) {
             <MessageItem
               key={m.id}
               message={m}
+              // 正文 markdown 的流式标记只对尾条生效（历史消息已是定稿，不需要渲染期缓存）
+              streaming={streaming && m.id === messages[messages.length - 1]?.id}
               toolResults={toolResults}
               // 运行态状态只对**尾条**消息生效：工具 id 全局唯一，但状态表是「本轮」的，
               // 下发给历史消息只会在 id 复用时错误改写旧行的 ✓/✗

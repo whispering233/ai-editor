@@ -97,10 +97,8 @@ export function parseSourceCards(toolName: string, result: unknown): SourceCardV
   return null;
 }
 
-/** 来源卡片（导出供渲染走查测试）：顺序 = 工具返回顺序；整卡新窗口外链。 */
-export function SourceCards({ toolName, result }: { toolName: string; result?: unknown }) {
-  const cards = parseSourceCards(toolName, result);
-  if (cards === null) return null;
+/** 卡片列表（已解析）：需要先判空再决定是否占位（如工具行 footer 非空才挂）时用这一层 */
+export function SourceCardList({ cards }: { cards: SourceCardView[] }) {
   return (
     <div className="space-y-1">
       {cards.map((card, index) => (

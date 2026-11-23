@@ -9,6 +9,12 @@
 
 ## [Unreleased]
 
+### Changed
+
+- **`@ant-design/x` 与 `@ant-design/x-markdown` 升到 2.10.0**（`^2.9.0` → `^2.10.0`，peerDependencies 未变，无破坏性变更）。
+- **助手正文的流式 markdown 渲染**：chat 正文改用 x-markdown 的 `streaming` 配置（`hasNextChunk` 跟随尾条流式状态 + 未闭合语法按已写完显示），流结束才一次性定稿；不启用 `typewriter` / `incremental` / `tail`（与 delta 到达双动画、散文无标题切分点、不新增视觉语言）。
+- **工具调用行改用 `@ant-design/x` `ThoughtChain`**：一条 assistant 消息的全部调用成一条链（左侧状态轴只标记进行中 / 失败，成功回落序号），折叠头保留我们自己的 `<button aria-expanded>`（不用 x 的 `collapsible`，它无键盘语义）；联网来源卡片改挂在恒显的 `footer` 槽位。
+
 ## [v0.0.65] - 2026-11-22
 
 ### Added
