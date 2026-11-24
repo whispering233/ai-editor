@@ -60,3 +60,18 @@ describe("单章 TXT 导出（exportPlainText）", () => {
     expect(functionSource("function documentTitle")).toContain('return chapterTitle ?? "正文";');
   });
 });
+
+describe("页头「回填本章摘要」（C2）", () => {
+  it("发送 = 消息常量 + 本章 focus_node_id，并聚焦右栏输入框（不新增端点 / 通道）", () => {
+    const source = functionSource("function requestChapterSummary");
+    expect(source).toContain("sendMessage(CHAPTER_SUMMARY_MESSAGE, { focus_node_id: chapterId });");
+    expect(source).toContain("requestFocusInput();");
+  });
+
+  it("按钮在页头动作组内（`ChapterEditor` 自己的 actions，不挂页面壳的 headerActions 槽位）", () => {
+    const actions = chapterEditor.slice(chapterEditor.indexOf("actions={"));
+    const button = actions.indexOf('aria-label="回填本章摘要"');
+    expect(button).toBeGreaterThan(-1);
+    expect(actions.indexOf("headerActions}")).toBeGreaterThan(button);
+  });
+});
