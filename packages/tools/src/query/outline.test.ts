@@ -112,6 +112,13 @@ describe("get_outline", () => {
     expect(scene?.id).toBe("sc-1");
   });
 
+  it("章节点 data.result_summary 原样透传（get_outline 直接可见本章实际摘要）", () => {
+    const tree = seedOutlineTree();
+    tree.children[0].children![0].data = { result_summary: "主角拿到断剑" };
+    writeOutlineFile(dir, tree);
+    expect(runGetOutline(makeCtx()).children[0].children?.[0].data?.result_summary).toBe("主角拿到断剑");
+  });
+
   it("默认不含 metadata", () => {
     writeOutlineFile(dir, seedOutlineTree());
     const tree = runGetOutline(makeCtx());

@@ -134,8 +134,8 @@ describe("@whispering233/ai-editor-tools 入口冒烟", () => {
     expect(registered).toEqual(new Set([...AUTO_TOOLS, ...COMMON_TOOLS, ...PRACTICE_TOOLS, ...PROPOSAL_TOOLS]));
   });
 
- // 工具 scope（工作区作用域，2026-10）：既有 37 个工具全为 novel（逐名对账，不用「长度相等」代替）
- // + 练习七个为 practice（**误标 common ⇒ 小说侧变 44；误标 novel ⇒ 小说集合逐名相等报红**）。
+ // 工具 scope（工作区作用域，2026-10）：小说侧工具全为 novel（逐名对账，不用「长度相等」代替）
+ // + 练习七个为 practice（**scope 标错任一侧，逐名集合对账即报红**）。
   it("scope 无遗漏：每个已注册工具的 scope 合法，novel 集合 = 既有 38 个、practice 集合 = 练习七个（逐名相等）", () => {
     const legacyToolNames = [
       "analyze_consistency",

@@ -177,6 +177,14 @@ describe("executeProposal（proposal.type → 执行函数映射）", () => {
     expect(runGetOutline(makeCtx()).children[0].children?.[0].data?.result_summary).toBe("主角拿到断剑");
   });
 
+  it("propose_update_outline_node：patches 非字符串 → 抛错且不推进节点版本（不白写 updated_at）", () => {
+    writeOutlineFile(dir, seedOutlineTree());
+    expect(() =>
+      executeProposal(makeCtx(), makeProposal("propose_update_outline_node", { node_id: "ch-1", patches: { title: 42 } })),
+    ).toThrow(/执行参数缺失或非法: title/);
+    expect(findOutlineNode(readOutlineFile(dir), "ch-1")!.updated_at).toBe(T0); // 节点版本未变，在途提案不因空写失效
+  });
+
   it("propose_update_outline_node：title / summary 直接写节点字段；空串 result_summary = 清空", () => {
     const tree = seedOutlineTree();
     findOutlineNode(tree, "ch-1")!.data = { result_summary: "旧摘要" };

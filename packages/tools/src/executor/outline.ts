@@ -48,6 +48,13 @@ export const executeDeleteNode: ExecutorFn = (ctx, proposal) => {
   return { id: nodeId, deleted: true, cascadedChildren: children };
 };
 
+/** patches 里的可选文本：缺省不写，出现即必须为字符串（静默跳过会「什么都不写却返回 updated」并白推版本戳） */
+function requirePatchString(patches: Record<string, unknown>, key: string): string {
+  const v = patches[key];
+  if (typeof v !== "string") throw new Error(`执行参数缺失或非法: ${key}`);
+  return v;
+}
+
 /**
  * update_outline_node（propose_update_outline_node 的确认侧）：
  * `updateOutlineNodeInfo(dir, id, { title?, summary?, data? }, nowIso())`——`data` 由 db 层**浅合并**
@@ -64,12 +71,11 @@ export const executeUpdateOutlineNode: ExecutorFn = (ctx, proposal) => {
     ? requireChapterNode(ctx, nodeId, "实际摘要")
     : requireOutlineNode(ctx, nodeId);
   const patch: { title?: string; summary?: string; data?: Record<string, unknown> } = {};
-  if (typeof patches.title === "string") patch.title = patches.title;
-  if (typeof patches.summary === "string") patch.summary = patches.summary;
+  if (patches.title !== undefined) patch.title = requirePatchString(patches, "title");
+  if (patches.summary !== undefined) patch.summary = requirePatchString(patches, "summary");
   if (hasResultSummary) {
  // 空串 = 清空（"" 与「无摘要」等价），仍写键——不做特例删字段
-    if (typeof patches.result_summary !== "string") throw new Error("执行参数缺失或非法: result_summary");
-    patch.data = { result_summary: patches.result_summary };
+    patch.data = { result_summary: requirePatchString(patches, "result_summary") };
   }
   updateOutlineNodeInfo(ctx.outlineDir, nodeId, patch, nowIso());
   return { id: node.id, updated: true };

@@ -32,7 +32,7 @@ import { executeReorderTimepoints } from "./reorder-timepoints.js";
 import { executeCreateReference } from "./reference.js";
 import { optionalRecord, requireString, type ExecutorFn, type ExecutorResult } from "./types.js";
 
-/** 提案类型字面量联合（16 个，PROPOSAL_TOOLS 常量派生——注册表/门面共用） */
+/** 提案类型字面量联合（提案类型见 `PROPOSAL_TOOLS`，常量派生——注册表/门面共用） */
 export type ProposalType = (typeof PROPOSAL_TOOLS)[number];
 
 /** 适配 propose_create_hook → 复合建 hook：create_entity(type=hook) + plants 关系一次提交 */

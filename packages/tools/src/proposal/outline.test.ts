@@ -1,4 +1,4 @@
-// S6.6 提案类工具测试：大纲（propose_outline_node / propose_move_node / propose_delete_node）
+// S6.6 提案类工具测试：大纲（propose_outline_node / propose_move_node / propose_delete_node / propose_update_outline_node）
 // 覆盖：tool_result 仅 { proposal_id, summary } 无预览 / 完整提案结构（父容器引用 check:"exists"，
 // 被移动节点与删除节点用版本引用）/ **不落盘**（outline.json 零变化——S6.7 对比核心差异）/
 // 严格三层层级校验（scene 无 parent 拒绝、scene 挂卷拒绝、章挂章拒绝）/
