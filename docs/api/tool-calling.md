@@ -230,7 +230,7 @@ web_search(query, count?)
     - 单条摘要只做**异常上限**：超过 `MAX_SEARCH_SUMMARY_CHARS` 才截断（结果含省略号、长度不超过上限）并带 `truncated: true`；正常摘要原样返回、不带该字段。需要更多正文走 `fetch_content`
     - 每次成功请求按 DeepSeek 计费；**这笔费用不进会话状态栏的 token 账目**（那里只有模型用量）
     - 查询词会发往 DeepSeek（隐私面，设置页不提供开关）
-  凭据：复用 pi 的 `deepseek` provider（`ModelRuntime.getAuth("deepseek")`，`auth.json` 存量优先、`DEEPSEEK_API_KEY` 兜底）；未配置时抛可读错误
+  凭据：**唯一来源** = `~/.ai-editor/search.json` 的 `apiKey`（**不复用**模型凭据、不读环境变量、无回退）；未配置时抛可读错误（指向「设置 → 高级」）
   失败：401（未配置 / key 无效）、402（余额不足）、429（限流）、5xx 直接抛错，不做重试链——是否重试由模型决定
   作用域：**common**（小说与练习工作区都注册）；无提案、无写入
 
@@ -241,7 +241,7 @@ fetch_content(url) —— **只在摘要不够时打开原文**（先 `web_searc
     - **无缓存、无续读工具**：一次调用 = 一次上游请求（按次计费）；模型拿到的就是完整正文，
       或超单条工具结果上限时被运行时截断的前段（截断处显式告知，模型看到的数据不完整）
     - 正文不落盘、不进项目文件、不进备份 / 云端；与正文 / 参考资料没有任何写入关系（只读）
-    - 与 web_search 同源：复用 DeepSeek 凭据、费用不进会话 token 账目、url 会发往 DeepSeek
+    - 与 web_search 同源：**同一份** `search.json` 凭据、费用不进会话 token 账目、url 会发往 DeepSeek
   失败：403（上游安全策略拒绝）、404（取不到可提取正文）、408 / 413 / 429 / 5xx → 可读文案，不重试
   流速：上游按账号限速（Search 与 Fetch 各自独立，百万级 QPS 远高于单用户需要）——不在本地另加限流
   作用域：**common**；无提案、无写入

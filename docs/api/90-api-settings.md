@@ -3,7 +3,7 @@
 > LLM 配置读写（provider 目录 / 凭据状态 / 激活模型 / 思考强度）。公共约定/命名/响应结构见 [api-public.md](./api-public.md)，错误码见 [error-code.md](./error-code.md)；
 > 请求/响应 schema 单一来源：`@whispering233/ai-editor-shared` `types/api.ts`；配置载体与读写边界见 [`../design/config.md`](../design/config.md)。
 
-**配置所有权在本仓之外**：模型目录、凭据、运行参数全部落 pi agent dir（`~/.pi/agent/` 的 `auth.json` / `models.json` / `settings.json`），本仓只提供设置页的读写端点，**不维护第二份配置**。凭据解析顺序（`pi-ai` `auth/resolve.js` + `auth/helpers.js`）：**auth.json 存量凭据优先**（一家一条；值支持字面 key / `$ENV_VAR` 引用 / `!命令`）→ 无条目时才回落到 provider 内置环境变量（如 `DEEPSEEK_API_KEY`，状态记为 `source: "environment"`）——因此不存在「两套来源竞争」，环境变量只是兜底。
+**配置所有权在本仓之外**：模型目录、凭据、运行参数全部落 **pi 配置目录**（缺省 `~/.ai-editor/pi-agent/` 的 `auth.json` / `models.json` / `settings.json`；目录可在「设置 → 高级」更改，与用户自己的 pi CLI 目录 `~/.pi/agent` 隔离），本仓只提供设置页的读写端点，**不维护第二份配置**。搜索 / 抓取的凭据是**另一份**（`~/.ai-editor/search.json`，见文末「本机配置文件」），不复用模型凭据。凭据解析顺序（`pi-ai` `auth/resolve.js` + `auth/helpers.js`）：**auth.json 存量凭据优先**（一家一条；值支持字面 key / `$ENV_VAR` 引用 / `!命令`）→ 无条目时才回落到 provider 内置环境变量（如 `DEEPSEEK_API_KEY`，状态记为 `source: "environment"`）——因此不存在「两套来源竞争」，环境变量只是兜底。
 
 ### GET /api/v1/settings/llm
 
@@ -59,8 +59,71 @@
 // 聊天模型解析：POST /api/v1/chat 使用当前激活模型（provider + model 成对校验，绝不跨 provider 串用）
 ```
 
+### GET /api/v1/settings/pi/dir
+
+读取 pi 配置目录（生效值 + 缺省值）。生效值只来自 `~/.ai-editor/pi.json` 的 `agentDir`；键缺失 / 空串 → 缺省 `~/.ai-editor/pi-agent`。
+
+```typescript
+// Res: 200
+{
+  dir: string;        // 生效目录（绝对路径）
+  defaultDir: string; // 缺省目录（前端「恢复默认」直接 PUT 它）
+}
+```
+
+### PUT /api/v1/settings/pi/dir
+
+写入目录并**立即生效**（服务端重设 `PI_CODING_AGENT_DIR` → 重建模型/设置实例 → 释放当前项目运行时 → 重挂出站 dispatcher），无需重启。
+
+```typescript
+// Req
+{ dir: string }   // 必须绝对路径（相对路径 / 空串 → 400 VALIDATION_ERROR）
+
+// Res: 200 —— 与 GET 同形（回显新目录）
+{ dir: string; defaultDir: string }
+
+// 当前项目有在途对话 → 409 CHAT_BUSY（会话运行时不能中途重建）
+// 不拷贝、不迁移旧目录内容（用户自行重配或改回 ~/.pi/agent）
+```
+
+### GET /api/v1/settings/config-file/:name
+
+读一份本机配置文件的**整份文本**（设置页「高级」编辑器用）。`name` 是 shared `CONFIG_FILE_NAMES` 白名单（`auth.json` / `models.json` / `settings.json` / `search.json`）→ 服务端映射为绝对路径，**绝不拼接客户端传入值**；白名单外的 name → 400 `VALIDATION_ERROR`。
+
+```typescript
+// Res: 200
+{
+  name: "auth.json" | "models.json" | "settings.json" | "search.json";
+  exists: boolean; // false（文件不存在）时 content 为空串
+  content: string; // 原文（含明文凭据——只在本机回环端点回传）
+}
+```
+
+### PUT /api/v1/settings/config-file/:name
+
+整份写入。**先按 pi 的读口径校验**（否则会拒绝 pi 自己读得懂的文件），通过后原子写（`writeTextAtomic`，保留用户缩进与注释），再走与目录同一套「立即生效」。
+
+| 文件 | 位置 | 校验口径 |
+| :--- | :--- | :--- |
+| `auth.json` | pi 配置目录 | 严格 `JSON.parse`（顶层必须是对象） |
+| `models.json` | pi 配置目录 | 宽容：去 `//` 注释与尾逗号后再 parse（与 pi `stripJsonComments` 同口径） |
+| `settings.json` | pi 配置目录 | 严格 `JSON.parse`（顶层必须是对象） |
+| `search.json` | `~/.ai-editor/` | shared `searchConfigFileSchema`（strict：只认 `{ apiKey?: string }`，未知键拒绝） |
+
+```typescript
+// Req
+{ content: string }        // 空串允许（= 未配置）
+
+// Res: 200
+{ saved: true }
+
+// 校验失败 → 400 VALIDATION_ERROR（含可直接展示给用户的原因），**不写盘**
+// 明文凭据纪律：只在这一个本机回环端点（127.0.0.1 + 来源校验）回传，
+// 不进日志（http 调试类别只记方法/路径/状态/耗时）、不进备份 / 导出 / 云端 / 项目文件
+```
+
 ### 不做的事
 
 - **不提供 OAuth 登录流程**（pi 支持的订阅登录不在本仓 UI 范围）：需要订阅凭据的用户用 pi CLI 登录，本仓只读该凭据状态。
-- **不提供自定义 provider 表单**：`~/.pi/agent/models.json` 由用户手工维护（pi 原生语义），本仓只展示其结果。
-- **不提供重试/压缩参数 UI**：这些参数在 pi settings 里，直接编辑 `~/.pi/agent/settings.json`（见 `../design/config.md`）。
+- **不为 pi 配置做表单**：`models.json` / `settings.json` 的参数结构属 pi，表单一改就漂——「高级」tab 只提供**整份 JSON 文本编辑**（服务端按 pi 的读口径校验）。
+- **不提供搜索表单**：`search.json` 同样只有 JSON 文本框（只有一个键，加表单不值）。

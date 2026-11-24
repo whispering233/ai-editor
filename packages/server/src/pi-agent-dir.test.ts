@@ -17,7 +17,7 @@ import {
 } from "./pi-agent-dir.js";
 import { getSettingsManager, resetModelRuntime } from "./model-runtime.js";
 
-let dirs: string[] = [];
+const dirs: string[] = [];
 let originalEnv: string | undefined;
 
 function tempDir(): string {

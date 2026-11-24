@@ -17,7 +17,7 @@
 
 - 项目设定只有 AGENTS.md 一个通道（`project.json` 的 `prompt` 字段已废弃，见 §4）。
 - **会话文件里的提示词快照不是编辑通道**（pi 0.86 起）：pi 把拼装结果作为会话首条 system 消息 entry 落盘（结构化 `sections`：`preamble` / `project_context` / `cwd`，加上 `toolsAdded` 的工具声明），续聊与分支导航按 transcript 重放；改提示词仍只改上表两个来源（代码常量 / 项目根 AGENTS.md），**不需要**迁移或改写存量会话（下一次请求即以新值为准）。
-- **不做祖先目录与全局搜索**：pi 默认会向上遍历父目录的 AGENTS.md 并读取 `~/.pi/agent/AGENTS.md`；本仓用 `agentsFilesOverride` 把数据源替换为「项目根 AGENTS.md 唯一文件」，避免把创作根之外的规则悄悄注进对话。
+- **不做祖先目录与全局搜索**：pi 默认会向上遍历父目录的 AGENTS.md 并读取 pi 配置目录（缺省 `~/.ai-editor/pi-agent/`）里的 `AGENTS.md`；本仓用 `agentsFilesOverride` 把数据源替换为「项目根 AGENTS.md 唯一文件」，避免把创作根之外的规则悄悄注进对话。
 - **内核提示词按工作区类型分叉（2026-10）**：小说工作区与练习工作区的内核提示词是**两份常量**（同层同源，仍只由开发者编辑，随 `00-master-design.md` 一起评审）；项目设定与临时指令两层不变。工作区类型还决定工具集（按工具定义的 `scope` 过滤，见 `../api/tool-calling.md`）——非小说工作区不注册小说工具与提案工具。
 - **不启用** pi 的技能（skills）与提示词模板：本项目工具集固定，技能清单只会增加不可见的状态来源。
 

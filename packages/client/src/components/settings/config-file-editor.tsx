@@ -68,8 +68,7 @@ export function ConfigFileEditor() {
     return () => {
       cancelled = true;
     };
-    // active 变化时按需拉取；update 是稳定闭包（依赖 setFiles）
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // 依赖只留 active：槽位状态经 filesRef 读，避免「拉取 → setState → 再拉取」的自激
   }, [active]);
 
   async function handleSave(): Promise<void> {
@@ -115,16 +114,18 @@ export function ConfigFileEditor() {
         {state.status === "ready" && !state.exists && <span className="text-muted-foreground">文件不存在，保存即创建</span>}
         {dirty && <span className="text-muted-foreground">未保存</span>}
       </div>
-      <Input.TextArea
-        className="mt-2 font-mono text-xs"
-        value={state.draft}
-        rows={14}
-        spellCheck={false}
-        disabled={state.status !== "ready"}
-        placeholder={state.status === "ready" ? "" : "读取中…"}
-        onChange={(e) => update(active, (prev) => fileEdited(prev, e.target.value))}
-        aria-label={`${active} 内容`}
-      />
+      {/* 等宽与内距挂外层（antd 根元素上的 class 会被它后注入的无层 CSS 压掉，见 design-discipline 守卫） */}
+      <div className="mt-2 font-mono text-xs">
+        <Input.TextArea
+          value={state.draft}
+          rows={14}
+          spellCheck={false}
+          disabled={state.status !== "ready"}
+          placeholder={state.status === "ready" ? "" : "读取中…"}
+          onChange={(e) => update(active, (prev) => fileEdited(prev, e.target.value))}
+          aria-label={`${active} 内容`}
+        />
+      </div>
       {state.error !== null && <p className="mt-1 text-xs text-destructive">{state.error}</p>}
       <p className="mt-2 text-xs text-muted-foreground">
         凭据以明文存在这些文件里（只在本机回传，不进日志 / 备份 / 云端）。保存后立即生效，不需要重启。

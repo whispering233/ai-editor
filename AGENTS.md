@@ -33,7 +33,9 @@
 - 升级 pi 后复查三处「与 pi 同构」断言：`packages/server/src/http-dispatcher.ts` 与 pi `core/http-dispatcher.ts` 的差异只允许「不跟踪 `installedGlobalFetch`」；pi-ai 凭据解析顺序；会话文件类型（`session-manager.d.ts`）。
 - 升级后复核模型目录：provider 家集合有增删改名要同步 `PROVIDER_ICONS`；`resolveDefaultModel` 对取不到的已选模型静默回落首个可用模型（不是缺陷）。
 - 凡调 LLM 一律走 pi 的 Agent 路径（`createAgentSessionServices` + `createAgentSessionFromServices` + `SessionManager`）；禁止直连 `completeSimple`、禁止自建 fetch / agent / 请求头——provider 特化头、重试 / 超时、思考档位只在 pi 的包装层生效。
-- pi 配置与凭据的唯一读写入口 = `packages/server/src/model-runtime.ts` 的 `getModelRuntime()` / `getSettingsManager()`；业务代码不得直读 `~/.pi/agent/auth.json` / `settings.json`。
+- pi 配置与凭据的唯一读写入口 = `packages/server/src/model-runtime.ts` 的 `getModelRuntime()` / `getSettingsManager()`；业务代码不得直读 pi 配置目录的 `auth.json` / `settings.json`（唯一例外 = 设置页「高级」的配置文件编辑器：整份文本透传、不解析语义）。
+- **pi 配置目录**唯一来源 = `~/.ai-editor/pi.json` 的 `agentDir`（缺失 / 非绝对路径 → 缺省 `~/.ai-editor/pi-agent`）；`process.env.PI_CODING_AGENT_DIR` 是**输出不是输入**（不读父进程值），只在 `packages/server/src/pi-agent-dir.ts` 里写、模块顶层零副作用（测试隔离靠这点）；改目录与改配置文件后统一走 `applyPiConfigChange()`（重设 env → 重建单例 → 释放项目运行时 → 重挂 dispatcher），否则读到的还是旧目录。编辑器可编的文件白名单 = shared `CONFIG_FILE_NAMES`（`name → 绝对路径`映射唯一，永不拼接客户端值），校验口径必须跟 pi 的**读**一致（`models.json` 宽容注释、`auth/settings` 严格、`search.json` 只认 `apiKey`）；明文凭据只在这一个本机回环端点回传，不进日志 / 备份 / 导出 / 云端 / 项目文件。
+- 搜索 / 抓取（`web_search` / `fetch_content`）的凭据唯一来源 = `~/.ai-editor/search.json` 的 `apiKey`：**不复用模型凭据、不读环境变量、无回退**；未配置就抛可读错误（指向「设置 → 高级」）。
 - 出站 HTTP 走服务启动时安装的全局 undici dispatcher（`packages/server/src/http-dispatcher.ts`：连接族退避 + 环境代理 + 空闲超时）；业务代码不要另建 fetch / agent（云端 WebDAV 同样走它）。
 
 ### pi 会话侧口径

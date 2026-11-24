@@ -722,11 +722,18 @@ components:
 
 ### 设置页「通用」区（桌面版专属）
 
-**`tab-general`（设置页二级 tab「通用」，2026-09）** — 设置页二级 tab 顺序 = **通用 → AI 模型 → 项目规则 → 备份 → 快捷键**；**「通用」仅在桌面版渲染**（client 能力检测：无 preload 桥则整个 tab 不出现，浏览器形态的 tab 集合与行为完全不变）。「快捷键」是纯说明页，恒在末位（浏览器与桌面版都渲染）——详见下节。
+**`tab-general`（设置页二级 tab「通用」，2026-09）** — 设置页二级 tab 顺序 = **通用 → AI 模型 → 高级 → 项目规则 → 备份 → 快捷键**；**「通用」仅在桌面版渲染**（client 能力检测：无 preload 桥则整个 tab 不出现，浏览器形态的 tab 集合与行为完全不变）。「高级」与「快捷键」两形态恒在（前者是本机级配置，后者是纯说明页），「快捷键」恒在末位——详见下节。
 
 **`library-location`（通用 tab 首项，也是当前唯一项）** — 一张 `card`：`section-title`「书库位置」+ 当前路径只读文本（`caption-text` + 超宽 `truncate` + `title` 给全文）+ 行尾 `button-default`「更改…」；卡片底部一行 `caption-text` 说明（更改后应用会重启）。点击「更改…」→ 原生目录框（preload `pickDirectory`）→ 确认后写应用级配置并重启应用。**不新增视觉语言**（全部复用 `card` / `section-title` / `caption-text` / `button-default`）。
 
 **`dashboard-open-path`（书架页「打开其他路径」行，2026-09）** — 原有手输路径 `input` 保留；在其右侧追加 `button-default`「浏览…」（**仅桌面版渲染**，同能力检测）→ 原生目录框 → 选中后直接以该路径打开项目。手输框与按钮同行：**输入框外包一个 `flex-1` 容器**（不给 antd `Input` 挂布局类——`antd-root-override` 守卫禁止在 antd 组件根元素上挂会被无层 CSS 压掉的类；按钮不挂类，自然尺寸）；浏览器形态只有输入框（现有布局不变）。
+
+### 设置页「高级」区（本机级配置，两形态恒在）
+
+**`tab-advanced`** — 内容 = 两张 `card`，顺序固定：
+
+1. `pi-dir`：`section-title`「pi 配置目录」+ 单行 `input`（当前生效目录，可编辑）+ 标题行右侧 `button-primary`「保存」（唯一 primary）+ 次行 `button-default`「恢复默认」+ `caption-text`（默认目录值 + 与 pi CLI 隔离）+ 卡片底部一句说明（换目录立即生效、目录不存在会自动创建）。失败（409 在途对话 / 400 非绝对路径）走 `toast` 呈现服务端文案。
+2. `config-file-editor`：`section-title`「本机配置文件」+ `Segmented`（**四项且恒定四项**：凭据 / 自定义模型 / 运行参数 / 搜索凭据；顺序 = shared `CONFIG_FILE_NAMES`，展示登记单源 = `lib/config-files.ts`，有测试同序守卫）+ 一行 `caption-text`（当前项用途）+ 文件名行（含「文件不存在，保存即创建」与「未保存」两个状态词，`font-mono`）+ 等宽 `TextArea`（`rows=14`、`font-mono text-xs`、关拼写检查）+ 底部 `caption-text`（明文只在本机回传）。保存是唯一 `primary`；校验失败的服务端文案内联展示且**不清空输入**（草稿状态机 = `lib/config-file-draft.ts`）。
 
 ### 设置页「快捷键」区
 
