@@ -49,6 +49,13 @@ export const CHAPTER_TENSION_LABEL: Record<ChapterTension, string> = {
   high: "高",
 };
 
+/**
+ * 章「实际摘要」字长上限（`data.result_summary`，作者/AI 回填的本章实际发生了什么）。
+ * 单源：`chapterDataSchema`（落库校验）与 `propose_update_outline_node` 的工具 schema
+ * （`maxLength`）都引用本常量，不写字面量。取值对齐同层的 `reversal`（章级单文本）。
+ */
+export const MAX_CHAPTER_RESULT_SUMMARY_CHARS = 1000;
+
 /** 大纲节点层级 → 中文标签（names/resolve 用；口径对齐 client outline 页面——卷/章/场景） */
 export const OUTLINE_NODE_TYPE_LABELS: Record<"volume" | "chapter" | "scene", string> = {
   volume: "卷",

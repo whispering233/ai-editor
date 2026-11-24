@@ -945,7 +945,7 @@ describe("新会话路径叶子组件富数据渲染走查（问题 3）+ 提案
     expect(expanded).toContain("数据已变化，此提案已失效");
   });
 
-  it("PROPOSAL_TYPE_LABELS 覆盖服务端注册的全部 propose_*（16 个，无多余/无遗漏）", () => {
+  it("PROPOSAL_TYPE_LABELS 覆盖服务端注册的全部 propose_*（17 个，无多余/无遗漏）", () => {
     // 清单来源 = packages/tools/src/index.ts 实际注册的提案工具（新增提案工具必须补中文名）
     const registered = [
       "propose_create_entity",
@@ -957,6 +957,7 @@ describe("新会话路径叶子组件富数据渲染走查（问题 3）+ 提案
       "propose_outline_node",
       "propose_move_node",
       "propose_delete_node",
+      "propose_update_outline_node",
       "propose_create_hook",
       "propose_update_hook",
       "propose_advance_hook",

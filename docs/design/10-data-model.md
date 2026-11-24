@@ -91,7 +91,7 @@
 大纲节点长期只有 title/summary 自由文本，作者无法挂载结构化信息。outline.json 节点新增可选 `data` 字段（`Record<string, unknown>`），按层级 schema 校验：
 
 - **scene**：`goal`（场景目标/欲望）、`conflict_levels`（麦基冲突三层次 `inner`/`personal`/`extra_personal` 多选）、`value_from`/`value_to`（开场/收场价值——「没有不转折的场景」）、`tags`（与章同 schema，为场景级标签留通道，UI 本轮只开放章标签）
-- **chapter**：`reversal`（章末反转）、`climax_scene`（章高潮场景引用，可选）；**2026-11 增补四个工作面字段**——`status`（`draft` / `revision` / `final`，缺省即草稿）、`tags`（剧情线标签 `string[]`，≤5 个、单值 1–24 字、trim）、`function`（`setup` / `advance` / `turn` / `resolve` / `breather`）、`tension`（`low` / `mid` / `high`）
+- **chapter**：`reversal`（章末反转）、`climax_scene`（章高潮场景引用，可选）；**2026-11 增补四个工作面字段**——`status`（`draft` / `revision` / `final`，缺省即草稿）、`tags`（剧情线标签 `string[]`，≤5 个、单值 1–24 字、trim）、`function`（`setup` / `advance` / `turn` / `resolve` / `breather`）、`tension`（`low` / `mid` / `high`）；`result_summary`（**实际摘要**：本章实际写了什么，与节点的计划摘要 `summary` 区分；空串 = 无摘要，字长上限单源 = shared `MAX_CHAPTER_RESULT_SUMMARY_CHARS`）
 - **volume**：`climax_scene`（幕高潮场景引用）、`inciting_scene`（激励事件落位，可选）
 
 **两层字段不要混**：`reversal` / `climax_scene` 是**麦基分析面**（给 AI 做结构判断的输入）；`status` / `tags` / `function` / `tension` 是**工作面**（作者自己的进度与分类）——前者要求语义精确、后者允许自由。**剧情线用标签、不用关系**：标签说「这章属于复仇线」（多标签），关系 `advances` 说「这章推进了复仇线」（有向、可锚定 hook）；两者不互相转换。章节标签 ≠ 场景价值转折（麦基：场景是最小转折单位，仍只看 `value_from → value_to`）。

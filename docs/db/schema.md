@@ -364,14 +364,9 @@ CREATE TABLE IF NOT EXISTS practice_style_packs (
 
 **节点版本戳**：每个节点携带 `updated_at`（ISO 8601），节点任何字段变更（title/summary/data/children 重排）时由服务端在原子写流程中统一更新，支撑提案快照比对。**父容器引用只校验存在性**：父节点版本戳随 children 变更，不能用来判断「父是否仍适合作容器」（见 `docs/design/30-agent-loop.md` §2）。
 
-**节点结构化信息 `data`（2026-08 新增）**：可选 `data` 字段（`Record<string, unknown>`，默认省略），按层级 schema（`OUTLINE_NODE_DATA_SCHEMAS`）校验，字段集基于麦基《故事》理论：
+**节点结构化信息 `data`（2026-08 新增）**：可选 `data` 字段（`Record<string, unknown>`，默认省略），按层级 schema 校验——**字段集单源 = `OUTLINE_NODE_DATA_SCHEMAS`**（`packages/shared/src/types/api.ts`，按 `type` 分 scene / chapter / volume 三档；字段集基于麦基《故事》理论），本文件不复述字段清单。
 
-| 层级 | data 字段 | 说明 |
-|------|-----------|------|
-| `scene` | `goal`（文本，max 1000）、`conflict_levels`（`inner`/`personal`/`extra_personal` 多选）、`value_from`/`value_to`（开场/收场价值双文本，各 max 200） | 场景目标/欲望、冲突三层次、价值转向（麦基场景定义） |
-| `chapter` | `reversal`（单文本，可选，max 1000）、`climax_scene`（场景节点 id 引用，可选） | 章末反转、章高潮场景 |
-| `volume` | `climax_scene`（场景节点 id 引用，可选）、`inciting_scene`（激励事件落位，可选） | 幕高潮、激励事件 |
-
+- `result_summary`（章「实际摘要」）**仅章**：卷 / 场景带该键由服务端拒绝，不静默忽略。
 - 引用字段宽松校验：`climax_scene`/`inciting_scene` 引用任意场景节点 id，MVP 不校验引用范围（UI 提示建议本层内），详情页可跳转。
 - 编辑节点 data **不自动生成 Delta**（手动编辑 data 不产生变更记录属正常行为）；变更记录由「+ 新建变更」显式创建（S5.6）。
 - 关联（人物/地点/伏笔）一律走 `relation_records`，不在 data 中重复建模。

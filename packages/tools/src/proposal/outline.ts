@@ -1,5 +1,5 @@
-// 提案类工具：大纲（S6.6，「提案类」3 个）
-// propose_outline_node / propose_move_node / propose_delete_node
+// 提案类工具：大纲（S6.6，「提案类」3 个 + C1 文本更新 1 个）
+// propose_outline_node / propose_move_node / propose_delete_node / propose_update_outline_node
 //
 // 语义：只产出提案对象并返回 { proposal_id, summary }（2026-08 修订：tool_result 不含预览）；
 // **不落盘、不写任何数据**（与 S6.7 create_outline_node/move_node/delete_node 对比的核心差异）。
@@ -11,11 +11,30 @@
 // - propose_move_node：节点与目标父均存在且未软删，且目标父可容纳该层级（严格三层）；
 // 被移动节点采集版本快照（自身变更须拦截），目标父采集存在性引用
 // - propose_delete_node：节点存在且未软删（软删 + 递归子树，可回收站还原）；节点采集版本快照
+// - propose_update_outline_node：节点存在且未软删；result_summary **仅章**（卷/场景抛错）；
+// 节点采集版本快照（**快照 = 节点级 updated_at**）——`move` 只推进父节点版本戳、不碰被移动节点自身，
+// 故移动不会误杀文本提案（位置与文本正交，**这是有意口径**）；软删自身会推进 updated_at，
+// 叠加 requireOutlineNode 的软删过滤 ⇒ 已删节点无法再写摘要
 
 import { assertCanHold } from "@whispering233/ai-editor-db";
-import type { ProposeDeleteNodeArgs, ProposeMoveNodeArgs, ProposeOutlineNodeArgs } from "../schemas/index.js";
+import type {
+  ProposeDeleteNodeArgs,
+  ProposeMoveNodeArgs,
+  ProposeOutlineNodeArgs,
+  ProposeUpdateOutlineNodeArgs,
+} from "../schemas/index.js";
 import type { ToolContext } from "../context.js";
-import { buildProposal, checkProposalAborted, refOutlineNode, refOutlineNodeExists, requireOutlineNode, type Proposal, type ProposalReference, type ToolProposalResult } from "./types.js";
+import {
+  buildProposal,
+  checkProposalAborted,
+  refOutlineNode,
+  refOutlineNodeExists,
+  requireChapterNode,
+  requireOutlineNode,
+  type Proposal,
+  type ProposalReference,
+  type ToolProposalResult,
+} from "./types.js";
 
 /** 产出新增大纲节点提案（parent_id 缺省挂根；**只有 volume 能缺省**，chapter 必须显式指定卷） */
 export function buildProposeOutlineNode(ctx: ToolContext, args: ProposeOutlineNodeArgs): Proposal {
@@ -112,5 +131,38 @@ export function runProposeDeleteNode(
 ): ToolProposalResult {
   checkProposalAborted(signal);
   const proposal = buildProposeDeleteNode(ctx, args);
+  return { proposal_id: proposal.proposal_id, summary: proposal.summary };
+}
+
+/**
+ * 产出更新大纲节点提案（标题 / 计划摘要 / 章实际摘要，浅合并进节点）。
+ * `result_summary` 仅章：卷 / 场景带该键**抛错**（不静默忽略）——错误文案单源 = shared 的
+ * `requireChapterNode`（与伏笔锚点、变更记录锚点同一条「须为章」判定）。
+ * 快照用节点级 `updated_at`（见文件头：移动只推父节点，故不误杀文本提案）。
+ */
+export function buildProposeUpdateOutlineNode(ctx: ToolContext, args: ProposeUpdateOutlineNodeArgs): Proposal {
+  const hasResultSummary = args.patches.result_summary !== undefined;
+ // 实际摘要仅章：卷/场景带该键直接拒绝（不静默丢弃字段）
+  const node = hasResultSummary
+    ? requireChapterNode(ctx, args.node_id, "实际摘要")
+    : requireOutlineNode(ctx, args.node_id);
+  const fieldCount = Object.keys(args.patches).length;
+  return buildProposal(
+    ctx,
+    "propose_update_outline_node",
+    { node_id: args.node_id, patches: args.patches },
+    [refOutlineNode(node)],
+    `更新大纲节点「${node.title}」的 ${fieldCount} 个字段`,
+  );
+}
+
+/** propose_update_outline_node run */
+export function runProposeUpdateOutlineNode(
+  ctx: ToolContext,
+  args: ProposeUpdateOutlineNodeArgs,
+  signal?: AbortSignal,
+): ToolProposalResult {
+  checkProposalAborted(signal);
+  const proposal = buildProposeUpdateOutlineNode(ctx, args);
   return { proposal_id: proposal.proposal_id, summary: proposal.summary };
 }

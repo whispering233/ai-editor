@@ -68,7 +68,7 @@ import { ConfirmDialog } from "../outline/dialogs";
 // 会话相对时间用 shared formatRelativeTime（Sidebar/Dashboard 同源；≥30 天回退绝对时间，非法输入原样返回）
 
 /** 提案 type → 中文标题（「提案卡片」；未知 type 显示原始名）
- * 覆盖 = packages/tools 实际注册的全部 propose_*（16 个；工具清单见 docs/api/tool-calling.md），
+ * 覆盖 = packages/tools 实际注册的全部 propose_*（17 个；工具清单见 docs/api/tool-calling.md），
  * 新增提案工具时同步补一行（chat-panel.test.tsx 有全集断言）。 */
 export const PROPOSAL_TYPE_LABELS: Record<string, string> = {
   propose_create_entity: "新建实体",
@@ -80,6 +80,7 @@ export const PROPOSAL_TYPE_LABELS: Record<string, string> = {
   propose_outline_node: "新建大纲节点",
   propose_move_node: "移动大纲节点",
   propose_delete_node: "删除大纲节点",
+  propose_update_outline_node: "更新大纲节点",
   propose_create_hook: "新建伏笔",
   propose_update_hook: "更新伏笔",
   propose_advance_hook: "推进伏笔",

@@ -294,6 +294,19 @@ propose_move_node(node_id, parent_id, order)
 propose_delete_node(node_id)
   → 同上，展示在大纲树上的位置变化
 
+propose_update_outline_node(node_id, patches)
+  → 更新**既有**节点的文本：patches = { title?, summary?, result_summary? }（至少一项，
+    浅合并——未传字段保留；未定义键直接拒绝）
+  注：result_summary（实际摘要 = 本章实际写了什么）**仅章**——卷/场景带该键
+    **直接报错**（不静默忽略）；字长上限单源 = shared `MAX_CHAPTER_RESULT_SUMMARY_CHARS`
+    （与 `chapterDataSchema` 同一常量，工具 schema 的 maxLength 从它插值）
+  注：空串 = 清空该字段（`""` 与「无摘要」等价）；result_summary 进 `data`
+    （浅合并，`tags` / `status` 等其他 data 字段原样保留）
+  快照 = **节点级** `updated_at`；`move` 只推进父节点版本戳 ⇒ 移动不会误杀文本提案
+    （位置与文本正交，**有意口径**）；软删会推进自身 `updated_at` 且执行层重查存在性
+    ⇒ 已删节点无法再写摘要
+  确认后：Executor 直接调 db `updateOutlineNodeInfo`（不新增执行类工具名）
+
 // 伏笔五件套（参数与返回结构以 packages/tools/src/index.ts 的工具描述为单一来源）
 propose_create_hook(name, data?, plant_at_node_id?)
 propose_update_hook(hook_id, patches)

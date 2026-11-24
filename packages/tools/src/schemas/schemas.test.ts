@@ -4,7 +4,7 @@
 // 练习工具（分页下限 / 点评卡卡形 / 出题长度上限 = shared 常量）
 import { describe, expect, it } from "vitest";
 import { type TSchema } from "@earendil-works/pi-ai";
-import { MAX_PRACTICE_BRIEF_CHARS, MAX_PRACTICE_TOPIC_CHARS, TOOL_PERMISSION } from "@whispering233/ai-editor-shared";
+import { MAX_PRACTICE_BRIEF_CHARS, MAX_PRACTICE_TOPIC_CHARS, MAX_CHAPTER_RESULT_SUMMARY_CHARS, TOOL_PERMISSION } from "@whispering233/ai-editor-shared";
 import { validateToolArgs } from "../registry.js";
 import {
   deltaChangeSchema,
@@ -17,6 +17,7 @@ import {
   proposeReorderTimepointsArgsSchema,
   proposeUpdateEntityArgsSchema,
   proposeUpdateHookArgsSchema,
+  proposeUpdateOutlineNodeArgsSchema,
   styleNotesPageArgsSchema,
   submitFreeFeedbackArgsSchema,
   submitPracticeTopicArgsSchema,
@@ -72,6 +73,22 @@ describe("提案工具 schema 约束", () => {
     expect(accepts(proposeUpdateEntityArgsSchema, { entity_id: "char-1", patches: { role: "主角" } })).toBe(true);
     expect(accepts(proposeUpdateEntityArgsSchema, { entity_id: "char-1", patches: {} })).toBe(false);
     expect(accepts(proposeUpdateHookArgsSchema, { hook_id: "hook-1", patches: {} })).toBe(false);
+  });
+
+  it("propose_update_outline_node：patches 至少一项（空对象拒）、仅许 title/summary/result_summary、title 非空", () => {
+    expect(accepts(proposeUpdateOutlineNodeArgsSchema, { node_id: "ch-1", patches: { result_summary: "实际写了什么" } })).toBe(true);
+    expect(accepts(proposeUpdateOutlineNodeArgsSchema, { node_id: "ch-1", patches: {} })).toBe(false);
+    expect(accepts(proposeUpdateOutlineNodeArgsSchema, { node_id: "ch-1", patches: { tags: ["主线"] } })).toBe(false); // 未定义键（strict）
+    expect(accepts(proposeUpdateOutlineNodeArgsSchema, { node_id: "ch-1", patches: { title: "" } })).toBe(false);
+    expect(accepts(proposeUpdateOutlineNodeArgsSchema, { node_id: "ch-1", patches: { summary: "" } })).toBe(true); // 空串 = 清空
+  });
+
+  it("propose_update_outline_node：result_summary 长度上限 = shared 常量（边界：上限通过、上限+1 拒）", () => {
+    const atLimit = "字".repeat(MAX_CHAPTER_RESULT_SUMMARY_CHARS);
+    expect(accepts(proposeUpdateOutlineNodeArgsSchema, { node_id: "ch-1", patches: { result_summary: atLimit } })).toBe(true);
+    expect(
+      accepts(proposeUpdateOutlineNodeArgsSchema, { node_id: "ch-1", patches: { result_summary: atLimit + "字" } }),
+    ).toBe(false);
   });
 
   it("name / description 拒绝空串（长度下限 1）", () => {

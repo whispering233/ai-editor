@@ -230,7 +230,7 @@ describe("工具常量", () => {
     expect(HOOK_ANALYSIS_TOOLS).toHaveLength(5);
   });
 
-  it("提案类 16 个", () => {
+  it("提案类 17 个", () => {
     expect(PROPOSAL_TOOLS).toEqual([
       "propose_create_entity",
       "propose_update_entity",
@@ -241,6 +241,7 @@ describe("工具常量", () => {
       "propose_outline_node",
       "propose_move_node",
       "propose_delete_node",
+      "propose_update_outline_node",
       "propose_create_hook",
       "propose_update_hook",
       "propose_advance_hook",
@@ -249,7 +250,7 @@ describe("工具常量", () => {
       "propose_reorder_timepoints",
       "propose_create_reference",
     ]);
-    expect(PROPOSAL_TOOLS).toHaveLength(16);
+    expect(PROPOSAL_TOOLS).toHaveLength(17);
   });
 
   it("执行类 13 个", () => {
@@ -293,10 +294,10 @@ describe("工具常量", () => {
     expect(TOOL_DETAILS_TO_CLIENT.every((name) => (TOOL_NAMES as readonly string[]).includes(name))).toBe(true);
   });
 
-  it("分组无重叠且全量 59 个", () => {
+  it("分组无重叠且全量 60 个", () => {
     expect(AUTO_TOOLS).toHaveLength(21); // +get_chapter_text（卡 12.9）、get_deduction_marks（剧情推演）
     expect(COMMON_TOOLS).toEqual(["web_search", "fetch_content"]); // 通用工具：两种工作区都注册
-    expect(TOOL_NAMES).toHaveLength(59); // 50 + 练习七个（四只读 + 三写 AI 产出，均自动）+ 通用两个
+    expect(TOOL_NAMES).toHaveLength(60); // 50 + 练习七个（四只读 + 三写 AI 产出，均自动）+ 通用两个 + 大纲文本更新提案
  // 各分组互不重叠
     const all = [...QUERY_TOOLS, ...ANALYSIS_TOOLS, ...HOOK_ANALYSIS_TOOLS, ...COMMON_TOOLS, ...PRACTICE_TOOLS, ...PROPOSAL_TOOLS, ...EXECUTOR_TOOLS];
     expect(new Set(all).size).toBe(all.length);
