@@ -1766,6 +1766,7 @@ describe("工具结果截断可观测性", () => {
   it("超上限的工具结果：截断 + 提示 + [usage] TOOL_RESULT_TOO_LARGE 日志", async () => {
     const project = openProject();
     // 大 outline（严格三层）：让 get_outline 的结果远超单条工具结果上限（TOOL_RESULT_MAX_TOKENS）
+    // 必须显式 depth=3：缺省已改为 depth=1（只回卷 + 聚合，体量很小），不再能造出超限结果
     const bigTree = {
       id: "root",
       type: "root",
@@ -1793,7 +1794,7 @@ describe("工具结果截断可观测性", () => {
 
     const env = await createFauxEnv();
     scripted(env, [
-      () => fauxAssistantMessage([fauxToolCall("get_outline", {})]),
+      () => fauxAssistantMessage([fauxToolCall("get_outline", { depth: 3 })]),
       () => fauxAssistantMessage("收到"),
     ]);
     const debugSpy = vi.spyOn(console, "debug").mockImplementation(() => {});
