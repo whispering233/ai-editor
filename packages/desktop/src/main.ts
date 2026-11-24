@@ -3,7 +3,16 @@
 // 职责（`docs/design/50-desktop.md` §1/§2）：解析书库位置（`<userData>/desktop.json`，首次启动弹
 // 原生目录选择框）→ 主进程内 in-process 启动 server → 窗口加载 `http://127.0.0.1:<实际端口>`
 // （与前端相对路径 API_BASE 同源）。**不开子进程**、**不依赖 `process.cwd()` / 命令行参数**。
-import { app, BrowserWindow, dialog, ipcMain, Menu, shell, type MenuItemConstructorOptions } from "electron";
+import {
+  app,
+  BrowserWindow,
+  dialog,
+  ipcMain,
+  Menu,
+  shell,
+  type IpcMainEvent,
+  type MenuItemConstructorOptions,
+} from "electron";
 import { mkdirSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -17,6 +26,7 @@ import {
   writeLibraryMarker,
 } from "./config.js";
 import { logFilePath, redirectConsoleToFile } from "./log.js";
+import { shouldCloseServerOnBeforeQuit, shouldSkipFlushOnClose } from "./quit-sequence.js";
 import { checkForUpdatesManually, isUpdateSupported, setupAutoUpdate } from "./updater.js";
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -33,6 +43,82 @@ async function closeServer(): Promise<void> {
   if (closing) return;
   closing = true;
   await handle?.close();
+}
+
+/** 关窗前落盘通道的 IPC 名（渲染侧 = `preload.cts` 的 `onFlushRequest`，见 `50-desktop.md` §1.1） */
+const FLUSH_REQUEST_CHANNEL = "desktop:flush-request";
+const FLUSH_DONE_CHANNEL = "desktop:flush-done";
+
+/** 等渲染侧落盘回执的上限；超时按失败处理（宁可多问一句，不静默丢正文） */
+const FLUSH_TIMEOUT_MS = 3000;
+
+/** 请渲染侧跑一次「栈顶保存动作」并等回执；低层通道（编排 = `guardCloseFlush`） */
+function requestFlush(win: BrowserWindow): Promise<boolean> {
+  return new Promise((resolve) => {
+    // 渲染进程已崩 / 页面已拆：发请求只会抛，没人能回执 ⇒ 直接按失败走确认框（窗口仍关得掉）
+    if (win.webContents.isDestroyed()) {
+      resolve(false);
+      return;
+    }
+    const settle = (ok: boolean): void => {
+      clearTimeout(timer);
+      ipcMain.removeListener(FLUSH_DONE_CHANNEL, onDone);
+      resolve(ok);
+    };
+    function onDone(event: IpcMainEvent, ok: unknown): void {
+      if (event.sender !== win.webContents) return; // 只认本窗口的回执
+      settle(ok === true); // 回执非 `true` 一律当失败
+    }
+    const timer = setTimeout(() => {
+      console.warn(`[desktop] 关窗落盘回执超时（${FLUSH_TIMEOUT_MS}ms），按失败处理`);
+      settle(false);
+    }, FLUSH_TIMEOUT_MS);
+    ipcMain.on(FLUSH_DONE_CHANNEL, onDone);
+    win.webContents.send(FLUSH_REQUEST_CHANNEL);
+  });
+}
+
+/**
+ * 关窗拦截（卡 C1）：退出必须经 flush 通道，不在 `before-quit` 里抢跑 `closeServer()`——
+ * 落盘还要打 HTTP，服务端必须活到那时。流程 = preventDefault → 请渲染侧落盘 → 成功放行；
+ * 失败 / 超时问一次（默认与 Esc 都是「留在这里」）。
+ */
+function guardCloseFlush(win: BrowserWindow): void {
+  let flushing = false; // 等待期间（落盘 + 可能的一次确认框）的第二次 close 只拦、不再发请求
+  let flushed = false; // 已放行：下面那次 `win.close()` 重入本监听时直接过
+  win.on("close", (event) => {
+    // 服务端已主动关闭（更新安装 / 切换书库先关了它再退）⇒ 这次 flush 必然失败，直接放行
+    if (shouldSkipFlushOnClose({ flushed, serverClosing: closing })) return;
+    event.preventDefault();
+    if (flushing) return;
+    flushing = true;
+    void (async () => {
+      try {
+        if (!(await requestFlush(win))) {
+          const { response } = await dialog.showMessageBox(win, {
+            type: "warning",
+            title: "保存未完成",
+            message: "关闭前保存未完成，未保存的修改可能丢失。",
+            buttons: ["留在这里", "仍要退出"],
+            defaultId: 0,
+            cancelId: 0,
+          });
+          if (response === 0) {
+            console.warn("[desktop] 关窗前落盘未成功 → 用户选择留在这里，窗口不关");
+            return;
+          }
+          console.warn("[desktop] 关窗前落盘未成功 → 用户选择仍要退出");
+        } else {
+          console.log("[desktop] 关窗前落盘成功，关闭窗口");
+        }
+        flushed = true;
+        // 确认框期间窗口可能已被销毁（此时 `close()` 抛的异常会成 unhandled rejection）
+        if (!win.isDestroyed()) win.close();
+      } finally {
+        flushing = false; // 「留在这里」后复位：下次关窗重新走一遍落盘
+      }
+    })();
+  });
 }
 
 /**
@@ -213,6 +299,7 @@ async function openWindow(): Promise<void> {
     },
   });
   guardNavigation(win, handle.port);
+  guardCloseFlush(win);
 
   // 菜单在窗口创建之后装：更新对话框要属主窗口，闭包直接引用已确定的 `win`
   // （否则得先声明 `let win` 再用非空断言，或者让菜单模板依赖一个还没有的值）
@@ -255,5 +342,8 @@ void app.whenReady().then(async () => {
 app.on("window-all-closed", () => app.quit());
 
 app.on("before-quit", () => {
+  // 菜单「退出」= `app.quit()` 先发 before-quit、窗口还没关 ⇒ 这时的 flush 还没跑，
+  // 服务端必须活到落盘之后（次序与两条退出路径见 `50-desktop.md` §1.1）
+  if (!shouldCloseServerOnBeforeQuit(BrowserWindow.getAllWindows().length)) return;
   void closeServer();
 });

@@ -17,7 +17,10 @@ import { useProjectStore } from "../stores/project";
 import { useSaveArchive } from "../hooks/use-save-archive";
 import { useUiStore } from "../stores/ui";
 import { cn } from "../lib/utils";
+import { desktopBridge } from "../lib/desktop";
+import { flushSucceeded } from "../lib/desktop-flush";
 import { panelShortcutFor } from "../lib/panel-shortcuts";
+import { triggerSaveShortcut } from "../lib/save-shortcut";
 import { ChatPanel } from "./chat/ChatPanel";
 import { FeedbackHost } from "./feedback/FeedbackHost";
 import { CloudConflictDialog } from "./settings/cloud-conflict-dialog";
@@ -40,6 +43,14 @@ export function AppShell({ route, children }: { route: Route; children: ReactNod
   // 全站 Ctrl/Cmd + S 的存档阶段（契约 DESIGN.md §设置页「快捷键」区）：
   // 挂在外壳层 = 任意页面（含专注模式、左栏收起）按快捷键都能生成存档；无项目时只保存不存档
   useSaveArchive();
+
+  // 桌面关窗前落盘（卡 C1，`50-desktop.md` §1.1）：主进程拦 close → 跑一次栈顶保存动作 → 回执 ok。
+  // 挂外壳层 = 任意页面（含左栏/右栏收起、专注模式）关窗都能落盘；浏览器形态没有这条通道
+  useEffect(() => {
+    const bridge = desktopBridge();
+    if (!bridge) return;
+    return bridge.onFlushRequest(() => flushSucceeded(triggerSaveShortcut()));
+  }, []);
 
   // 整栏快捷键（卡 L2，DESIGN.md §Layout「三栏」）：仅桌面 + 非专注模式注册；
   // 可编辑区不抢键（块编辑器 Mod+B 保持加粗），口径与判定同在 lib/panel-shortcuts

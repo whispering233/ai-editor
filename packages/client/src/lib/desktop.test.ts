@@ -34,6 +34,7 @@ describe("desktopBridge", () => {
       pickDirectory: async () => "/books/mine",
       getLibraryRoot: async () => "/books",
       changeLibraryRoot: async () => null,
+      onFlushRequest: () => () => {},
     };
     setWindow({ aiEditorDesktop: bridge });
     expect(desktopBridge()).toBe(bridge);

@@ -9,6 +9,9 @@ export interface DesktopBridge {
   getLibraryRoot(): Promise<string | null>;
   /** 更改书库位置：写配置 + 重启应用；返回新路径，用户取消/未变更返回 null */
   changeLibraryRoot(): Promise<string | null>;
+  /** 关窗前落盘（`50-desktop.md` §1.1）：主进程拦 close 后调一次 handler，返回值即回执（`true` = 落盘成功）。
+   * 返回注销函数 */
+  onFlushRequest(handler: () => Promise<boolean>): () => void;
 }
 
 declare global {
