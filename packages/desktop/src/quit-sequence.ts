@@ -4,3 +4,13 @@
 export function shouldCloseServerOnBeforeQuit(windowCount: number): boolean {
   return windowCount === 0;
 }
+
+// 关窗时是否跳过 flush：服务端**已被主动关掉**时，渲染侧那次保存 PUT 必然失败 ⇒ 弹「保存未完成」是
+// 假警报，而且选「留在这里」会取消整个 quit（安装器其实已经拉起，安装就停在半路）。两条先关后退的路径：
+// `updater.ts` 的 `quitAndInstall`、切换书库的 `app.relaunch` + `app.quit`——次序不能改（`50-desktop.md` §1.1）。
+export function shouldSkipFlushOnClose({ flushed, serverClosing }: {
+  flushed: boolean;
+  serverClosing: boolean;
+}): boolean {
+  return flushed || serverClosing;
+}

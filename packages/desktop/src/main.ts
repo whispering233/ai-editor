@@ -26,7 +26,7 @@ import {
   writeLibraryMarker,
 } from "./config.js";
 import { logFilePath, redirectConsoleToFile } from "./log.js";
-import { shouldCloseServerOnBeforeQuit } from "./quit-sequence.js";
+import { shouldCloseServerOnBeforeQuit, shouldSkipFlushOnClose } from "./quit-sequence.js";
 import { checkForUpdatesManually, isUpdateSupported, setupAutoUpdate } from "./updater.js";
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -87,7 +87,8 @@ function guardCloseFlush(win: BrowserWindow): void {
   let flushing = false; // 等待期间（落盘 + 可能的一次确认框）的第二次 close 只拦、不再发请求
   let flushed = false; // 已放行：下面那次 `win.close()` 重入本监听时直接过
   win.on("close", (event) => {
-    if (flushed) return;
+    // 服务端已主动关闭（更新安装 / 切换书库先关了它再退）⇒ 这次 flush 必然失败，直接放行
+    if (shouldSkipFlushOnClose({ flushed, serverClosing: closing })) return;
     event.preventDefault();
     if (flushing) return;
     flushing = true;
@@ -111,7 +112,8 @@ function guardCloseFlush(win: BrowserWindow): void {
           console.log("[desktop] 关窗前落盘成功，关闭窗口");
         }
         flushed = true;
-        win.close();
+        // 确认框期间窗口可能已被销毁（此时 `close()` 抛的异常会成 unhandled rejection）
+        if (!win.isDestroyed()) win.close();
       } finally {
         flushing = false; // 「留在这里」后复位：下次关窗重新走一遍落盘
       }
