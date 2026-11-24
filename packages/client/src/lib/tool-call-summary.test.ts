@@ -57,6 +57,15 @@ describe("summarizeToolCall", () => {
     expect(withPlain).toEqual(["搜索实体：类型：character", "关键词：张三"]);
   });
 
+  it("search_outline：关键词 / 状态 / 标签 / 卷（卷 id 解析为名称）", () => {
+    const lines = summarizeToolCall(
+      "search_outline",
+      { query: "灵脉", status: "draft", tags: ["主线"], volume_id: "ch-4" },
+      names,
+    );
+    expect(lines).toEqual(["检索大纲：卷「第一章」", "关键词：灵脉", "状态：draft", "标签：主线"]);
+  });
+
   it("propose_reorder_timepoints：无参摘要（可读描述由 preview.changes 承载）", () => {
     const lines = summarizeToolCall(
       "propose_reorder_timepoints",

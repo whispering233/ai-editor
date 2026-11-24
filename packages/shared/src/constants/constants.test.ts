@@ -191,7 +191,7 @@ describe("工具常量", () => {
     expect(TOOL_PERMISSION).toEqual({ AUTO: "auto", PROPOSAL: "proposal" });
   });
 
-  it("查询类 11 个", () => {
+  it("查询类 12 个", () => {
     expect(QUERY_TOOLS).toEqual([
       "get_entity",
       "search_entities",
@@ -199,13 +199,14 @@ describe("工具常量", () => {
       "query_relationships",
       "get_outline",
       "get_outline_path",
+      "search_outline", // C2：大纲结构化检索（C3 的 search_manuscript 落地后再 +1）
       "get_deduction_marks", // 推演节点标记（剧情推演）
       "get_chapter_text", // 章正文只读（卡 12.9）
       "compute_state",
       "get_delta_history",
       "get_entity_summary",
     ]);
-    expect(QUERY_TOOLS).toHaveLength(11);
+    expect(QUERY_TOOLS).toHaveLength(12);
   });
 
   it("分析类 5 个", () => {
@@ -294,10 +295,10 @@ describe("工具常量", () => {
     expect(TOOL_DETAILS_TO_CLIENT.every((name) => (TOOL_NAMES as readonly string[]).includes(name))).toBe(true);
   });
 
-  it("分组无重叠且全量 60 个", () => {
-    expect(AUTO_TOOLS).toHaveLength(21); // +get_chapter_text（卡 12.9）、get_deduction_marks（剧情推演）
+  it("分组无重叠且全量 61 个", () => {
+    expect(AUTO_TOOLS).toHaveLength(22); // +get_chapter_text（卡 12.9）、get_deduction_marks（剧情推演）、search_outline（C2）
     expect(COMMON_TOOLS).toEqual(["web_search", "fetch_content"]); // 通用工具：两种工作区都注册
-    expect(TOOL_NAMES).toHaveLength(60); // 50 + 练习七个（四只读 + 三写 AI 产出，均自动）+ 通用两个 + 大纲文本更新提案
+    expect(TOOL_NAMES).toHaveLength(61); // 50 + 练习七个（四只读 + 三写 AI 产出，均自动）+ 通用两个 + 大纲文本更新提案 + search_outline
  // 各分组互不重叠
     const all = [...QUERY_TOOLS, ...ANALYSIS_TOOLS, ...HOOK_ANALYSIS_TOOLS, ...COMMON_TOOLS, ...PRACTICE_TOOLS, ...PROPOSAL_TOOLS, ...EXECUTOR_TOOLS];
     expect(new Set(all).size).toBe(all.length);

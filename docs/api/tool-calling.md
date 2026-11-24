@@ -70,6 +70,21 @@ get_outline_path(node_id)
   → 从根到该节点的路径 ID 列表
   用途：AI 说"从卷1第3章到结局有哪几条路径"
 
+search_outline(query?, status?, tags?, volume_id?, offset?)
+  → { items: [{ id, title, chapterNumber, volumeId, volumeTitle, status, tags, snippet }],
+      total, truncated?, next_offset? }
+  **至少一个条件**（query / status / tags / volume_id 全空 → 报错）：本工具不承担「列全书」
+     （那会把整棵树的标题灌进上下文），看整体结构走 get_outline
+  命中面 = 节点 `title` / `summary`（计划摘要）/ `data.result_summary`（实际摘要）子串匹配
+     （数据在 outline.json 一棵树里，全树扫描 ms 级 —— **不上 FTS5、不开迁移**）
+  status = 章写作状态（draft/revision/final；`data.status` 缺省即草稿）
+  tags = `data.tags` **全含**（与 `listEntities` 的 filters 同口径）；volume_id 限定某一卷
+  排序 = 阅读序（卷序 → 卷内章序，复用服务端 `deriveChapterOrder`）；
+     `chapterNumber` 与之同源（与 get_chapter_text 的 chapter_number 同口径），软删章不出现
+  分页同 search_entities：total = 命中总数，单页上限 = 工具层 `MAX_OUTLINE_SEARCH_LIMIT`，
+     未取完时附 truncated / next_offset；`snippet` = 命中字段前后各 `OUTLINE_SEARCH_SNIPPET_CHARS` 字
+  千章书典型用法：get_outline 看整体结构 → 本工具（关键词 / status / tags / volume_id）跨卷定位
+
 // === 推演节点（2026-09）===
 get_deduction_marks()
   → { marks: [...], spans: [...] }
