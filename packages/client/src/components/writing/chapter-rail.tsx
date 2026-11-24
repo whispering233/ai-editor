@@ -9,9 +9,12 @@
 //
 // 行几何与大纲树同密度：32px 行高、24px 折叠箭头盒、编号徽标 `min-w-14`（对齐口径见 DESIGN.md
 // §大纲页「缩进列对齐」）；章行是 `<a href="#/writing/:id">`，点击直接进正文，不渲染「写正文」按钮。
-import { useEffect, useRef, type ReactNode } from "react";
+import { Fragment, useEffect, useRef, type ReactNode } from "react";
 import { Button } from "antd";
 import { RightOutlined } from "@ant-design/icons";
+import type { ExpectedHookItem } from "../../lib/api";
+import { entityDetailPath } from "../../lib/entity-paths";
+import { HOOK_STATUS_LABEL } from "../../lib/entity-list";
 import { formatTextLength } from "../../lib/manuscript";
 import { errorBannerClass, skeletonClass } from "../../lib/styles";
 import { cn } from "../../lib/utils";
@@ -44,6 +47,11 @@ export interface ChapterRailProps {
   detailCollapsed?: boolean;
   /** 切换右侧详情收起态；不传 = 不渲染该按钮（详情展开时右钮在正文页头、窄屏无相邻正文列） */
   onToggleDetail?: () => void;
+  /** 当前章「待回收」伏笔（页面拉取；空数组 = 整块不渲染） */
+  expectedHooks?: ExpectedHookItem[];
+  /** 「本章待回收」折叠态（页面 state，同卷折叠口径：不写 localStorage） */
+  expectedCollapsed?: boolean;
+  onToggleExpected?: () => void;
 }
 
 export function ChapterRail({
@@ -59,6 +67,9 @@ export function ChapterRail({
   leading,
   detailCollapsed,
   onToggleDetail,
+  expectedHooks = [],
+  expectedCollapsed = false,
+  onToggleExpected,
 }: ChapterRailProps) {
   // 换章后把选中行滚进可视区（`nearest`：已在视野内则不跳）。SSR 不跑 effect。
   const selectedRef = useRef<HTMLAnchorElement | null>(null);
@@ -180,35 +191,83 @@ export function ChapterRail({
               const selected = row.id === selectedId;
               const lengthLabel = formatTextLength(row.textLength);
               return (
-                <li key={row.id}>
-                  <a
-                    ref={selected ? selectedRef : undefined}
-                    data-chapter-id={row.id}
-                    href={`#/writing/${row.id}`}
-                    aria-current={selected ? "page" : undefined}
-                    className={cn(
-                      "flex h-8 w-full items-center gap-2 rounded-sm px-2 text-foreground transition-colors",
-                      selected ? "bg-accent text-foreground" : "hover:bg-muted",
-                    )}
-                  >
-                    {/* 缩进占位：与卷行折叠箭头同几何（24px 盒） */}
-                    <span className="-ml-2 w-6 shrink-0" aria-hidden />
-                    <TypeChip
-                      tone="soft"
-                      className="min-w-14 shrink-0 justify-center tabular-nums"
+                <Fragment key={row.id}>
+                  <li>
+                    <a
+                      ref={selected ? selectedRef : undefined}
+                      data-chapter-id={row.id}
+                      href={`#/writing/${row.id}`}
+                      aria-current={selected ? "page" : undefined}
+                      className={cn(
+                        "flex h-8 w-full items-center gap-2 rounded-sm px-2 text-foreground transition-colors",
+                        selected ? "bg-accent text-foreground" : "hover:bg-muted",
+                      )}
                     >
-                      {row.label}
-                    </TypeChip>
-                    <span className="min-w-0 flex-1 truncate text-sm" title={row.title}>
-                      {row.title}
-                    </span>
-                    {lengthLabel !== null && (
-                      <span className="shrink-0 text-xs tabular-nums text-muted-foreground">
-                        {lengthLabel}
+                      {/* 缩进占位：与卷行折叠箭头同几何（24px 盒） */}
+                      <span className="-ml-2 w-6 shrink-0" aria-hidden />
+                      <TypeChip
+                        tone="soft"
+                        className="min-w-14 shrink-0 justify-center tabular-nums"
+                      >
+                        {row.label}
+                      </TypeChip>
+                      <span className="min-w-0 flex-1 truncate text-sm" title={row.title}>
+                        {row.title}
                       </span>
-                    )}
-                  </a>
-                </li>
+                      {lengthLabel !== null && (
+                        <span className="shrink-0 text-xs tabular-nums text-muted-foreground">
+                          {lengthLabel}
+                        </span>
+                      )}
+                    </a>
+                  </li>
+                  {/* 「本章待回收 · N」紧跟在当前章行之后（不是 rail 尾部）；无命中整块不渲染 */}
+                  {selected && onToggleExpected !== undefined && expectedHooks.length > 0 && (
+                    <li>
+                      <button
+                        type="button"
+                        onClick={onToggleExpected}
+                        aria-expanded={!expectedCollapsed}
+                        className="flex h-8 w-full items-center gap-2 rounded-sm px-2 text-left text-muted-foreground transition-colors hover:bg-muted"
+                      >
+                        <span className="-ml-2 flex w-6 shrink-0 items-center justify-center">
+                          <RightOutlined
+                            className={cn(
+                              "text-sm transition-transform",
+                              !expectedCollapsed && "rotate-90",
+                            )}
+                          />
+                        </span>
+                        <span className="min-w-0 flex-1 truncate text-xs">
+                          本章待回收 · {expectedHooks.length}
+                        </span>
+                      </button>
+                      {!expectedCollapsed && (
+                        <ul className="space-y-0.5">
+                          {expectedHooks.map((hook) => (
+                            <li key={hook.id}>
+                              <a
+                                href={`#${entityDetailPath("hook", hook.id)}`}
+                                data-expected-hook-id={hook.id}
+                                className="flex h-7 items-center gap-2 rounded-sm py-0 pl-8 pr-2 text-foreground transition-colors hover:bg-muted"
+                              >
+                                <span
+                                  className="min-w-0 flex-1 truncate text-sm"
+                                  title={hook.name}
+                                >
+                                  {hook.name}
+                                </span>
+                                <span className="shrink-0 text-xs text-muted-foreground">
+                                  {HOOK_STATUS_LABEL[hook.status] ?? hook.status}
+                                </span>
+                              </a>
+                            </li>
+                          ))}
+                        </ul>
+                      )}
+                    </li>
+                  )}
+                </Fragment>
               );
             })}
           </ul>

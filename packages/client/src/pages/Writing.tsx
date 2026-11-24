@@ -9,7 +9,7 @@
 //
 // 响应式（<1024px）= 两级互斥（同人物工作台）：`#/writing` 只显示 rail 全宽（无正文）；
 // `#/writing/:id` 只显示正文全宽 + 顶部「章节目录」返回条。专注模式隐藏 rail 与返回条。
-import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Button } from "antd";
 import { ArrowLeftOutlined } from "@ant-design/icons";
 import { PanelToggleButton } from "../components/ui/panel-toggle-button";
@@ -19,8 +19,10 @@ import { EmptyState } from "../components/ui/empty-state";
 import { PanelHeader } from "../components/ui/panel-header";
 import { ResizeHandle } from "../components/ui/resize-handle";
 import { useMediaQuery } from "../hooks/use-media-query";
+import { useDataRefresh } from "../hooks/use-data-refresh";
 import { useOutlineLoader } from "../hooks/use-outline-loader";
 import { useWritingRail } from "../hooks/use-writing-rail";
+import { getExpectedHooks, type ExpectedHookItem } from "../lib/api";
 import { errorBannerClass, skeletonClass } from "../lib/styles";
 import { cn } from "../lib/utils";
 import { buildWritingRailRows, readLastOpenedChapter, resolveWritingTarget, writeLastOpenedChapter } from "../lib/writing";
@@ -66,6 +68,32 @@ export default function Writing({ chapterId }: { chapterId?: string }) {
   const chapterExists =
     chapterId !== undefined &&
     rows.some((row) => row.kind === "chapter" && row.id === chapterId);
+
+  // 「本章待回收」伏笔（rail 附带信息块）：失败静默（不挡写作，无命中整块不渲染）；
+  // seq 守卫丢弃快速切章时旧章的迟到响应。数据源 = `GET /hook/expected?node_id=`（docs/api/30-api-entity.md）。
+  const [expectedHooks, setExpectedHooks] = useState<ExpectedHookItem[]>([]);
+  const [expectedCollapsed, setExpectedCollapsed] = useState(false);
+  const expectedSeq = useRef(0);
+  const reloadExpectedHooks = useCallback(() => {
+    const seq = ++expectedSeq.current;
+    if (chapterId === undefined || !chapterExists) {
+      setExpectedHooks([]);
+      return;
+    }
+    getExpectedHooks(chapterId).then(
+      (res) => {
+        if (expectedSeq.current === seq) setExpectedHooks(res.items);
+      },
+      () => {
+        if (expectedSeq.current === seq) setExpectedHooks([]);
+      },
+    );
+  }, [chapterId, chapterExists]);
+  useEffect(reloadExpectedHooks, [reloadExpectedHooks]);
+  // 提案确认写库 / 刷新按钮（伏笔可能刚被回收）
+  useDataRefresh(reloadExpectedHooks);
+  const toggleExpected = useCallback(() => setExpectedCollapsed((prev) => !prev), []);
+
   // 大纲加载失败（以 store 的错误标记为准：首帧 / 加载中 outlineError 为 null，不误报失败）。
   // 错误提示在正文列（桌面）；窄屏目录页没有正文列，错误与重试挂在 rail 内。
   const outlineFailed = outline === null && outlineError !== null;
@@ -153,6 +181,9 @@ export default function Writing({ chapterId }: { chapterId?: string }) {
         // 详情收起时右钮回到本 header 右端组末尾（详情展开时在正文页头动作组末尾）
         detailCollapsed={isDesktop ? railLayout.detailCollapsed : undefined}
         onToggleDetail={detailHidden ? toggleRailDetail : undefined}
+        expectedHooks={expectedHooks}
+        expectedCollapsed={expectedCollapsed}
+        onToggleExpected={toggleExpected}
       />
     ) : null;
 

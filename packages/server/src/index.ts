@@ -30,6 +30,7 @@ import { getSettingsManager } from "./model-runtime.js";
 import { chatRoutes } from "./routes/chat.js";
 import { deltaRoutes } from "./routes/delta.js";
 import { entityRoutes } from "./routes/entity.js";
+import { hookRoutes } from "./routes/hook.js"; // 伏笔专属只读端点（本章待回收）
 import { settingsRoutes } from "./routes/settings.js";
 import {
   closeProject,
@@ -235,6 +236,10 @@ export async function startServer(projectRoot: string, options: StartServerOptio
  // 实体路由（S3.3）：GET/POST /api/v1/entity/:type、GET/PUT/DELETE /:type/:id
   app.use("/api/v1/entity/*", requireKind("novel"));
   app.route("/api/v1/entity", entityRoutes);
+
+ // 伏笔路由（C5）：GET /api/v1/hook/expected?node_id=（写作页「本章待回收」）
+  app.use("/api/v1/hook/*", requireKind("novel"));
+  app.route("/api/v1/hook", hookRoutes);
 
  // 项目路由（S1.2）：create/open/close/config（项目管理）
   app.route("/api/v1/project", projectRoutes);
