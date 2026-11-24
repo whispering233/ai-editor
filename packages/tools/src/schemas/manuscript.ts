@@ -1,4 +1,4 @@
-// 工具参数 schema：章正文域（get_chapter_text）
+// 工具参数 schema：章正文域（get_chapter_text / search_manuscript）
 //
 // 口径见 docs/api/tool-calling.md「正文只读查询（2026-09）」：AI 按需分页拉取章正文的
 // 轻量 md 投影（document_records.content_text）；**工具面不存在任何正文/文档写工具**。
@@ -20,3 +20,17 @@ export const getChapterTextArgsSchema = Type.Object(
 );
 
 export type GetChapterTextArgs = Static<typeof getChapterTextArgsSchema>;
+
+/**
+ * search_manuscript 入参：query（必填，空串 / 纯空白 → 实现层抛错）+ offset（跳过前面多少章命中，缺省 0）。
+ * 一页条数上限见 `query/manuscript.ts` 的 `MAX_MANUSCRIPT_SEARCH_HITS`（不进参数：模型只需 offset 续读）。
+ */
+export const searchManuscriptArgsSchema = Type.Object(
+  {
+    query: Type.String(),
+    offset: Type.Optional(Type.Integer({ minimum: 0 })),
+  },
+  { additionalProperties: false },
+);
+
+export type SearchManuscriptArgs = Static<typeof searchManuscriptArgsSchema>;

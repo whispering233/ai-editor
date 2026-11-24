@@ -1,7 +1,7 @@
 // 冒烟测试：验证 @whispering233/ai-editor-tools 入口可正常导入（T0.3 语义）
-// 冒烟断言为新入口形态：注册表 API + 工具副作用注册（查询 11 + 分析 5 +
+// 冒烟断言为新入口形态：注册表 API + 工具副作用注册（查询 12 + 分析 5 +
 // S6.5 伏笔 5 + S6.6 提案 17 + S6.7 卡 12.9（get_chapter_text）1 + D4（get_deduction_marks）1
-// + 练习 7（四读三写，scope = practice）+ 通用 2（web_search / fetch_content，scope = common）= 47 个；执行 13 个不暴露）；
+// + 练习 7（四读三写，scope = practice）+ 通用 2（web_search / fetch_content，scope = common）= 48 个；执行 13 个不暴露）；
 // workspace 依赖 @whispering233/ai-editor-db / @whispering233/ai-editor-shared 解析由 import 在编译/运行期验证
 import { describe, expect, it } from "vitest";
 import { AUTO_TOOLS, CHARACTER_PRIORITIES, CHARACTER_PRIORITY_LABELS, COMMON_TOOLS, DEFAULT_HALF_LIFE, MAX_CHAPTER_RESULT_SUMMARY_CHARS, MAX_ENTITY_LIST_LIMIT, MAX_FEEDBACK_DIMENSIONS, MAX_PRACTICE_BRIEF_CHARS, MAX_PRACTICE_TOPIC_CHARS, PRACTICE_TOOLS, PROPOSAL_TOOLS, TOOL_SCOPES } from "@whispering233/ai-editor-shared";
@@ -23,14 +23,16 @@ describe("@whispering233/ai-editor-tools 入口冒烟", () => {
     expect(typeof m.runComputeState).toBe("function");
     expect(typeof m.runGetDeltaHistory).toBe("function");
     expect(typeof m.runGetEntitySummary).toBe("function");
+    expect(typeof m.runSearchManuscript).toBe("function"); // 正文检索（search_manuscript）
  // 提案工具实现导出（S6.6）
     expect(typeof m.runProposeCreateEntity).toBe("function");
     expect(typeof m.runProposeAddDelta).toBe("function");
     expect(typeof m.runProposeAdvanceHook).toBe("function");
- // 入口副作用注册：查询 11 + 分析 5 + 伏笔 5 + 提案 17 + 练习 7 + 通用 2 = 47 个（含 get_chapter_text 正文只读 + get_deduction_marks 推演标记）
-    expect(m.toolCount()).toBe(47);
+ // 入口副作用注册：查询 12 + 分析 5 + 伏笔 5 + 提案 17 + 练习 7 + 通用 2 = 48 个（含 get_chapter_text 正文只读 + get_deduction_marks 推演标记 + search_manuscript 正文检索）
+    expect(m.toolCount()).toBe(48);
     expect(m.getTool("get_entity")).toBeDefined();
     expect(m.getTool("get_chapter_text")!.permission).toBe("auto"); // 正文只读：自动权限
+    expect(m.getTool("search_manuscript")!.permission).toBe("auto"); // 正文检索：只读、自动权限
  // 分页数值防漂移：description 由 query/manuscript.ts 的常量插值生成
     const chapterTextDescription = m.getTool("get_chapter_text")!.description;
     const descriptionNumbers = chapterTextDescription.match(/\d{4,}/g) ?? [];
@@ -75,6 +77,14 @@ describe("@whispering233/ai-editor-tools 入口冒烟", () => {
     expect(m.getTool("fetch_content")!.scope).toBe("common");
     expect(m.getTool("fetch_content")!.permission).toBe("auto");
     expect(typeof m.runFetchContent).toBe("function");
+ // 检索上限防漂移：search_manuscript 的 description 由 query/manuscript.ts 的常量插值——
+ // 描述里出现的**任何**数字必须恰好 ⊆ {单页章数上限, 片段窗宽}（手写数值 / 值改了没同步即报红）
+    const manuscriptSearchDescription = m.getTool("search_manuscript")!.description;
+    expect(new Set(manuscriptSearchDescription.match(/\d+/g) ?? [])).toEqual(
+      new Set([String(m.MAX_MANUSCRIPT_SEARCH_HITS), String(m.MANUSCRIPT_SNIPPET_WINDOW_CHARS)]),
+    );
+ // 模型得知「query 必填」与「只搜正文」的唯一渠道是描述本身
+    expect(manuscriptSearchDescription).toContain("query 必填");
  // 实体列表上限防漂移：search_entities 的 description 由 shared MAX_ENTITY_LIST_LIMIT 插值——
  // 描述里出现的**任何**数字必须恰好 ⊆ {条数上限}（手写数值 / 值改了没同步即报红）
     const entitySearchDescription = m.getTool("search_entities")!.description;
@@ -141,7 +151,7 @@ describe("@whispering233/ai-editor-tools 入口冒烟", () => {
 
  // 工具 scope（工作区作用域，2026-10）：小说侧工具全为 novel（逐名对账，不用「长度相等」代替）
  // + 练习七个为 practice（**scope 标错任一侧，逐名集合对账即报红**）。
-  it("scope 无遗漏：每个已注册工具的 scope 合法，novel 集合 = 既有 38 个、practice 集合 = 练习七个（逐名相等）", () => {
+  it("scope 无遗漏：每个已注册工具的 scope 合法，novel 集合 = 既有 39 个、practice 集合 = 练习七个（逐名相等）", () => {
     const legacyToolNames = [
       "analyze_consistency",
       "analyze_hook_health",
@@ -176,6 +186,7 @@ describe("@whispering233/ai-editor-tools 入口冒烟", () => {
       "propose_update_outline_node",
       "query_relationships",
       "search_entities",
+      "search_manuscript",
       "search_references",
       "suggest_connections",
       "suggest_hook_payoff",

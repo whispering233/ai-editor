@@ -57,6 +57,7 @@ export const QUERY_TOOLS = [
   "get_outline_path",
   "get_deduction_marks", // 推演节点标记（剧情推演）
   "get_chapter_text", // 章正文只读（卡 12.9：分页拉取 content_text 投影）
+  "search_manuscript", // 正文检索（跨章 LIKE 检索，回命中章 + 片段；千章书的导航入口）
   "compute_state",
   "get_delta_history",
   "get_entity_summary",
@@ -127,7 +128,7 @@ export const EXECUTOR_TOOLS = [
   "reorder_timepoints",
 ] as const;
 
-/** 自动级工具（查询 11 + 分析 5 + 伏笔分析 5，共 21 个） */
+/** 自动级工具（查询 12 + 分析 5 + 伏笔分析 5，共 22 个） */
 export const AUTO_TOOLS = [...QUERY_TOOLS, ...ANALYSIS_TOOLS, ...HOOK_ANALYSIS_TOOLS] as const;
 
 /**
@@ -156,7 +157,7 @@ export const PRACTICE_TOOLS = [
   "submit_practice_topic", // AI 出题（只写 practice_free_pieces.topic / brief）
 ] as const;
 
-/** 全部工具名（自动 21 + 通用 2 + 练习 7 + 提案 17 + 执行 13 = 60 个） */
+/** 全部工具名（自动 22 + 通用 2 + 练习 7 + 提案 17 + 执行 13 = 61 个） */
 export const TOOL_NAMES = [
   ...AUTO_TOOLS,
   ...COMMON_TOOLS,

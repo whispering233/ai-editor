@@ -9,7 +9,7 @@ import { join } from "node:path";
 import type { OutlineFileTree } from "@whispering233/ai-editor-shared";
 import type { ToolContext } from "../context.js";
 import { closeDatabase, findOutlineNode, openDatabase, readOutlineFile, upsertDocument, writeOutlineFile, type Db } from "@whispering233/ai-editor-db";
-import { MAX_TEXT_PAGE_CHARS, runGetChapterText } from "./manuscript.js";
+import { MAX_TEXT_PAGE_CHARS, MANUSCRIPT_SNIPPET_WINDOW_CHARS, MAX_MANUSCRIPT_SEARCH_HITS, runGetChapterText, runSearchManuscript } from "./manuscript.js";
 
 let dir: string;
 let db: Db;
@@ -169,5 +169,131 @@ describe("get_chapter_text", () => {
     const beyond = runGetChapterText(makeCtx(), { node_id: "ch-1", offset: 100 });
     expect(beyond).toMatchObject({ offset: 100, returned_chars: 0, text: "", truncated: false });
     expect(() => runGetChapterText(makeCtx(), { node_id: "ch-1", offset: -1 })).toThrow(/offset 必须为非负整数/);
+  });
+});
+
+describe("search_manuscript", () => {
+  /** 章数 > 单页上限的书：ch-1..ch-n 全挂同一卷（章号 = 1..n） */
+  function seedLongBook(chapterCount: number): void {
+    writeOutlineFile(dir, {
+      id: "root",
+      type: "root",
+      schema_version: 1,
+      children: [
+        {
+          id: "vol-1",
+          type: "volume",
+          title: "第一卷",
+          updated_at: T0,
+          children: Array.from({ length: chapterCount }, (_, i) => ({
+            id: `ch-${i + 1}`,
+            type: "chapter" as const,
+            title: `第${i + 1}章`,
+            updated_at: T0,
+            children: [],
+          })),
+        },
+      ],
+    });
+  }
+
+  it("命中章正文：章名 + 阅读序章号 + 片段齐备，total = 命中章数", () => {
+    writeOutlineFile(dir, seedOutlineTree());
+    seedChapterText("ch-2", "断刃峡的风停了。");
+    seedChapterText("ch-1", "无关键词的正文。");
+    expect(runSearchManuscript(makeCtx(), { query: "断刃峡" })).toEqual({
+      items: [{ chapterId: "ch-2", chapterNumber: 2, title: "第二章", snippet: "断刃峡的风停了。" }],
+      total: 1,
+    });
+  });
+
+  it("空 query / 纯空白 → 抛错（不退化为「列出全部已写章」）", () => {
+    writeOutlineFile(dir, seedOutlineTree());
+    seedChapterText("ch-1", "内容");
+    expect(() => runSearchManuscript(makeCtx(), { query: "" })).toThrow(/query 不能为空/);
+    expect(() => runSearchManuscript(makeCtx(), { query: "  \n\t" })).toThrow(/query 不能为空/);
+  });
+
+  it("snippet：命中前后各取窗宽、首尾被截的一侧补「…」，包含命中词且长度在上限内", () => {
+    writeOutlineFile(dir, seedOutlineTree());
+    const text = "无关".repeat(50) + "断刃峡" + "也无关".repeat(50);
+    seedChapterText("ch-1", text);
+    const [hit] = runSearchManuscript(makeCtx(), { query: "断刃峡" }).items;
+    expect(hit!.snippet).toContain("断刃峡");
+    expect(hit!.snippet.startsWith("…")).toBe(true); // 命中在章中段 → 两侧都省略
+    expect(hit!.snippet.endsWith("…")).toBe(true);
+    // 窗宽单源：长度 = 两倍窗宽 + query 长度 + 两个省略号
+    expect(hit!.snippet).toHaveLength(MANUSCRIPT_SNIPPET_WINDOW_CHARS * 2 + "断刃峡".length + 2);
+  });
+
+  it("多处命中只给第一处（不汇总全章命中）", () => {
+    writeOutlineFile(dir, seedOutlineTree());
+    seedChapterText("ch-1", "第一处断刃峡……第二处断刃峡");
+    const [hit] = runSearchManuscript(makeCtx(), { query: "断刃峡" }).items;
+    expect(hit!.snippet.startsWith("第一处断刃峡")).toBe(true);
+  });
+
+  it("分页：连续两次取完不重不漏（第二页只剩尾部，不再附 truncated）", () => {
+    const chapterCount = MAX_MANUSCRIPT_SEARCH_HITS + 3;
+    seedLongBook(chapterCount);
+    for (let i = 1; i <= chapterCount; i++) seedChapterText(`ch-${i}`, `第${i}章正文提到断刃峡`);
+    const ctx = makeCtx();
+    const first = runSearchManuscript(ctx, { query: "断刃峡" });
+    expect(first.items).toHaveLength(MAX_MANUSCRIPT_SEARCH_HITS);
+    expect(first.total).toBe(chapterCount);
+    expect(first.truncated).toBe(true);
+    expect(first.next_offset).toBe(MAX_MANUSCRIPT_SEARCH_HITS);
+    const second = runSearchManuscript(ctx, { query: "断刃峡", offset: first.next_offset });
+    expect(second.total).toBe(chapterCount); // total 与 offset 无关
+    expect(second.items).toHaveLength(chapterCount - MAX_MANUSCRIPT_SEARCH_HITS);
+    expect(second.truncated).toBeUndefined();
+    // 不重不漏：两页拼起来 = 整本书的章序（1..n），无重复
+    const ids = [...first.items, ...second.items].map((item) => item.chapterId);
+    expect(ids).toEqual(Array.from({ length: chapterCount }, (_, i) => `ch-${i + 1}`));
+  });
+
+  it("阅读序：卷序 → 卷内章序，章号跨卷连续（不按命中先后 / 不按更新时）", () => {
+    writeOutlineFile(dir, {
+      id: "root",
+      type: "root",
+      schema_version: 1,
+      children: [
+        { id: "vol-1", type: "volume", title: "第一卷", updated_at: T0, children: [{ id: "ch-1", type: "chapter", title: "第一章", updated_at: T0, children: [] }] },
+        { id: "vol-2", type: "volume", title: "第二卷", updated_at: T0, children: [{ id: "ch-2", type: "chapter", title: "第二章", updated_at: T0, children: [] }] },
+      ],
+    });
+    seedChapterText("ch-2", "断刃峡在后卷");
+    seedChapterText("ch-1", "断刃峡在前卷");
+    expect(runSearchManuscript(makeCtx(), { query: "断刃峡" }).items.map((item) => [item.chapterId, item.chapterNumber])).toEqual([
+      ["ch-1", 1],
+      ["ch-2", 2],
+    ]);
+  });
+
+  it("软删章不出现（含软删卷下的章），total 也不计它", () => {
+    writeOutlineFile(dir, seedOutlineTree());
+    seedChapterText("ch-1", "断刃峡其一");
+    seedChapterText("ch-2", "断刃峡其二");
+    softDeleteNode("ch-2");
+    const result = runSearchManuscript(makeCtx(), { query: "断刃峡" });
+    expect(result.items.map((item) => item.chapterId)).toEqual(["ch-1"]);
+    expect(result.total).toBe(1);
+    // 卷软删 → 其下全部章不可见（防手改 outline.json 的畸形树）
+    softDeleteNode("vol-1");
+    expect(runSearchManuscript(makeCtx(), { query: "断刃峡" })).toEqual({ items: [], total: 0 });
+  });
+
+  it("只搜正文：标题/摘要命中不算（检索面 = document_records.content_text）", () => {
+    writeOutlineFile(dir, seedOutlineTree());
+    seedChapterText("ch-1", "正文里没有那个词");
+    expect(runSearchManuscript(makeCtx(), { query: "第一章" })).toEqual({ items: [], total: 0 });
+  });
+
+  it("offset 越过末页 → 空 items 且不附续页（不报错）；负 offset 抛错", () => {
+    writeOutlineFile(dir, seedOutlineTree());
+    seedChapterText("ch-1", "断刃峡");
+    const ctx = makeCtx();
+    expect(runSearchManuscript(ctx, { query: "断刃峡", offset: 99 })).toEqual({ items: [], total: 1 });
+    expect(() => runSearchManuscript(ctx, { query: "断刃峡", offset: -1 })).toThrow(/offset 必须为非负整数/);
   });
 });

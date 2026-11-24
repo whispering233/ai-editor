@@ -8,7 +8,7 @@
 // 生命周期：无 deleted_at——owner 软删时调用方不读（端点 404）、purge 时调用方删行，
 // 故本模块只提供按 owner 删行的入口（deleteDocumentsByOwner）。
 
-import { and, eq, inArray } from "drizzle-orm";
+import { and, eq, inArray, like } from "drizzle-orm";
 import type { Db } from "../connection.js";
 import { queryDb } from "../query-db.js";
 import { documentRecords } from "../tables.js";
@@ -98,6 +98,23 @@ export function deleteDocumentsByOwner(db: Db, ownerKind: DocumentOwnerKind, own
     .delete(documentRecords)
     .where(and(eq(documentRecords.owner_kind, ownerKind), eq(documentRecords.owner_id, ownerId)))
     .run().changes;
+}
+
+/**
+ * 正文全文检索（`search_manuscript` 下沉）：`content_text LIKE %query%`，只回命中章的 owner_id。
+ *
+ * - **只取 id 不取正文**：正文按页取（`getDocumentTexts`），命中的全书正文不必进内存
+ * - LIKE 通配符 `%` / `_` 原样透传（与 `listEntities` 的 q 同口径：模糊搜索语义，不转义）
+ * - 无排序 / 无分页：阅读序在大纲树（章序不是 SQL 列），排序分页归调用方
+ * - 无需 FTS5：157 万字全表扫实测 5–9ms（LIKE 前导通配走全表，就是这个量级）
+ */
+export function searchChapterIds(db: Db, query: string): string[] {
+  const rows = queryDb(db)
+    .select({ ownerId: documentRecords.owner_id })
+    .from(documentRecords)
+    .where(and(eq(documentRecords.owner_kind, "chapter"), like(documentRecords.content_text, `%${query}%`)))
+    .all();
+  return rows.map((row) => row.ownerId);
 }
 
 /**

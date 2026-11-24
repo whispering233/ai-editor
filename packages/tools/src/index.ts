@@ -1,5 +1,5 @@
 // @whispering233/ai-editor-tools 入口：导出工具上下文 / 注册表 / 查询类与分析类工具实现
-// S6.3 查询类工具（自动权限，11 个）+ S6.4 分析类工具（自动权限，5 个）在此注册；
+// S6.3 查询类工具（自动权限，12 个）+ S6.4 分析类工具（自动权限，5 个）在此注册；
 // S6.5 伏笔 / S6.6 提案通过 registry.registerTool(s) 继续挂载（注册表是唯一事实来源）。
 // S6.7 执行类 13 个**不注册 registry**（LLM 不可见，「核心设计原则」）——
 // 仅经 executor 门面（executeProposal）导出，S7.5 提案确认后调用。
@@ -8,7 +8,7 @@
 // 工具定义集中在本入口（name/description/parameters/permission/scope/run），
 // 参数 TypeBox schema 统一从 ./schemas 出口取（见 docs/api/tool-calling.md）。
 //
-// scope（工作区作用域，2026-10）：本入口的 37 个小说语义工具（实体/大纲/伏笔/Delta/参考资料）
+// scope（工作区作用域，2026-10）：本入口的 38 个小说语义工具（实体/大纲/正文/伏笔/Delta/参考资料）
 // 一律 `scope: "novel"`——练习工作区不注册它们（含全部 propose_*）；七个练习工具
 // （四个只读 + 三个写 AI 产出）标 `scope: "practice"`；两个通用工具（web_search / fetch_content）标 `scope: "common"`
 // （装配过滤见 agent `createCustomTools`）。
@@ -67,6 +67,7 @@ import {
   getOutlinePathArgsSchema,
   queryRelationshipsArgsSchema,
   searchEntitiesArgsSchema,
+  searchManuscriptArgsSchema,
   searchReferencesArgsSchema,
 } from "./schemas/index.js";
 import { registerTools, type ToolDefinition } from "./registry.js";
@@ -74,11 +75,11 @@ import { runGetEntity, runGetEntitySummary, runSearchEntities } from "./query/en
 import { runSearchReferences } from "./query/reference.js";
 import { runQueryRelationships } from "./query/relation.js";
 import { runGetOutline, runGetOutlinePath } from "./query/outline.js";
-import { runGetChapterText, DEFAULT_TEXT_PAGE_CHARS, MAX_TEXT_PAGE_CHARS } from "./query/manuscript.js";
+import { runGetChapterText, runSearchManuscript, DEFAULT_TEXT_PAGE_CHARS, MAX_MANUSCRIPT_SEARCH_HITS, MAX_TEXT_PAGE_CHARS, MANUSCRIPT_SNIPPET_WINDOW_CHARS } from "./query/manuscript.js";
 import { runGetDeductionMarks } from "./query/deduction.js";
 import { runComputeState, runGetDeltaHistory } from "./query/delta.js";
 
-/** 查询类工具定义（S6.3 + 卡 12.9 + D4，「查询类（自动）」11 个；权限全为 AUTO） */
+/** 查询类工具定义（S6.3 + 卡 12.9 + D4，「查询类（自动）」12 个；权限全为 AUTO） */
 const queryToolDefs: ToolDefinition[] = [
   {
     name: "get_entity",
@@ -162,6 +163,24 @@ const queryToolDefs: ToolDefinition[] = [
     permission: TOOL_PERMISSION.AUTO,
     scope: "novel",
     run: runGetChapterText,
+  },
+  {
+    name: "search_manuscript",
+    // 条数 / 窗宽插值自 query/manuscript.ts 的常量（模型可见数值的唯一来源，禁止手写数字）
+    description:
+      "正文检索：按关键词在全书**已写正文**里模糊匹配，返回命中章列表（章名 + 阅读序章号 + 命中片段），按阅读序排列——" +
+      "千章书里找「某人某物在哪几章出现过」先用它定位，再按需 get_chapter_text 读上下文（不要靠读大纲推断正文）。" +
+      "一页最多 " +
+      MAX_MANUSCRIPT_SEARCH_HITS +
+      " 章；total 为命中章总数，未取完时返回 truncated=true 与 next_offset，用 offset 续读。" +
+      "snippet 为命中位置前后各 " +
+      MANUSCRIPT_SNIPPET_WINDOW_CHARS +
+      " 字的片段（多处命中只给第一处，被截的一侧带「…」）。" +
+      "query 必填（空串或纯空白报错）；只看正文文本，不含标题/设定；软删章不出现。**只读**。",
+    parameters: searchManuscriptArgsSchema,
+    permission: TOOL_PERMISSION.AUTO,
+    scope: "novel",
+    run: runSearchManuscript,
   },
   {
     name: "get_deduction_marks",
