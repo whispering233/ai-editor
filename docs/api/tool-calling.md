@@ -118,6 +118,16 @@ get_chapter_text(node_id, offset?, max_chars?)
        提示一起压进单条工具结果的 `TOOL_RESULT_MAX_TOKENS` 预算，实测余量 ≈12%）；truncated = true 时提示用 offset 续读（长章分段读完，不炸上下文）
        node_id 必须为章（非章 → 报错，与 propose_add_delta 同口径）
 
+search_manuscript(query, offset?)
+  → { items: [{ chapterId, chapterNumber, title, snippet }], total, truncated?, next_offset? }
+  用途：千章书里定位「某人 / 某物在哪几章出现过」——先检索定位，再按需 get_chapter_text 读上下文
+  口径：检索面 = `document_records.content_text`（**只搜正文文本**，不含标题 / 设定；`owner_kind='chapter'`），
+       匹配 = `LIKE %query%`（**不上 FTS5**：157 万字全表扫实测 5–9ms，不配一个索引结构 / 迁移）
+       query 必填（空串 / 纯空白 → 报错，否则退化为「列出全部已写章」）
+       排序 = 阅读序（复用 `deriveChapterOrder`，章号跨卷连续）；软删章（含软删卷下的章）不出现
+       snippet = 命中位置前后各 `MANUSCRIPT_SNIPPET_WINDOW_CHARS` 字；多处命中只给**第一处**，被截的一侧带「…」
+       一页条数上限 = `MAX_MANUSCRIPT_SEARCH_HITS`；未取完附 `truncated: true` 与 `next_offset`（同 search_entities）
+
 // === 参考资料全文（只读）===
 // get_entity('reference', id) 的 reference 分支返回 data.content 的**投影文本**（content_text），
 // 不是块 JSON 原文——列表摘要定长截断与详情全文分离，防长文撑爆响应（见下 search_references）

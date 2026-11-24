@@ -312,7 +312,7 @@ describe("执行类不注册 registry", () => {
     for (const name of EXECUTOR_TOOLS) {
       expect(names.has(name)).toBe(false);
     }
-    expect(toolsEntry.toolCount()).toBe(48); // 查询 12 + 分析 5 + 伏笔 5 + 提案 17 + 练习 7 + 通用 2（执行 13 不注册；C3 的 search_manuscript 落地后 = 49）
+    expect(toolsEntry.toolCount()).toBe(49); // 查询 13 + 分析 5 + 伏笔 5 + 提案 17 + 练习 7 + 通用 2（执行 13 不注册）
   });
 
   it("executeProposal 导出存在（S7.5 确认路由的消费入口）", () => {

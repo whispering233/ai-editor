@@ -58,6 +58,7 @@ export const QUERY_TOOLS = [
   "search_outline", // C2：大纲结构化检索（关键词 / 状态 / 标签 / 卷）
   "get_deduction_marks", // 推演节点标记（剧情推演）
   "get_chapter_text", // 章正文只读（卡 12.9：分页拉取 content_text 投影）
+  "search_manuscript", // 正文检索（跨章 LIKE 检索，回命中章 + 片段；千章书的导航入口）
   "compute_state",
   "get_delta_history",
   "get_entity_summary",

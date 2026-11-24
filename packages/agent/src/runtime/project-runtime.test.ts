@@ -235,7 +235,7 @@ describe("会话文件位置", () => {
 
 // ============ 5. 工具装配与执行 ============
 
-/** 小说工作区应当装配的 39 个工具（**写死清单**：逐名对账，不用「长度相等」代替） */
+/** 小说工作区应当装配的 40 个工具（**写死清单**：逐名对账，不用「长度相等」代替） */
 const NOVEL_TOOLS = [
   "analyze_consistency",
   "analyze_hook_health",
@@ -270,6 +270,7 @@ const NOVEL_TOOLS = [
   "propose_update_outline_node",
   "query_relationships",
   "search_entities",
+  "search_manuscript",
   "search_outline",
   "search_references",
   "suggest_connections",
@@ -279,7 +280,7 @@ const NOVEL_TOOLS = [
 ];
 
 describe("领域工具装配", () => {
-  it("小说工作区：39 个小说工具 + 2 个通用工具（web_search / fetch_content）全部可用（逐名相等）、builtin 全关，faux 的工具调用真正执行", async () => {
+  it("小说工作区：40 个小说工具 + 2 个通用工具（web_search / fetch_content）全部可用（逐名相等）、builtin 全关，faux 的工具调用真正执行", async () => {
     const env = await createFauxEnv();
     const projectRoot = mkTempDir("ai-editor-k2-tools-");
     const agentDir = mkTempDir("ai-editor-k2-agentdir4-");

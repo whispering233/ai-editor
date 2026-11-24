@@ -1,5 +1,5 @@
 // 冒烟测试：验证 @whispering233/ai-editor-tools 入口可正常导入（T0.3 语义）
-// 冒烟断言为新入口形态：注册表 API + 工具副作用注册（查询 11 + 分析 5 +
+// 冒烟断言为新入口形态：注册表 API + 工具副作用注册（查询 12 + 分析 5 +
 // S6.5 伏笔 5 + S6.6 提案 17 + S6.7 卡 12.9（get_chapter_text）1 + D4（get_deduction_marks）1
 // + 练习 7（四读三写，scope = practice）+ 通用 2（web_search / fetch_content，scope = common）= 48 个；执行 13 个不暴露）；
 // workspace 依赖 @whispering233/ai-editor-db / @whispering233/ai-editor-shared 解析由 import 在编译/运行期验证
@@ -23,14 +23,16 @@ describe("@whispering233/ai-editor-tools 入口冒烟", () => {
     expect(typeof m.runComputeState).toBe("function");
     expect(typeof m.runGetDeltaHistory).toBe("function");
     expect(typeof m.runGetEntitySummary).toBe("function");
+    expect(typeof m.runSearchManuscript).toBe("function"); // 正文检索（search_manuscript）
  // 提案工具实现导出（S6.6）
     expect(typeof m.runProposeCreateEntity).toBe("function");
     expect(typeof m.runProposeAddDelta).toBe("function");
     expect(typeof m.runProposeAdvanceHook).toBe("function");
- // 入口副作用注册：查询 12 + 分析 5 + 伏笔 5 + 提案 17 + 练习 7 + 通用 2 = 48 个（含 get_chapter_text 正文只读 + get_deduction_marks 推演标记 + search_outline 大纲检索；C3 的 search_manuscript 落地后 = 49）
-    expect(m.toolCount()).toBe(48);
+ // 入口副作用注册：查询 13 + 分析 5 + 伏笔 5 + 提案 17 + 练习 7 + 通用 2 = 49 个（含 get_chapter_text 正文只读 + get_deduction_marks 推演标记 + search_outline 大纲检索 + search_manuscript 正文检索）
+    expect(m.toolCount()).toBe(49);
     expect(m.getTool("get_entity")).toBeDefined();
     expect(m.getTool("get_chapter_text")!.permission).toBe("auto"); // 正文只读：自动权限
+    expect(m.getTool("search_manuscript")!.permission).toBe("auto"); // 正文检索：只读、自动权限
  // 分页数值防漂移：description 由 query/manuscript.ts 的常量插值生成
     const chapterTextDescription = m.getTool("get_chapter_text")!.description;
     const descriptionNumbers = chapterTextDescription.match(/\d{4,}/g) ?? [];
@@ -75,6 +77,14 @@ describe("@whispering233/ai-editor-tools 入口冒烟", () => {
     expect(m.getTool("fetch_content")!.scope).toBe("common");
     expect(m.getTool("fetch_content")!.permission).toBe("auto");
     expect(typeof m.runFetchContent).toBe("function");
+ // 检索上限防漂移：search_manuscript 的 description 由 query/manuscript.ts 的常量插值——
+ // 描述里出现的**任何**数字必须恰好 ⊆ {单页章数上限, 片段窗宽}（手写数值 / 值改了没同步即报红）
+    const manuscriptSearchDescription = m.getTool("search_manuscript")!.description;
+    expect(new Set(manuscriptSearchDescription.match(/\d+/g) ?? [])).toEqual(
+      new Set([String(m.MAX_MANUSCRIPT_SEARCH_HITS), String(m.MANUSCRIPT_SNIPPET_WINDOW_CHARS)]),
+    );
+ // 模型得知「query 必填」与「只搜正文」的唯一渠道是描述本身
+    expect(manuscriptSearchDescription).toContain("query 必填");
  // 实体列表上限防漂移：search_entities 的 description 由 shared MAX_ENTITY_LIST_LIMIT 插值——
  // 描述里出现的**任何**数字必须恰好 ⊆ {条数上限}（手写数值 / 值改了没同步即报红）
     const entitySearchDescription = m.getTool("search_entities")!.description;
@@ -202,6 +212,7 @@ describe("@whispering233/ai-editor-tools 入口冒烟", () => {
       "propose_update_outline_node",
       "query_relationships",
       "search_entities",
+      "search_manuscript",
       "search_outline",
       "search_references",
       "suggest_connections",

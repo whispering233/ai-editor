@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { closeDatabase, openDatabase, type Db } from "../connection.js";
-import { deleteDocumentsByOwner, getDocument, getDocumentTextLengths, getDocumentTexts, getDocumentUpdatedAts, upsertDocument } from "./document.js";
+import { deleteDocumentsByOwner, getDocument, getDocumentTextLengths, getDocumentTexts, getDocumentUpdatedAts, searchChapterIds, upsertDocument } from "./document.js";
 
 const T1 = "2026-10-01T10:00:00Z";
 const T2 = "2026-10-01T10:05:00Z";
@@ -155,5 +155,20 @@ describe("getDocumentUpdatedAts（大纲章 documentUpdatedAt 的批量来源）
     // 覆盖写推进 updated_at（与 PUT /manuscript 的返回值同源）
     upsertDocument(db, { ownerKind: "chapter", ownerId: "ch-1", content: "[]", contentText: "一", now: T2 });
     expect(getDocumentUpdatedAts(db, "chapter", ["ch-1"]).get("ch-1")).toBe(T2);
+  });
+});
+
+describe("searchChapterIds（search_manuscript 的检索来源）", () => {
+  it("只回 chapter 行的 owner_id、只匹配正文、LIKE 通配符原样透传、无排序（阅读序归调用方）", () => {
+    upsertDocument(db, { ownerKind: "chapter", ownerId: "ch-2", content: "[]", contentText: "断刃峡的风停了", now: T1 });
+    upsertDocument(db, { ownerKind: "chapter", ownerId: "ch-1", content: "[]", contentText: "无关正文", now: T1 });
+    upsertDocument(db, { ownerKind: "reference", ownerId: "ref-1", content: "[]", contentText: "断刃峡", now: T1 });
+
+    expect(searchChapterIds(db, "断刃峡")).toEqual(["ch-2"]); // ref 行不混入；无排序
+    expect(searchChapterIds(db, "断刃")).toEqual(["ch-2"]); // 模糊匹配子串
+    expect(searchChapterIds(db, "别处")).toEqual([]);
+    expect(searchChapterIds(db, "%刃%")).toEqual(["ch-2"]); // 通配符原样透传（与 listEntities 同口径）
+    // 只取 id 不取正文：命中行由 getDocumentTexts 按页取（大库不把全文拉进内存）
+    expect(searchChapterIds(db, "正文")).toEqual(["ch-1"]);
   });
 });
