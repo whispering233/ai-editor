@@ -32,9 +32,11 @@ import type { EntityRow, EntitySummary, EntityType, HookStatus, RelationRow } fr
 import { CHARACTER_PRIORITIES, DEFAULT_ENTITY_LIST_LIMIT, ENTITY_TYPES, MAX_ENTITY_LIST_LIMIT, generateEntityId, panelTopLevelNames } from "@whispering233/ai-editor-shared";
 import { and, asc, count, desc, eq, inArray, isNull, like, or, sql, type SQLWrapper } from "drizzle-orm";
 import { nowIso } from "../storage/atomic.js";
+import { findOutlineNode, readOutlineFile } from "../storage/outline.js";
 import { withTransaction, type Db } from "../connection.js";
 import { deltaRecords, entities, relationRecords } from "../tables.js";
 import { queryDb } from "../query-db.js";
+import { deriveChapterOrder } from "./outline-ops.js";
 // reference 列表摘要的 content 投影来源（一次批量查询，见 listEntities）
 import { getDocumentTexts } from "./document.js";
 // relation.ts ↔ entity.ts 循环引用（relation.ts import getEntity）：仅函数调用期使用
@@ -384,8 +386,7 @@ export function listExpectedHooks(db: Db, nodeId: string): ExpectedHookItem[] {
   return items;
 }
 
-/** 实体的 Delta 计数（详情响应 deltaCount；目标实体软删的 Delta 不可见） */
-export function countDeltasForEntity(db: Db, id: string): number {
+/** 实体的 Delta 计数（详情响应 deltaCount；目标实体软删的 Delta 不可见） */export function countDeltasForEntity(db: Db, id: string): number {
   return (
     queryDb(db)
       .select({ c: count() })
@@ -395,9 +396,80 @@ export function countDeltasForEntity(db: Db, id: string): number {
   ).c;
 }
 
+/** 「已写未回收」列表项（`GET /api/v1/hook/written-unresolved` / `analyze_hook_health` 的 `written_unresolved`） */
+export interface WrittenUnresolvedHookItem {
+  id: string;
+  name: string;
+  /** 归一后的状态：`resolved` / `abandoned` 已被本查询排除，其余未知值按 planted（创建即埋设） */
+  status: HookStatus;
+  expectedResolveNodeId: string;
+ /** 预计回收章的全局章序号（`deriveChapterOrder` 口径）；脏引用（章已不在树里）不列表 */
+  expectedResolveChapterNumber: number;
+  expectedResolveChapterTitle: string;
+}
+
 /**
- * 创建实体（POST /api/v1/entity/:type）：
- * id = shared generateEntityId（char-/set-/loc-/hook- 前缀）、created_at/updated_at 应用层 ISO、
+ * 「已写未回收」伏笔：未软删 + 状态未回收（`planted` / `progressing`）+ 设了 `data.expected_resolve_node_id`
+ * + **该章已写过正文**（`document_records.content_text` 非空白）。
+ *
+ * - 四个条件全在**一个 SQL** 里：正文判定走 `EXISTS` 子查询（不把 hook 先拉进内存再逐条扫正文）
+ * - `json_valid` 守卫同 `listExpectedHooks`：裸 `json_extract` 遇坏 JSON 会打挂整表查询
+ * - 章号 = `deriveChapterOrder`（阅读序单源，含软删章的既有口径）——本函数不另写遍历
+ * - 排序 = 章号升序 + name + id（最早该回收的在前，行序可预期）
+ * - **与 `analyze_hook_health` 的 `overdue` 无关**：`overdue` 是龄期 > 半衰期×2 的时间衰减；
+ *   本查询是「预计回收的章已经写了、伏笔却仍未回收」的写作进度口径
+ */
+export function listHooksWrittenUnresolved(db: Db, outlineDir: string): WrittenUnresolvedHookItem[] {
+  const expectedNodeId = (): ReturnType<typeof sql> =>
+    sql`CASE WHEN json_valid(${entities.data}) THEN json_extract(${entities.data}, '$.expected_resolve_node_id') END`;
+  const rows = queryDb(db)
+    .select({ id: entities.id, name: entities.name, data: entities.data })
+    .from(entities)
+    .where(
+      and(
+        isNull(entities.deleted_at),
+        eq(entities.type, "hook"),
+        // status 缺失 = 创建即埋设（与 listExpectedHooks 同口径）
+        sql`COALESCE(CASE WHEN json_valid(${entities.data}) THEN json_extract(${entities.data}, '$.status') END, 'planted') IN ('planted', 'progressing')`,
+        sql`${expectedNodeId()} IS NOT NULL AND ${expectedNodeId()} <> ''`,
+        // 预计回收章已写正文（空白投影视为未写——SQLite trim() 默认只去空格，故显式列出空白字符）
+        sql`EXISTS (SELECT 1 FROM document_records d WHERE d.owner_kind = 'chapter' AND d.owner_id = ${expectedNodeId()} AND trim(d.content_text, char(9) || char(10) || char(13) || ' ') <> '')`,
+      ),
+    )
+    .orderBy(asc(entities.name), asc(entities.id))
+    .all();
+
+  const chapterNumbers = new Map(
+    deriveChapterOrder(outlineDir).map((entry) => [entry.chapterId, entry.chapterNumber]),
+  );
+  const tree = readOutlineFile(outlineDir);
+  const items: WrittenUnresolvedHookItem[] = [];
+  for (const row of rows) {
+    const data = parseDataColumn(row.data);
+    const nodeId = data.expected_resolve_node_id;
+    if (typeof nodeId !== "string") continue; // 防御：SQL 已过滤（非字符串不可能命中）
+    const chapterNumber = chapterNumbers.get(nodeId);
+    if (chapterNumber === undefined) continue; // 脏引用：预计回收章已不在大纲树里 → 无章号可报
+    items.push({
+      id: row.id,
+      name: row.name,
+      status: data.status === "progressing" ? "progressing" : "planted",
+      expectedResolveNodeId: nodeId,
+      expectedResolveChapterNumber: chapterNumber,
+      expectedResolveChapterTitle: findOutlineNode(tree, nodeId)?.title ?? "",
+    });
+  }
+  items.sort(
+    (a, b) =>
+      a.expectedResolveChapterNumber - b.expectedResolveChapterNumber ||
+      a.name.localeCompare(b.name) ||
+      a.id.localeCompare(b.id),
+  );
+  return items;
+}
+
+/**
+ * 创建实体（POST /api/v1/entity/:type）： * id = shared generateEntityId（char-/set-/loc-/hook- 前缀）、created_at/updated_at 应用层 ISO、
  * data 缺省 {}、type 必须 ∈ ENTITY_TYPES（非法抛错——路由层 schema 校验后一般不可达，防御）。
  * @returns 新行（EntityRow，data 已解析）
  */

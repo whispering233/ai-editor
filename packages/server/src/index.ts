@@ -238,6 +238,7 @@ export async function startServer(projectRoot: string, options: StartServerOptio
   app.route("/api/v1/entity", entityRoutes);
 
  // 伏笔路由（C5）：GET /api/v1/hook/expected?node_id=（写作页「本章待回收」）
+ // / GET /api/v1/hook/written-unresolved（伏笔页「已写未回收」）
   app.use("/api/v1/hook/*", requireKind("novel"));
   app.route("/api/v1/hook", hookRoutes);
 

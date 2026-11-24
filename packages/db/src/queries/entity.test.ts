@@ -6,9 +6,12 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
+import type { OutlineFileTree } from "@whispering233/ai-editor-shared";
 import { closeDatabase, openDatabase, type Db } from "../connection.js";
+import { writeOutlineFile } from "../storage/outline.js";
 import { upsertDocument } from "./document.js";
 import { createRelation, listSettingHierarchyEdges, RelationError } from "./relation.js";
+import { deriveChapterOrder } from "./outline-ops.js";
 import {
   assertEventSingleOccursAt,
   countDeltasForEntity,
@@ -17,6 +20,7 @@ import {
   getEntity,
   getEntitySummaryStats,
   listEntities,
+  listHooksWrittenUnresolved,
   listTimepoints,
   moveEvent,
   moveSetting,
@@ -1185,5 +1189,156 @@ describe("listEntities reference 摘要（content_text 投影，卡 12.7a）", (
     expect(items.find((i) => i.id === withDoc.id)!.summary.content).toBe("正文摘要");
     expect(items.find((i) => i.id === emptyDoc.id)!.summary).not.toHaveProperty("content");
     expect(items.find((i) => i.id === noDoc.id)!.summary).not.toHaveProperty("content");
+  });
+});
+// ============ listHooksWrittenUnresolved（「已写未回收」，2026-11） ============
+
+const T0 = "2026-11-01T00:00:00Z";
+
+/** 两卷三章：卷 1[第一章, 第二章] / 卷 2[第三章]（章号 1/2/3，跨卷连续） */
+function seedOutline(): OutlineFileTree {
+  return {
+    id: "root",
+    type: "root",
+    schema_version: 1,
+    children: [
+      {
+        id: "vol-1",
+        type: "volume",
+        title: "第一卷",
+        updated_at: T0,
+        children: [
+          { id: "ch-1", type: "chapter", title: "第一章", updated_at: T0, children: [] },
+          { id: "ch-2", type: "chapter", title: "第二章", updated_at: T0, children: [] },
+        ],
+      },
+      {
+        id: "vol-2",
+        type: "volume",
+        title: "第二卷",
+        updated_at: T0,
+        children: [{ id: "ch-3", type: "chapter", title: "第三章", updated_at: T0, children: [] }],
+      },
+    ],
+  };
+}
+
+/** 写某章正文（content_text 非空即「已写」） */
+function writeChapter(chapterId: string, text: string): void {
+  upsertDocument(db, {
+    ownerKind: "chapter",
+    ownerId: chapterId,
+    content: "[]",
+    contentText: text,
+    now: T0,
+  });
+}
+
+describe("listHooksWrittenUnresolved（预计回收章已写正文却未回收）", () => {
+  it("四个条件同时满足才命中：状态未回收 / 设了预计回收节点 / 该章已写正文 / 未软删", () => {
+    writeOutlineFile(dir, seedOutline());
+    writeChapter("ch-1", "第一章已经写了正文");
+    writeChapter("ch-2", "第二章也写了");
+    const planted = createEntity(db, {
+      type: "hook",
+      name: "断剑来历",
+      data: { status: "planted", expected_resolve_node_id: "ch-1" },
+    });
+    const progressing = createEntity(db, {
+      type: "hook",
+      name: "旧盟友背叛",
+      data: { status: "progressing", expected_resolve_node_id: "ch-2" },
+    });
+    // 状态缺失 = 创建即埋设（与 listExpectedHooks 同口径）
+    const bare = createEntity(db, { type: "hook", name: "无名信", data: { expected_resolve_node_id: "ch-2" } });
+
+    const items = listHooksWrittenUnresolved(db, dir);
+    expect(items).toEqual([
+      {
+        id: planted.id,
+        name: "断剑来历",
+        status: "planted",
+        expectedResolveNodeId: "ch-1",
+        expectedResolveChapterNumber: 1,
+        expectedResolveChapterTitle: "第一章",
+      },
+      {
+        id: progressing.id,
+        name: "旧盟友背叛",
+        status: "progressing",
+        expectedResolveNodeId: "ch-2",
+        expectedResolveChapterNumber: 2,
+        expectedResolveChapterTitle: "第二章",
+      },
+      {
+        id: bare.id,
+        name: "无名信",
+        status: "planted",
+        expectedResolveNodeId: "ch-2",
+        expectedResolveChapterNumber: 2,
+        expectedResolveChapterTitle: "第二章",
+      },
+    ]);
+  });
+
+  it("预计回收章尚未写正文（无文档行 / 空投影 / 纯空白投影）→ 都不算", () => {
+    writeOutlineFile(dir, seedOutline());
+    createEntity(db, { type: "hook", name: "无正文", data: { expected_resolve_node_id: "ch-1" } });
+    writeChapter("ch-2", "");
+    createEntity(db, { type: "hook", name: "空投影", data: { expected_resolve_node_id: "ch-2" } });
+    writeChapter("ch-3", "   \n\t ");
+    createEntity(db, { type: "hook", name: "空白投影", data: { expected_resolve_node_id: "ch-3" } });
+
+    expect(listHooksWrittenUnresolved(db, dir)).toEqual([]);
+  });
+
+  it("已回收 / 已废弃不算；无 expected_resolve_node_id 不算（含空串）", () => {
+    writeOutlineFile(dir, seedOutline());
+    writeChapter("ch-1", "第一章正文");
+    createEntity(db, { type: "hook", name: "已回收", data: { status: "resolved", expected_resolve_node_id: "ch-1" } });
+    createEntity(db, { type: "hook", name: "已废弃", data: { status: "abandoned", expected_resolve_node_id: "ch-1" } });
+    createEntity(db, { type: "hook", name: "没有预计章", data: { status: "planted" } });
+    createEntity(db, { type: "hook", name: "空预计章", data: { status: "planted", expected_resolve_node_id: "" } });
+
+    expect(listHooksWrittenUnresolved(db, dir)).toEqual([]);
+  });
+
+  it("软删伏笔不出现", () => {
+    writeOutlineFile(dir, seedOutline());
+    writeChapter("ch-1", "第一章正文");
+    const hook = createEntity(db, {
+      type: "hook",
+      name: "进回收站",
+      data: { status: "planted", expected_resolve_node_id: "ch-1" },
+    });
+    softDeleteEntity(db, hook.id, "2026-11-02T00:00:00Z");
+
+    expect(listHooksWrittenUnresolved(db, dir)).toEqual([]);
+  });
+
+  it("章号与 deriveChapterOrder 一致（跨卷连续；不是按卷内序）", () => {
+    writeOutlineFile(dir, seedOutline());
+    writeChapter("ch-3", "第三章正文");
+    const hook = createEntity(db, {
+      type: "hook",
+      name: "卷二的坑",
+      data: { status: "planted", expected_resolve_node_id: "ch-3" },
+    });
+    const expected = deriveChapterOrder(dir).find((entry) => entry.chapterId === "ch-3")!;
+    const [item] = listHooksWrittenUnresolved(db, dir);
+    expect(item.id).toBe(hook.id);
+    expect(item.expectedResolveChapterNumber).toBe(expected.chapterNumber);
+    expect(item.expectedResolveChapterNumber).toBe(3);
+  });
+
+  it("data 非法 JSON 的坏行不打挂列表（json_valid 守卫）", () => {
+    writeOutlineFile(dir, seedOutline());
+    writeChapter("ch-1", "第一章正文");
+    const hit = createEntity(db, { type: "hook", name: "正常", data: { expected_resolve_node_id: "ch-1" } });
+    db.prepare(
+      "INSERT INTO entities (id, type, name, data, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)",
+    ).run("hook-bad", "hook", "坏行", "{", T0, T0);
+
+    expect(listHooksWrittenUnresolved(db, dir).map((item) => item.id)).toEqual([hit.id]);
   });
 });

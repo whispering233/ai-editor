@@ -398,3 +398,34 @@ id: string;                    // 事件 id（ev- 前缀）
 - **坏 JSON 不打挂列表**：`data` 提取带 `json_valid` 守卫（SQLite `CASE` 懒求值），单条非法 JSON 行不匹配、不打挂整表查询（同 `listEntities` 的 `parseDataColumn` 防御口径）。
 - 排序 = `name` 升序 + `id` 升序（rail 行序稳定）；空命中 → `items: []`（客户端据此不渲染整块）。
 - 写侧不变：预计回收节点仍是 `data.expected_resolve_node_id`（`hookDataSchema`，UI 选择器只列章）。
+
+---
+
+### GET /api/v1/hook/written-unresolved
+
+伏笔专属只读端点：取**「已写未回收」伏笔**——预计回收的章已经写了正文、伏笔却仍未回收。供伏笔页的「已写未回收」标记 / 筛选（以及写作页 rail 的计数块）使用。
+
+```typescript
+// Query：无参
+
+// Res: 200（无分页：单书命中量小）
+{
+  hooks: Array<{
+    id: string;                          // hook- 前缀
+    name: string;
+    status: "planted" | "progressing";   // 已归一到「未回收」两态（缺失 status → planted）
+    expectedResolveNodeId: string;       // 预计回收章节点 id
+    expectedResolveChapterNumber: number; // 全局章序号（`deriveChapterOrder` 口径）
+    expectedResolveChapterTitle: string;
+  }>;
+}
+```
+
+**语义**：
+
+- 四个条件**在一个 SQL 查询里**判定（正文判定走 `EXISTS` 子查询，不先把伏笔拉进内存再逐条扫正文）：未软删 + `type = 'hook'` + `data.status ∈ {planted, progressing}`（缺失按 `planted`）+ `data.expected_resolve_node_id` 非空 + **该章 `document_records.content_text` 非空白**（`owner_kind = 'chapter'`）。
+- **与 `analyze_hook_health` 的 `overdue` 不是一回事**：`overdue` 是时间衰减（埋设龄期 > 半衰期 × 2），本端点只问「该回收的章已经写了、伏笔却还没回收」（看正文是否已写，不看龄期）。
+- 章号 = `deriveChapterOrder`（阅读序单源，含软删章的既有口径）；脏引用（预计回收章已不在大纲树里）不列表。
+- **坏 JSON 不打挂列表**：`data` 提取带 `json_valid` 守卫（同 `/expected`）。
+- 排序 = 章号升序 + `name` + `id`（最早该回收的在前，行序稳定）；空命中 → `hooks: []`。
+- 数据源与 `analyze_hook_health` 的 `written_unresolved` 同源（db `listHooksWrittenUnresolved`）——两处不可各拉一条判定链。

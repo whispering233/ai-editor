@@ -10,7 +10,7 @@ import { join } from "node:path";
 import type { EntityRow, OutlineFileTree } from "@whispering233/ai-editor-shared";
 import type { ToolContext } from "../context.js";
 import { closeDatabase, openDatabase, type Db } from "@whispering233/ai-editor-db";
-import { createEntity, createRelation, getEntity, softDeleteEntity } from "@whispering233/ai-editor-db";
+import { createEntity, createRelation, getEntity, softDeleteEntity, upsertDocument } from "@whispering233/ai-editor-db";
 import { findOutlineNode, readOutlineFile, writeOutlineFile, writeProjectFile } from "@whispering233/ai-editor-db";
 import { computeHookHealth, runAnalyzeHookHealth, runDetectHookConflicts, runFindHookOpportunities, runSuggestHookPayoff, runTraceHookLifecycle } from "./hook.js";
 import { AbortedError, buildChapterIndex } from "./utils.js";
@@ -361,6 +361,58 @@ describe("analyze_hook_health 聚合", () => {
     const overdueWarning = overview.warnings.find((w) => w.includes("超过两倍半衰期"))!;
     expect(overdueWarning).toContain("积压伏笔");
     expect(overdueWarning).toContain("建议尽快回收");
+  });
+});
+
+describe("analyze_hook_health written_unresolved（已写未回收）", () => {
+  /** 写某章正文（content_text 非空即「已写」） */
+  function writeChapter(chapterId: string, text: string): void {
+    upsertDocument(db, { ownerKind: "chapter", ownerId: chapterId, content: "[]", contentText: text, now: T0 });
+  }
+
+  it("预计回收章已写正文 → 列出（snake_case 字段 + 章号 + 章标题）", () => {
+    seedBase("sc-1");
+    writeChapter("ch-2", "第二章正文");
+    const hookId = makeHook("断剑来历", { status: "planted", expected_resolve_node_id: "ch-2" });
+    plant(hookId, "sc-1");
+
+    const overview = runAnalyzeHookHealth(makeCtx(), {});
+    expect(overview.written_unresolved).toEqual([
+      {
+        id: hookId,
+        name: "断剑来历",
+        status: "planted",
+        expected_resolve_node_id: "ch-2",
+        expected_resolve_chapter_number: 2,
+        expected_resolve_chapter_title: "第二章",
+      },
+    ]);
+  });
+
+  it("预计回收章未写正文 / 已回收 → 不进清单（与 overdue 的龄期口径无关）", () => {
+    seedBase("sc-5"); // 当前第 3 章
+ // 已回收但章已写：不算「未回收」
+    writeChapter("ch-1", "第一章正文");
+    const resolved = makeHook("已回收伏笔", { status: "resolved", expected_resolve_node_id: "ch-1" });
+    plant(resolved, "sc-1");
+ // 活跃、预计第 2 章回收、但第 2 章还没写：不算「已写」
+    const notWritten = makeHook("未写伏笔", { status: "planted", expected_resolve_node_id: "ch-2" });
+    plant(notWritten, "sc-1");
+
+    const overview = runAnalyzeHookHealth(makeCtx(), {});
+    expect(overview.written_unresolved).toEqual([]);
+  });
+
+  it("overdue（时间衰减）与 written_unresolved（写作进度）各算各的", () => {
+    seedBase("sc-5"); // 当前第 3 章
+ // 埋设第 1 章、half_life=1、当前第 3 章 → age=2（不 overdue）；预计回收第 2 章已写 → written_unresolved
+    writeChapter("ch-2", "第二章正文");
+    const hookId = makeHook("该回收了", { status: "progressing", half_life: 1, expected_resolve_node_id: "ch-2" });
+    plant(hookId, "sc-1");
+
+    const overview = runAnalyzeHookHealth(makeCtx(), {});
+    expect(overview.overdue).toEqual([]);
+    expect(overview.written_unresolved.map((hook) => hook.id)).toEqual([hookId]);
   });
 });
 

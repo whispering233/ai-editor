@@ -4,7 +4,9 @@ import { Type, type Static } from "@earendil-works/pi-ai";
 
 /**
  * search_references 入参：query 关键词（标题+tags 命中）+ 可选 type 分类过滤（自由文本，
- * 原预置枚举已取消，建议沿用项目内已有分类）+ 可选 tags 过滤。
+ * 原预置枚举已取消，建议沿用项目内已有分类）+ 可选 tags 过滤
+ * + 可选 body（true = 命中面再加参考资料**正文** `document_records.content_text`，
+ *   命中项带 snippet；缺省 / false = 只搜名字与标签——旧行为不变）。
  * 返回摘要列表（content 为 db `toSummary` 的截断摘要，截断长度见 db 层）。
  */
 export const searchReferencesArgsSchema = Type.Object(
@@ -12,6 +14,7 @@ export const searchReferencesArgsSchema = Type.Object(
     query: Type.String(),
     type: Type.Optional(Type.String()),
     tags: Type.Optional(Type.Array(Type.String())),
+    body: Type.Optional(Type.Boolean()),
   },
   { additionalProperties: false },
 );

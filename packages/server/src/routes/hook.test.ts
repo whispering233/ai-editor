@@ -1,12 +1,13 @@
-// 伏笔专属只读端点测试（C5）：GET /api/v1/hook/expected?node_id=
-// 覆盖：命中（字面相等）/ 已回收与已弃用不列 / 已软删不列 / 空命中 / 坏 JSON 行不打挂列表 / 缺 node_id 400。
-// 走真实 sqlite（同 entity.test.ts 的装配方式），不经泛型列表端点——本端点自己走 db `listExpectedHooks`。
+// 伏笔专属只读端点测试：GET /api/v1/hook/expected?node_id= / GET /api/v1/hook/written-unresolved
+// /expected 覆盖：命中（字面相等）/ 已回收与已弃用不列 / 已软删不列 / 空命中 / 坏 JSON 行不打挂列表 / 缺 node_id 400。
+// /written-unresolved 覆盖：已写正文的预计回收章 → 列出（章号 + 章标题）/ 未写正文不列 / 空命中。
+// 走真实 sqlite（同 entity.test.ts 的装配方式），不经泛型列表端点——两个端点各自走 db 查询。
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { Hono } from "hono";
-import { createEntity, softDeleteEntity, updateEntity } from "@whispering233/ai-editor-db";
+import { createEntity, softDeleteEntity, updateEntity, upsertDocument, writeOutlineFile } from "@whispering233/ai-editor-db";
 import { errorHandler } from "../middleware/error.js";
 import {
   closeProject,
@@ -161,5 +162,74 @@ describe("GET /api/v1/hook/expected", () => {
     updateEntity(db, hook.id, { data: { status: "resolved" } });
     const res = await app.request("/api/v1/hook/expected?node_id=ch-2", { headers: HOST_HEADERS });
     expect((await res.json()).data).toEqual({ items: [] });
+  });
+});
+describe("GET /api/v1/hook/written-unresolved", () => {
+  /** 两章大纲（ch-1 = 第 1 章、ch-2 = 第 2 章） */
+  function seedOutline(): void {
+    writeOutlineFile(getCurrentProject()!.root, {
+      id: "root",
+      type: "root",
+      schema_version: 1,
+      children: [
+        {
+          id: "vol-1",
+          type: "volume",
+          title: "第一卷",
+          updated_at: "2026-11-01T00:00:00Z",
+          children: [
+            { id: "ch-1", type: "chapter", title: "第一章", updated_at: "2026-11-01T00:00:00Z", children: [] },
+            { id: "ch-2", type: "chapter", title: "第二章", updated_at: "2026-11-01T00:00:00Z", children: [] },
+          ],
+        },
+      ],
+    });
+  }
+
+  it("只列「预计回收章已写正文」的活跃伏笔（含章号与章标题）", async () => {
+    const app = buildApp();
+    openProject();
+    seedOutline();
+    const db = getCurrentProject()!.db;
+    // ch-2 已写正文、ch-1 未写
+    upsertDocument(db, {
+      ownerKind: "chapter",
+      ownerId: "ch-2",
+      content: "[]",
+      contentText: "第二章正文",
+      now: "2026-11-01T00:00:00Z",
+    });
+    const hit = createEntity(db, {
+      type: "hook",
+      name: "断剑来历",
+      data: { status: "progressing", expected_resolve_node_id: "ch-2" },
+    });
+    createEntity(db, { type: "hook", name: "章未写", data: { status: "planted", expected_resolve_node_id: "ch-1" } });
+    createEntity(db, { type: "hook", name: "已回收", data: { status: "resolved", expected_resolve_node_id: "ch-2" } });
+    createEntity(db, { type: "hook", name: "无预计章", data: { status: "planted" } });
+
+    const res = await app.request("/api/v1/hook/written-unresolved", { headers: HOST_HEADERS });
+    expect(res.status).toBe(200);
+    expect((await res.json()).data).toEqual({
+      hooks: [
+        {
+          id: hit.id,
+          name: "断剑来历",
+          status: "progressing",
+          expectedResolveNodeId: "ch-2",
+          expectedResolveChapterNumber: 2,
+          expectedResolveChapterTitle: "第二章",
+        },
+      ],
+    });
+  });
+
+  it("空命中 → hooks: []", async () => {
+    const app = buildApp();
+    openProject();
+    seedOutline();
+    const res = await app.request("/api/v1/hook/written-unresolved", { headers: HOST_HEADERS });
+    expect(res.status).toBe(200);
+    expect((await res.json()).data).toEqual({ hooks: [] });
   });
 });
