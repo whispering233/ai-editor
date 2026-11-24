@@ -10,7 +10,7 @@ import { CHARACTER_PRIORITIES, DEFAULT_ENTITY_LIST_LIMIT, ENTITY_TYPES, MAX_ENTI
 import { normalizeRelationType, relationTypeSyntaxError } from "../utils/relation-type.js";
 import { NOVEL_TXT_LAYOUTS } from "../utils/novel-export.js";
 import { HOOK_STATUSES, PAYOFF_TIMING } from "../constants/hook.js";
-import { CONFLICT_LEVELS, CHAPTER_FUNCTIONS, CHAPTER_TENSIONS, OUTLINE_STATUS } from "../constants/outline.js";
+import { CONFLICT_LEVELS, CHAPTER_FUNCTIONS, CHAPTER_TENSIONS, MAX_CHAPTER_RESULT_SUMMARY_CHARS, OUTLINE_STATUS } from "../constants/outline.js";
 import { BACKUP_FREQUENCIES } from "../constants/backup.js";
 import { WORKSPACE_KINDS } from "../constants/workspace.js";
 import {
@@ -743,7 +743,7 @@ export const nodeTagsSchema = z.array(z.string().trim().min(1).max(24)).max(5);
 /**
  * 大纲节点 data 字段 schema（麦基《故事》字段集，outline.json「节点结构化信息」节）：
  * scene——goal/conflict_levels/value_from/value_to/tags；chapter——reversal/climax_scene
- * + 工作面四字段 status/tags/function/tension；volume——climax_scene/inciting_scene。
+ * + 工作面四字段 status/tags/function/tension + 实际摘要 result_summary；volume——climax_scene/inciting_scene。
  * 宽松语义与 ENTITY_DATA_SCHEMAS 一致：
  * - `.passthrough` 允许未知字段（创作工具，用户自定义字段自由，未知字段原样保留透传）
  * - 引用字段（climax_scene/inciting_scene）仅类型校验（字符串），不校验存在性/范围（MVP 宽松）
@@ -768,6 +768,8 @@ export const chapterDataSchema = z
     tags: nodeTagsSchema.optional(), // 剧情线标签
     function: z.enum(CHAPTER_FUNCTIONS).optional(), // 叙事功能
     tension: z.enum(CHAPTER_TENSIONS).optional(), // 张力度
+    // 实际摘要（作者或 AI 回填「本章实际写了什么」；空串 = 无摘要，与缺省等价）
+    result_summary: z.string().max(MAX_CHAPTER_RESULT_SUMMARY_CHARS).optional(),
   })
   .passthrough();
 

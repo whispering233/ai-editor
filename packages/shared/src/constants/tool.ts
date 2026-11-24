@@ -81,7 +81,7 @@ export const HOOK_ANALYSIS_TOOLS = [
 ] as const;
 
 /**
- * 提案类工具（需确认，「提案类」+ 「工具扩展」提案类，共 16 个）
+ * 提案类工具（需确认，「提案类」+ 「工具扩展」提案类 + 大纲文本更新，共 17 个）
  * AI 不能直接修改数据，propose_* 仅发出提案（proposal_id + 一句话摘要），
  * tool_result 不含预览细节；完整预览随 tool_execution_end 帧的 result.details 推送 GUI
  */
@@ -95,6 +95,7 @@ export const PROPOSAL_TOOLS = [
   "propose_outline_node",
   "propose_move_node",
   "propose_delete_node",
+  "propose_update_outline_node", // C1：既有节点文本更新（标题 / 计划摘要 / 章实际摘要）
   "propose_create_hook",
   "propose_update_hook",
   "propose_advance_hook",
@@ -155,7 +156,7 @@ export const PRACTICE_TOOLS = [
   "submit_practice_topic", // AI 出题（只写 practice_free_pieces.topic / brief）
 ] as const;
 
-/** 全部工具名（自动 21 + 通用 2 + 练习 7 + 提案 16 + 执行 13 = 59 个） */
+/** 全部工具名（自动 21 + 通用 2 + 练习 7 + 提案 17 + 执行 13 = 60 个） */
 export const TOOL_NAMES = [
   ...AUTO_TOOLS,
   ...COMMON_TOOLS,

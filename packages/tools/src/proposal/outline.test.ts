@@ -17,9 +17,11 @@ import {
   buildProposeDeleteNode,
   buildProposeMoveNode,
   buildProposeOutlineNode,
+  buildProposeUpdateOutlineNode,
   runProposeDeleteNode,
   runProposeMoveNode,
   runProposeOutlineNode,
+  runProposeUpdateOutlineNode,
 } from "./outline.js";
 
 let dir: string;
@@ -223,13 +225,62 @@ describe("propose_delete_node", () => {
   });
 });
 
+describe("propose_update_outline_node", () => {
+  it("完整提案结构：快照 = 节点级 updated_at（复用 refOutlineNode）；tool_result 无预览", () => {
+    writeOutlineFile(dir, seedOutlineTree());
+    const proposal = buildProposeUpdateOutlineNode(makeCtx(), {
+      node_id: "ch-1",
+      patches: { summary: "计划摘要", result_summary: "实际摘要" },
+    });
+    expect(proposal.args).toEqual({ node_id: "ch-1", patches: { summary: "计划摘要", result_summary: "实际摘要" } });
+    expect(proposal.references).toEqual([{ kind: "outline_node", id: "ch-1", updated_at: T0 }]);
+    expect(proposal.summary).toBe("更新大纲节点「第一章」的 2 个字段");
+    const result = runProposeUpdateOutlineNode(makeCtx(), { node_id: "ch-1", patches: { title: "新标题" } });
+    expect(Object.keys(result).sort()).toEqual(["proposal_id", "summary"]);
+  });
+
+  it("不落盘：调用后节点文本与 data 零变化（写入发生在确认执行时）", () => {
+    writeOutlineFile(dir, seedOutlineTree());
+    runProposeUpdateOutlineNode(makeCtx(), { node_id: "ch-1", patches: { result_summary: "实际摘要" } });
+    const node = findOutlineNode(readOutlineFile(dir), "ch-1")!;
+    expect(node.title).toBe("第一章");
+    expect(node.data).toBeUndefined();
+  });
+
+  it("result_summary 仅章：卷 / 场景带该键 → 抛错（不静默忽略）", () => {
+    writeOutlineFile(dir, seedOutlineTree());
+    expect(() => buildProposeUpdateOutlineNode(makeCtx(), { node_id: "vol-1", patches: { result_summary: "x" } })).toThrow(
+      /实际摘要须为章/,
+    );
+    expect(() => buildProposeUpdateOutlineNode(makeCtx(), { node_id: "sc-1", patches: { result_summary: "x" } })).toThrow(
+      /实际摘要须为章/,
+    );
+ // 卷/场景的 title / summary 不受限（只收窄实际摘要）
+    expect(() => runProposeUpdateOutlineNode(makeCtx(), { node_id: "vol-1", patches: { summary: "卷计划" } })).not.toThrow();
+  });
+
+  it("节点不存在 / 已软删 → 抛错", () => {
+    writeOutlineFile(dir, seedOutlineTree());
+    expect(() => runProposeUpdateOutlineNode(makeCtx(), { node_id: "ch-999", patches: { title: "x" } })).toThrow(
+      /大纲节点不存在或已软删/,
+    );
+    softDeleteNode("ch-1");
+    expect(() => runProposeUpdateOutlineNode(makeCtx(), { node_id: "ch-1", patches: { result_summary: "x" } })).toThrow(
+      /大纲节点不存在或已软删/,
+    );
+  });
+});
+
 describe("signal aborted", () => {
-  it("三个大纲提案工具在 signal 已中止时抛 AbortedError", () => {
+  it("四个大纲提案工具在 signal 已中止时抛 AbortedError", () => {
     const controller = new AbortController();
     controller.abort();
     const ctx = makeCtx();
     expect(() => runProposeOutlineNode(ctx, { type: "volume", title: "卷" }, controller.signal)).toThrow(AbortedError);
     expect(() => runProposeMoveNode(ctx, { node_id: "sc-1", parent_id: "ch-1", order: 0 }, controller.signal)).toThrow(AbortedError);
     expect(() => runProposeDeleteNode(ctx, { node_id: "sc-1" }, controller.signal)).toThrow(AbortedError);
+    expect(() => runProposeUpdateOutlineNode(ctx, { node_id: "ch-1", patches: { title: "x" } }, controller.signal)).toThrow(
+      AbortedError,
+    );
   });
 });

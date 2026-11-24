@@ -1,4 +1,4 @@
-// 工具参数 schema：提案域（propose_* 16 个）
+// 工具参数 schema：提案域（propose_* 17 个）
 //
 // 语义（docs/api/tool-calling.md「提案类（需确认）」）：AI 不能直接修改数据——propose_*
 // 只产出提案对象；参数签名与工具目录逐字对齐（端点 id 的类型识别与 updated_at 快照
@@ -6,7 +6,7 @@
 // patches（部分更新字段）以 `minProperties: 1` 表达「拒绝空对象」（等价原 zod `.refine`）。
 
 import { Type, type Static } from "@earendil-works/pi-ai";
-import { MAX_ENTITY_LIST_LIMIT } from "@whispering233/ai-editor-shared";
+import { MAX_CHAPTER_RESULT_SUMMARY_CHARS, MAX_ENTITY_LIST_LIMIT } from "@whispering233/ai-editor-shared";
 import { entityTypeSchema } from "./entity.js";
 import { relationTypeSchema } from "./relation.js";
 import { outlineNodeTypeSchema } from "./outline.js";
@@ -135,6 +135,30 @@ export const proposeDeleteNodeArgsSchema = Type.Object(
 );
 
 export type ProposeDeleteNodeArgs = Static<typeof proposeDeleteNodeArgsSchema>;
+
+/**
+ * propose_update_outline_node 入参：node_id + patches（**至少一个键**，`additionalProperties: false` 拒绝未定义键）。
+ * - title / summary：节点文本（空串 = 清空 summary；title 非空）
+ * - result_summary：章「实际摘要」，进 `data.result_summary`——**仅章**
+ *   （卷/场景带该键由提案层与执行层抛错，不静默忽略）；maxLength 与
+ *   `chapterDataSchema` 同源（`MAX_CHAPTER_RESULT_SUMMARY_CHARS`）
+ */
+export const proposeUpdateOutlineNodeArgsSchema = Type.Object(
+  {
+    node_id: Type.String(),
+    patches: Type.Object(
+      {
+        title: Type.Optional(Type.String({ minLength: 1 })),
+        summary: Type.Optional(Type.String()),
+        result_summary: Type.Optional(Type.String({ maxLength: MAX_CHAPTER_RESULT_SUMMARY_CHARS })),
+      },
+      { additionalProperties: false, minProperties: 1 },
+    ),
+  },
+  { additionalProperties: false },
+);
+
+export type ProposeUpdateOutlineNodeArgs = Static<typeof proposeUpdateOutlineNodeArgsSchema>;
 
 // ============ 伏笔（proposal/hook.ts） ============
 

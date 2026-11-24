@@ -5,7 +5,7 @@
 //
 // 本模块是提案仓与 `PROPOSAL_BUILDERS` 的**唯一实现**（提案端点与对话链路同仓消费）：
 // - 仓：set/get/peek/remove/clear/size
-// - build：16 个 propose_* 工具名 → 产出完整 Proposal 的构造函数
+// - build：17 个 propose_* 工具名 → 产出完整 Proposal 的构造函数
 //   （工具的 run 只返回 `{ proposal_id, summary }`，完整对象必须重建——工具的返回值要省 token）
 // - sink：pi 工具执行成功后的接线点——重建 Proposal 入仓 + 返回推给前端的载荷
 //
@@ -28,6 +28,7 @@ import {
   buildProposeResolveHook,
   buildProposeUpdateEntity,
   buildProposeUpdateHook,
+  buildProposeUpdateOutlineNode,
   type Proposal,
   type ToolContext,
 } from "@whispering233/ai-editor-tools";
@@ -165,7 +166,7 @@ export const defaultProposalStore: ProposalStore = createProposalStore();
 export type ProposalBuilder = (ctx: ToolContext, args: unknown) => Proposal;
 
 /**
- * 16 个 propose_* 工具名 → build 层函数。
+ * 17 个 propose_* 工具名 → build 层函数。
  * 运行时查表缺失（非提案工具）返回 undefined；完整性由测试断言覆盖
  * （Object.keys(PROPOSAL_BUILDERS) === PROPOSAL_TOOLS）。
  */
@@ -179,6 +180,7 @@ export const PROPOSAL_BUILDERS: Record<string, ProposalBuilder> = {
   propose_outline_node: (ctx, args) => buildProposeOutlineNode(ctx, args as never),
   propose_move_node: (ctx, args) => buildProposeMoveNode(ctx, args as never),
   propose_delete_node: (ctx, args) => buildProposeDeleteNode(ctx, args as never),
+  propose_update_outline_node: (ctx, args) => buildProposeUpdateOutlineNode(ctx, args as never),
   propose_create_hook: (ctx, args) => buildProposeCreateHook(ctx, args as never),
   propose_update_hook: (ctx, args) => buildProposeUpdateHook(ctx, args as never),
   propose_advance_hook: (ctx, args) => buildProposeAdvanceHook(ctx, args as never),

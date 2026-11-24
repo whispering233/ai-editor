@@ -116,6 +116,10 @@ const TOOL_DISPLAY_SPECS: Record<string, ToolDisplaySpec> = {
     },
   },
   propose_delete_node: { lead: "删除大纲节点", fields: { node_id: { label: "节点", id: true } } },
+  propose_update_outline_node: {
+    lead: "更新大纲节点",
+    fields: { node_id: { label: "节点", id: true }, patches: { label: "变更字段" } },
+  },
   propose_create_hook: {
     lead: "新建伏笔",
     fields: { name: { label: "名称" }, plant_at_node_id: { label: "埋设节点", id: true } },

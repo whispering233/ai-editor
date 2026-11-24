@@ -26,6 +26,7 @@ import {
 } from "@whispering233/ai-editor-db";
 import { findOutlineNode, readOutlineFile, writeOutlineFile } from "@whispering233/ai-editor-db";
 import { buildProposal } from "../proposal/types.js";
+import { runGetOutline } from "../query/outline.js";
 import { executeProposal } from "./index.js";
 import { listTools } from "../registry.js";
 import * as toolsEntry from "../index.js"; // 副作用注册（LLM 可见工具）
@@ -154,6 +155,58 @@ describe("executeProposal（proposal.type → 执行函数映射）", () => {
     expect(findOutlineNode(readOutlineFile(dir), "ch-1")!.deleted).toBe(true);
   });
 
+  // C1 闸门用例：「写 result_summary 不覆盖 tags / status」（db updateOutlineNodeInfo 的 data 浅合并）
+  it("propose_update_outline_node → updateOutlineNodeInfo：result_summary 落进 data，tags / status 与其他 data 字段不变", () => {
+    const tree = seedOutlineTree();
+    const ch1 = findOutlineNode(tree, "ch-1")!;
+    ch1.summary = "计划摘要";
+    ch1.data = { status: "revision", tags: ["主线"], function: "turn", result_summary: "旧摘要" };
+    writeOutlineFile(dir, tree);
+
+    const result = executeProposal(
+      makeCtx(),
+      makeProposal("propose_update_outline_node", { node_id: "ch-1", patches: { result_summary: "主角拿到断剑" } }),
+    );
+    expect(result).toMatchObject({ id: "ch-1", updated: true });
+
+    const node = findOutlineNode(readOutlineFile(dir), "ch-1")!;
+ // 浅合并：只换 result_summary，其余 data 字段原样保留
+    expect(node.data).toEqual({ status: "revision", tags: ["主线"], function: "turn", result_summary: "主角拿到断剑" });
+    expect(node.summary).toBe("计划摘要");
+ // get_outline 能带出 result_summary（data 原样透传）
+    expect(runGetOutline(makeCtx()).children[0].children?.[0].data?.result_summary).toBe("主角拿到断剑");
+  });
+
+  it("propose_update_outline_node：title / summary 直接写节点字段；空串 result_summary = 清空", () => {
+    const tree = seedOutlineTree();
+    findOutlineNode(tree, "ch-1")!.data = { result_summary: "旧摘要" };
+    writeOutlineFile(dir, tree);
+    executeProposal(
+      makeCtx(),
+      makeProposal("propose_update_outline_node", { node_id: "ch-1", patches: { title: "第一章（改）", summary: "计划", result_summary: "" } }),
+    );
+    const node = findOutlineNode(readOutlineFile(dir), "ch-1")!;
+    expect(node.title).toBe("第一章（改）");
+    expect(node.summary).toBe("计划");
+    expect(node.data?.result_summary).toBe(""); // 空串就是「无摘要」，不删键
+  });
+
+  it("propose_update_outline_node：卷 / 场景带 result_summary → 抛错；软删节点 → 抛错", () => {
+    writeOutlineFile(dir, seedOutlineTree());
+    expect(() =>
+      executeProposal(makeCtx(), makeProposal("propose_update_outline_node", { node_id: "vol-1", patches: { result_summary: "x" } })),
+    ).toThrow(/实际摘要须为章/);
+    expect(() =>
+      executeProposal(makeCtx(), makeProposal("propose_update_outline_node", { node_id: "sc-1", patches: { result_summary: "x" } })),
+    ).toThrow(/实际摘要须为章/);
+    const tree = seedOutlineTree();
+    findOutlineNode(tree, "ch-1")!.deleted = true;
+    writeOutlineFile(dir, tree);
+    expect(() =>
+      executeProposal(makeCtx(), makeProposal("propose_update_outline_node", { node_id: "ch-1", patches: { summary: "x" } })),
+    ).toThrow(/大纲节点不存在或已软删/);
+  });
+
   it("propose_create_hook → 适配器：create_entity(type=hook) + plant_at_node_id 同事务补插 plants 关系", () => {
     writeOutlineFile(dir, seedOutlineTree());
     const result = executeProposal(makeCtx(), makeProposal("propose_create_hook", { name: "身世之谜", plant_at_node_id: "ch-1", data: { payoff_timing: "near_term" } }));
@@ -246,12 +299,12 @@ describe("executeProposal（proposal.type → 执行函数映射）", () => {
 });
 
 describe("执行类不注册 registry", () => {
-  it("LLM 可见工具表（listTools）不包含任何 EXECUTOR_TOOLS 名；入口冒烟 46 个注册数不变", () => {
+  it("LLM 可见工具表（listTools）不包含任何 EXECUTOR_TOOLS 名；入口冒烟 47 个注册数不变", () => {
     const names = new Set(listTools().map((t) => t.name));
     for (const name of EXECUTOR_TOOLS) {
       expect(names.has(name)).toBe(false);
     }
-    expect(toolsEntry.toolCount()).toBe(46); // 查询 11 + 分析 5 + 伏笔 5 + 提案 16 + 练习 7 + 通用 2（执行 13 不注册）
+    expect(toolsEntry.toolCount()).toBe(47); // 查询 11 + 分析 5 + 伏笔 5 + 提案 17 + 练习 7 + 通用 2（执行 13 不注册）
   });
 
   it("executeProposal 导出存在（S7.5 确认路由的消费入口）", () => {

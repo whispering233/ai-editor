@@ -2,7 +2,8 @@
 //
 // 按 proposal.type 映射执行函数（PROPOSAL_TOOLS 名 ↔ EXECUTOR_TOOLS 名）：
 // propose_create_entity → create_entity、propose_add_relation → add_relation、
-// propose_advance_hook → advance_hook 等（16 提案 → 13 执行）；
+// propose_advance_hook → advance_hook 等（17 提案 → 13 执行）；
+// propose_update_outline_node → 复用 db updateOutlineNodeInfo（无独立执行类工具名）
 // propose_create_hook / propose_update_hook 为适配器（hook 即 type=hook 的实体）：
 // - propose_create_hook → create_entity 注入 type="hook" + plant_at_node_id 时
 // 同事务补插 plants 关系（提案承诺「确认后建立 plants 关系」，生命周期「埋下」）
@@ -25,7 +26,7 @@ import type { Proposal } from "../proposal/types.js";
 import { executeAddDelta } from "./delta.js";
 import { executeCreateEntity, executeDeleteEntity, executeUpdateEntity } from "./entity.js";
 import { executeAddRelation, executeRemoveRelation } from "./relation.js";
-import { executeCreateOutlineNode, executeDeleteNode, executeMoveNode } from "./outline.js";
+import { executeCreateOutlineNode, executeDeleteNode, executeMoveNode, executeUpdateOutlineNode } from "./outline.js";
 import { executeAbandonHook, executeAdvanceHook, executeResolveHook } from "./hook.js";
 import { executeReorderTimepoints } from "./reorder-timepoints.js";
 import { executeCreateReference } from "./reference.js";
@@ -79,6 +80,8 @@ const EXECUTE_BY_PROPOSAL_TYPE: Record<ProposalType, ExecutorFn> = {
   propose_outline_node: executeCreateOutlineNode,
   propose_move_node: executeMoveNode,
   propose_delete_node: executeDeleteNode,
+ // C1：文本更新复用 db updateOutlineNodeInfo（data 浅合并）；不新增执行类工具名（同 hook 适配器口径）
+  propose_update_outline_node: executeUpdateOutlineNode,
   propose_create_hook: executeCreateHook,
   propose_update_hook: executeUpdateHook,
   propose_advance_hook: executeAdvanceHook,
@@ -107,6 +110,6 @@ export { executeCreateEntity, executeUpdateEntity, executeDeleteEntity } from ".
 export { executeCreateReference } from "./reference.js";
 export { executeAddRelation, executeRemoveRelation } from "./relation.js";
 export { executeAddDelta } from "./delta.js";
-export { executeCreateOutlineNode, executeMoveNode, executeDeleteNode } from "./outline.js";
+export { executeCreateOutlineNode, executeMoveNode, executeDeleteNode, executeUpdateOutlineNode } from "./outline.js";
 export { executeAdvanceHook, executeResolveHook, executeAbandonHook } from "./hook.js";
 export { executeReorderTimepoints } from "./reorder-timepoints.js";

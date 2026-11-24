@@ -33,6 +33,7 @@ import {
   buildProposal,
   buildProposeMoveNode,
   buildProposeOutlineNode,
+  buildProposeUpdateOutlineNode,
   refEntity,
   refOutlineNode,
   refRelation,
@@ -320,6 +321,22 @@ describe("POST /api/v1/proposal/:proposalId/confirm 成功", () => {
     expect(String(body.data?.result?.id)).toMatch(/^delta-/);
     expect(defaultProposalStore.peek(proposal.proposal_id)).toBeNull();
   });
+
+  it("propose_update_outline_node → 200 + result_summary 进 data（浅合并，其余 data 字段保留）", async () => {
+    const { app } = await seed();
+    updateOutlineNodeInfo(getCurrentProject()!.root, "ch-1", { data: { status: "revision", tags: ["主线"] } }, "2026-08-01T10:00:00Z");
+    const proposal = buildProposeUpdateOutlineNode(toolCtx(), { node_id: "ch-1", patches: { result_summary: "主角拿到断剑" } });
+    defaultProposalStore.set(proposal);
+
+    const { status, body } = await confirmProposal(app, proposal.proposal_id);
+    expect(status).toBe(200);
+    expect(body.data?.result?.id).toBe("ch-1");
+    expect(findOutlineNode(readOutlineFile(getCurrentProject()!.root), "ch-1")!.data).toEqual({
+      status: "revision",
+      tags: ["主线"],
+      result_summary: "主角拿到断剑",
+    });
+  });
 });
 
 // ============ 快照过期（存在性 + updated_at 任一失败 → 409 PROPOSAL_STALE） ============
@@ -394,6 +411,18 @@ describe("confirm 快照重校验 → 409 PROPOSAL_STALE", () => {
     );
     defaultProposalStore.set(proposal);
  // 入仓后节点信息被编辑：节点级 updated_at 刷新
+    updateOutlineNodeInfo(getCurrentProject()!.root, "ch-1", { title: "第一章（改）" }, "2026-08-02T10:00:00Z");
+
+    const { status, body } = await confirmProposal(app, proposal.proposal_id);
+    expect(status).toBe(409);
+    expect(body.error?.code).toBe("PROPOSAL_STALE");
+  });
+
+  it("propose_update_outline_node：节点 updated_at 变化 → 409 PROPOSAL_STALE（既有冲突码）", async () => {
+    const { app } = await seed();
+    const proposal = buildProposeUpdateOutlineNode(toolCtx(), { node_id: "ch-1", patches: { result_summary: "实际摘要" } });
+    defaultProposalStore.set(proposal);
+ // 入仓后节点被编辑（标题改动推进节点级 updated_at）
     updateOutlineNodeInfo(getCurrentProject()!.root, "ch-1", { title: "第一章（改）" }, "2026-08-02T10:00:00Z");
 
     const { status, body } = await confirmProposal(app, proposal.proposal_id);
