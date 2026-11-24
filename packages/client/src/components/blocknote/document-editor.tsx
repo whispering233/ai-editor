@@ -66,8 +66,9 @@ export interface DocumentEditorApi {
 export interface DocumentEditorProps {
  /** 初始内容（块数组 JSON 字符串；空串 / 空数组 = 空文档）——仅挂载时消费，外部改写请换 key 重挂 */
   initialContent: string;
- /** 内容变化：把 editor.document 序列化为块数组 JSON 字符串交给调用方（保存/自动保存） */
-  onChange: (content: string) => void;
+  /** 内容变化：把 editor.document 序列化为块数组 JSON 字符串交给调用方（保存/自动保存）；
+   * 只读预览（`readOnly`）不传——内容不会被改动 */
+  onChange?: (content: string) => void;
  /** 纯文本长度变化（码字悬浮面板累计用）：只在文本长度变化时回调（纯格式变更 = 0 不回调）；
    * 传了才计算（参考资料编辑器不传，行为零变化） */
   onTextDelta?: (delta: number) => void;
@@ -79,6 +80,9 @@ export interface DocumentEditorProps {
   focus?: ToolbarFocus;
   /** 手动保存（章正文页 / 参考资料详情页编辑态各自注入）；不传 = 工具条无保存按钮（卡 14.1） */
   save?: ToolbarSave;
+  /** 只读预览（章历史抽屉）：锁编辑（`editable={false}`）+ **不渲染写作工具条**；
+   * 恢复前的「看一眼旧版」用它，不另写一套 markdown 渲染 */
+  readOnly?: boolean;
 }
 
 /** 块数组 → 纯文本长度（码字增量的唯一口径，与保存/导出共用 shared 投影） */
@@ -94,6 +98,7 @@ export function DocumentEditor({
   status,
   focus,
   save,
+  readOnly = false,
 }: DocumentEditorProps) {
   const theme = useThemeMode();
   const { prefs, setPref } = useWritingPrefs();
@@ -132,6 +137,7 @@ export function DocumentEditor({
     <BlockNoteView
       editor={editor}
       theme={theme}
+      editable={!readOnly}
       style={toWritingCssVars(prefs)}
       /* 属性值的约定：data-writing-paper 直接用纹理档名（none/ruled/grid，档位表是唯一定义处）；
          data-writing-indent 是开关（on/off）——两串都要与 blocknote.css 的属性选择器逐字对应。 */
@@ -144,10 +150,12 @@ export function DocumentEditor({
           plainLengthRef.current = length;
           if (delta !== 0) onTextDelta(delta);
         }
-        onChange(JSON.stringify(next.document));
+        onChange?.(JSON.stringify(next.document));
       }}
     >
-      <EditorToolbar prefs={prefs} setPref={setPref} status={status} focus={focus} save={save} />
+      {!readOnly && (
+        <EditorToolbar prefs={prefs} setPref={setPref} status={status} focus={focus} save={save} />
+      )}
     </BlockNoteView>
   );
 }

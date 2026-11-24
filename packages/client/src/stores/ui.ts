@@ -71,6 +71,13 @@ interface UiState {
   setFocusMode: (on: boolean) => void;
 
  /**
+ * AI 右栏临时收起（章历史抽屉打开时）：**瞬态**、不改用户的栏位偏好（`ai-editor:panels`），
+ * 抽屉关闭 / 卸载即还原；外壳据此在「用户偏好收起 ∪ 临时收起」时都不渲染右栏。
+ */
+  chatPanelSuppressed: boolean;
+  setChatPanelSuppressed: (on: boolean) => void;
+
+ /**
  * 数据版本信号（问题 1）：AI 提案确认写库后 / MainToolbar 刷新按钮点击时 +1，
  * 中栏数据页面（EntityList/EntityDetail/Outline/OutlineDetail/HookPanel/Trash/Dashboard）
  * 订阅本字段变化后重拉各自数据，实现「AI 改完数据中栏同步刷新」。
@@ -127,6 +134,9 @@ export const useUiStore = create<UiState>((set, get) => ({
 
   focusMode: false,
   setFocusMode: (on) => set({ focusMode: on }),
+
+  chatPanelSuppressed: false,
+  setChatPanelSuppressed: (on) => set({ chatPanelSuppressed: on }),
 
   dataVersion: 0,
   notifyDataChanged: () => set((s) => ({ dataVersion: s.dataVersion + 1 })),
