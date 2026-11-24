@@ -16,6 +16,7 @@ function card(over: Partial<CanvasChapterCard> = {}): CanvasChapterCard {
   return {
     id: "ch-1",
     title: "开端",
+    volumeId: "vol-1",
     volumeLabel: "第1卷",
     chapterNumber: 3,
     chapterLabel: "第3章",
