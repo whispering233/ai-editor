@@ -538,6 +538,11 @@
   - 现状：`#/` 页头标题 = 「书架」（描述行已改为「选择一本小说或练习区打开…」），而练习工作区左栏顶部标识是「文风练习」且也指向该页 ⇒ 同一页在两个 kind 下有两个名字。
   - 触发条件：用户/文案评审提出该页命名时；最小修法 = 改页头标题与 `DESIGN.md` 的「根首页」小节一行（**先定用词**：不要把设计侧词「工作区」直接搬进界面）。
 
+## 开发环境（Windows，2026-11 实测登记）
+
+- **Windows 上 `pnpm dev` 直接失败** — 现状：`packages/server` 的 dev script 是 POSIX 前缀 `NODE_ENV=development tsx watch src/index.ts`，Windows 下报 `'NODE_ENV' 不是内部或外部命令`，且 `pnpm -r --parallel` 会把其它包的 dev 一并带崩。触发条件：需要在 Windows 一键起 dev（当前得手动分两处起 server / client）。最小修法：改用 `cross-env`（新增一个 devDependency）或 `node --env-file`；不新增依赖的做法是给 server 加一个 dev 入口脚本。
+- **Windows 上 server 测试有既有红，且会写真实家目录** — 现状：`*.test.ts` 用 `process.env.HOME` 做沙箱，但 `os.homedir()` 在 Windows 读 `USERPROFILE` ⇒ 沙箱失效，用例读到真实 `~/.pi/agent`（`11 文件 / 97 用例`失败，2026-11 基线实测），并会往真实 `~/.ai-editor/pi-agent/` 写空 `auth.json` / `models-store.json`（实测 mtime 与测试进程一致）。触发条件：需要在 Windows 上跑 server 测试并相信其结果时（CI 是 Linux，不受影响）。最小修法：测试 harness 同时设 `USERPROFILE`（或统一用 `vi.stubEnv` 并让路径走可注入的 `pi-agent-dir.ts` override），再把「落盘路径」类断言改成注入路径。
+
 ## 发布前审计登记（2026-09，v0.0.52）
 
 - **REST 校验范围在 api 文档与 zod schema 两处出现（有意保留的契约镜像）** — 现状：`docs/api/*.md` 的请求体注释写明「1-100 字符」这类范围，单一来源 = shared `types/api.ts` 的 zod schema，文档是契约说明视图。触发条件：改任一校验范围时（schema 与文档同改）。**不**做「文档插值常量」——api 文档是给人读的契约，插值会降低可读性。
