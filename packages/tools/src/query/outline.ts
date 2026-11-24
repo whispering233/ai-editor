@@ -3,17 +3,19 @@
 //
 // db 层能力确认与分工：
 // - get_outline：db readOutlineFile 返回存储形态 OutlineFileTree——
-// 工具层 mapOutlineFileToTree 映射为 API 形态（camelCase）；**默认不含 metadata**
-// （省 token，明确：需统计走 API with_metadata）；软删节点整棵剔除
-// （查询类工具不返回回收站中的对象）
+// 工具层 mapOutlineFileToTree 映射为 API 形态（camelCase），再投影成
+// **分层视图**（depth 从树根算层数；卷节点带聚合）；软删节点整棵剔除
+// （查询类工具不返回回收站中的对象）。不再整树返回：千章书的全树早已远超
+// `TOOL_RESULT_MAX_TOKENS`，导航靠「地图（depth=1）→ 放大（volume_id）→ 检索」。
 // - get_outline_path：db getOutlinePathIds 返回根 → 目标节点路径（含 root）；
 // 节点不存在抛错——工具层转 null（查询无结果）；路径上任一节点软删 → null（不可见）
 
-import { findOutlineNode, getOutlinePathIds, readOutlineFile } from "@whispering233/ai-editor-db";
-import { mapOutlineFileToTree } from "@whispering233/ai-editor-shared";
-import type { OutlineFileNode, OutlineTree } from "@whispering233/ai-editor-shared";
+import { findOutlineNode, getDocumentTextLengths, getOutlinePathIds, readOutlineFile } from "@whispering233/ai-editor-db";
+import { OUTLINE_STATUS, mapOutlineFileToTree } from "@whispering233/ai-editor-shared";
+import type { OutlineFileNode, OutlineNode, OutlineTree } from "@whispering233/ai-editor-shared";
+import type { Db } from "@whispering233/ai-editor-db";
 import type { ToolContext } from "../context.js";
-import type { GetOutlinePathArgs } from "../schemas/index.js";
+import type { GetOutlineArgs, GetOutlinePathArgs } from "../schemas/index.js";
 
 /**
  * 递归剔除软删节点：deleted === true 的节点整棵不可见——
@@ -31,17 +33,112 @@ function stripDeletedNodes<T extends OutlineFileNode>(nodes: readonly T[]): T[] 
   return out;
 }
 
+/** get_outline 层数（从树根算：1 = 卷，2 = 卷 + 章，3 = 卷 + 章 + 场景） */
+export type OutlineDepth = 1 | 2 | 3;
+
+/** 卷聚合（仅 depth=1 的卷节点；**只计未软删节点**，charCount = 正文字数，与 API `with_metadata` 的 textLength 同义） */
+export interface OutlineVolumeStats {
+  chapterCount: number;
+  charCount: number;
+  /** `data.status` = draft；缺省（未设置 / 非法值）同样计为 draft——与 UI 详情页 select 的缺省口径一致 */
+  draftCount: number;
+  finalCount: number;
+}
+
+/** get_outline 结果节点：API 形态去掉 `updatedAt`（模型不需要版本戳，它占原 payload 约 27%） */
+export interface OutlineViewNode {
+  id: string;
+  type: OutlineNode["type"];
+  title: string;
+  summary?: string;
+  data?: Record<string, unknown>;
+  stats?: OutlineVolumeStats;
+  children?: OutlineViewNode[];
+}
+
+/** get_outline 结果树（root 无 updatedAt；schemaVersion 原样透传） */
+export interface OutlineViewTree {
+  id: "root";
+  type: "root";
+  schemaVersion: number;
+  children: OutlineViewNode[];
+}
+
 /**
- * 完整大纲树（get_outline → 严格三层树）。
- * - 默认不含 metadata 统计（省 token；需统计走 API GET /outline?with_metadata=）
- * - 软删节点过滤
- * - 返回 API 形态 OutlineTree（camelCase；data 嵌套字段原样透传）
- * 无参工具：签名省略 args（少参数赋值兼容 ToolDefinition.run，避免未使用参数 lint）
+ * 章 status 归一：outline.json 在读入时已解析（不经 SQL `json_extract`，无 `json_valid` 守卫问题），
+ * 守卫体现为枚举白名单——缺失 / 非法值按「缺省 = 草稿」计（与 `lib/outline-detail.ts` 的
+ * `defaultValue: "draft"` 同口径：手改 outline.json 的脏值不得抛错，也不得冒充定稿）。
  */
-export function runGetOutline(ctx: ToolContext): OutlineTree {
-  const tree = readOutlineFile(ctx.outlineDir);
-  const stripped = { ...tree, children: stripDeletedNodes(tree.children) };
-  return mapOutlineFileToTree(stripped);
+function chapterStatusOf(node: OutlineNode): string {
+  const status = node.data?.["status"];
+  return typeof status === "string" && (OUTLINE_STATUS as readonly string[]).includes(status) ? status : "draft";
+}
+
+/** 卷 → 聚合四数；正文字数一次批量取（勿逐卷 N+1） */
+function volumeStats(chapters: readonly OutlineNode[], textLengths: Map<string, number>): OutlineVolumeStats {
+  let charCount = 0;
+  let draftCount = 0;
+  let finalCount = 0;
+  for (const chapter of chapters) {
+    charCount += textLengths.get(chapter.id) ?? 0;
+    const status = chapterStatusOf(chapter);
+    if (status === "draft") draftCount++;
+    else if (status === "final") finalCount++;
+  }
+  return { chapterCount: chapters.length, charCount, draftCount, finalCount };
+}
+
+/** 卷聚合（depth=1 的卷节点用）：所有卷的章 id 一次批量取正文长度，再按卷归并 */
+function attachVolumeStats(db: Db, tree: OutlineTree, nodes: OutlineViewNode[]): void {
+  const chaptersOf = new Map<string, OutlineNode[]>();
+  for (const child of tree.children) {
+    if (child.type === "volume") chaptersOf.set(child.id, child.children ?? []);
+  }
+  const textLengths = getDocumentTextLengths(db, "chapter", [...chaptersOf.values()].flat().map((chapter) => chapter.id));
+  for (const node of nodes) {
+    const chapters = chaptersOf.get(node.id);
+    if (chapters !== undefined) node.stats = volumeStats(chapters, textLengths);
+  }
+}
+
+/** API 形态节点 → 结果节点：砍到 depth 层、去 updatedAt（deleted/deletedAt 未删时本就是缺省值，一并丢） */
+function projectNode(node: OutlineNode, levelsLeft: OutlineDepth): OutlineViewNode {
+  const out: OutlineViewNode = { id: node.id, type: node.type, title: node.title };
+  if (node.summary !== undefined) out.summary = node.summary;
+  if (node.data !== undefined) out.data = node.data;
+  const children = (node as { children?: OutlineNode[] }).children;
+  if (levelsLeft > 1 && children !== undefined) {
+    out.children = children.map((child) => projectNode(child, (levelsLeft - 1) as OutlineDepth));
+  }
+  return out;
+}
+
+/**
+ * 分层大纲视图（get_outline）。
+ * - depth 从树根算层数（缺省 1 = 只回卷）：千章书先看地图，再 `volume_id` 放大单卷
+ * - volume_id 只过滤（只留该卷，depth 语义不变）；不存在（含已软删）→ 抛错，不静默回空树
+ * - depth=1 的卷节点带聚合四数；所有档位都不返回 updatedAt
+ * - 软删节点过滤（查询类工具不返回回收站对象）
+ */
+export function runGetOutline(ctx: ToolContext, args: GetOutlineArgs = {}): OutlineViewTree {
+  const depth = args.depth ?? 1;
+  const fileTree = readOutlineFile(ctx.outlineDir);
+  const visible = stripDeletedNodes(fileTree.children);
+  let scoped: typeof visible = visible;
+  if (args.volume_id !== undefined) {
+    const volume = visible.find((node) => node.id === args.volume_id && node.type === "volume");
+    if (volume === undefined) throw new Error(`卷不存在：${args.volume_id}`);
+    scoped = [volume];
+  }
+  const tree = mapOutlineFileToTree({ ...fileTree, children: scoped });
+  const view: OutlineViewTree = {
+    id: "root",
+    type: "root",
+    schemaVersion: tree.schemaVersion,
+    children: tree.children.map((node) => projectNode(node, depth)),
+  };
+  if (depth === 1) attachVolumeStats(ctx.db, tree, view.children);
+  return view;
 }
 
 /**

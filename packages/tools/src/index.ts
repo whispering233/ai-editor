@@ -123,9 +123,15 @@ const queryToolDefs: ToolDefinition[] = [
   },
   {
     name: "get_outline",
+    // 大纲不再整树返回（千章书的整树远超单条结果上限）：地图 → 放大 → 检索，三档语义必须写在描述里
     description:
-      "完整大纲树查询（严格三层：卷→章→场景）。默认不含 metadata 统计（省 token）；" +
-      "软删节点不返回。用于了解作品整体结构。" +
+      "大纲地图查询（严格三层：卷→章→场景），按 depth 从树根算层数逐级展开：" +
+      "depth=1（缺省）只回卷，每个卷带聚合 {chapterCount, charCount, draftCount, finalCount}；" +
+      "depth=2 回卷 + 章；depth=3 回卷 + 章 + 场景。" +
+      "volume_id 只做过滤（只留该卷，depth 语义不变；不存在或已软删报错）。" +
+      "千章规模的书不要一次拉全树（会撞单条工具结果上限被截断）：先 depth=1 看地图定位卷 → " +
+      "再用 volume_id + depth=2 放大单卷；跨卷定位具体内容也不要靠拉全树。" +
+      "不返回 updatedAt；软删节点不返回。" +
       "章节点 data.result_summary = 写完之后的事实摘要（作者的 summary 是写作前的计划摘要，两者并存）：" +
       "做跨章衔接、一致性或伏笔回收分析前先读它，不要凭标题推断。",
     parameters: getOutlineArgsSchema,

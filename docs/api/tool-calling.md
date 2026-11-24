@@ -60,9 +60,15 @@ query_relationships(opts: {
   → 关系图子图 [{ source, target, type, metadata }]
 
 // === 大纲查询 ===
-get_outline()
-  → 完整大纲树（严格三层，无游离节点）
-  注意：默认不含 metadata 统计（省 token）；需统计走 API `GET /outline?with_metadata=`
+get_outline(depth?, volume_id?)
+  → 分层大纲视图（严格三层：卷→章→场景），depth **从树根算层数**：
+    depth=1（缺省）只回卷，每个卷带聚合 { chapterCount, charCount, draftCount, finalCount }
+      （只计未软删节点；charCount = 正文字数，与 `with_metadata` 的 textLength 同义；
+       draftCount / finalCount 按 `data.status` 计，**缺省 = draft**，与 UI 详情页面径一致）
+    depth=2 = 卷 + 章；depth=3 = 卷 + 章 + 场景
+  volume_id 只做**过滤**（只留该卷，depth 语义不变）；不存在或已软删 → 抛错（不静默回空树）
+  用法（千章书）：整树远超单条工具结果上限 ⇒ 先 depth=1 看地图 → volume_id + depth=2 放大单卷 →
+    跨卷定位具体内容同样不靠拉全树；**不返回 updatedAt**（模型不需要版本戳），软删节点不返回
   注：章节点 `data.result_summary` = 写完之后的事实摘要（与写作前的 `summary` 并存）
     ——跨章衔接 / 一致性 / 伏笔回收分析前先读它，不要凭标题推断
 
