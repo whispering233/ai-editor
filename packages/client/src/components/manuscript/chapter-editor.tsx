@@ -28,6 +28,7 @@ import {
   ArrowLeftOutlined,
   ArrowRightOutlined,
   ExportOutlined,
+  HistoryOutlined,
   ImportOutlined,
   ThunderboltOutlined,
 } from "@ant-design/icons";
@@ -36,6 +37,7 @@ import {
   DocumentEditor,
   type DocumentEditorApi,
 } from "../blocknote/document-editor";
+import { ChapterHistoryDrawer } from "./chapter-history-drawer";
 import { ManuscriptLoadFailure, ManuscriptMissing } from "../blocknote/manuscript-states";
 import {
   Dialog,
@@ -130,6 +132,8 @@ export function ChapterEditor({
   const [savedAt, setSavedAt] = useState<Date | null>(null);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [conflictOpen, setConflictOpen] = useState(false);
+  /** 历史抽屉（C2）：打开时抽屉自己把右栏临时收起（见 chapter-history-drawer.tsx） */
+  const [historyOpen, setHistoryOpen] = useState(false);
   // 专注模式（卡 13.4）：**瞬态**全局标志（不持久化，路由变化由 MainPanel 的守卫归零）
   const focusMode = useUiStore((s) => s.focusMode);
   const setFocusMode = useUiStore((s) => s.setFocusMode);
@@ -288,6 +292,28 @@ export function ChapterEditor({
   async function overwriteRemote(): Promise<void> {
     setConflictOpen(false);
     await saveContent(latestRef.current ?? "", { force: true });
+  }
+
+  /**
+   * 历史恢复成功（C2）：服务端已把目标内容写进库 ⇒ 本地不再发第二次请求——
+   * 前移版本戳 + 换 key 重挂编辑器（BlockNote 非受控）⇒ 正文与字数立即更新（不刷新页面）；
+   * 待存内容已由抽屉在恢复前 flush，这里 reset 只为防旧内容被调度器回写。
+   */
+  function applyRestoredContent(info: {
+    content: string;
+    updatedAt: string;
+    charCount: number;
+  }): void {
+    autosave.reset();
+    baseRef.current = info.updatedAt;
+    latestRef.current = info.content;
+    setContent(info.content);
+    setCharCount(info.charCount);
+    setSaveError(null);
+    setSaveState("idle");
+    setSavedAt(null);
+    setEditorEpoch((epoch) => epoch + 1);
+    onSaved?.({ charCount: info.charCount, updatedAt: info.updatedAt });
   }
 
   /** 「回填本章摘要」（C2）：一条普通用户消息 + 本次发送的 `focus_node_id`，并聚焦右栏输入框
@@ -522,6 +548,18 @@ export function ChapterEditor({
                 aria-label="回填本章摘要"
                 onClick={requestChapterSummary}
               />
+              {/* 历史版本（C2）：与导入导出 / 回填摘要同排的 24px 图标按钮；正文未加载时不可点
+                  （「比当前少/多 N 字」要拿当前字数做基准） */}
+              <Button
+                color="default"
+                variant="text"
+                size="small"
+                disabled={content === null}
+                icon={<HistoryOutlined className="text-sm" />}
+                title="历史"
+                aria-label="历史"
+                onClick={() => setHistoryOpen(true)}
+              />
               {headerActions}
             </>
           }
@@ -589,6 +627,17 @@ export function ChapterEditor({
           </p>
         )}
       </div>
+
+      {/* 历史版本抽屉（C2）：挂载 = 打开；打开期间右栏临时收起、关闭还原（不改栏位偏好） */}
+      {historyOpen && (
+        <ChapterHistoryDrawer
+          chapterId={chapterId}
+          currentCharCount={charCount}
+          flushPending={() => autosave.flush()}
+          onRestored={applyRestoredContent}
+          onClose={() => setHistoryOpen(false)}
+        />
+      )}
 
       {/* 409 冲突（仅携带 base_updated_at 保存时可能）：二选一，不自动决定 */}
       <Dialog open={conflictOpen} onOpenChange={(open) => !open && setConflictOpen(false)}>

@@ -374,6 +374,56 @@ export function saveManuscript(
   });
 }
 
+// ============ 章级历史（快照 + 恢复；docs/api/110-api-manuscript.md「章级历史」） ============
+
+/** 历史快照摘要（列表项；不含正文） */
+export interface ChapterSnapshotSummary {
+  seq: number;
+ /** 该快照写入时刻（ISO 8601） */
+  createdAt: string;
+ /** 该快照的正文字数（与当前 charCount 之差 = 列表行的「多/少 N 字」） */
+  charCount: number;
+}
+
+/** GET /api/v1/manuscript/:chapterNodeId/snapshots 响应（服务端已按 seq 降序 = 新→旧，客户端不重排） */
+export interface ChapterSnapshotsRes {
+  snapshots: ChapterSnapshotSummary[];
+}
+
+/** 列出该章历史快照（404 = 章不存在/已软删；400 = 节点不是章） */
+export function listChapterSnapshots(chapterNodeId: string): Promise<ChapterSnapshotsRes> {
+  return apiFetch<ChapterSnapshotsRes>(`/manuscript/${chapterNodeId}/snapshots`);
+}
+
+/** 单份快照（只读预览）：`content` = 块数组 JSON 字符串，与 GET 正文同形，可直喂块编辑器 */
+export interface ChapterSnapshotDetail extends ChapterSnapshotSummary {
+  content: string;
+}
+
+/** 取单份历史快照（404 SNAPSHOT_NOT_FOUND = 该章没有这个 seq） */
+export function getChapterSnapshot(
+  chapterNodeId: string,
+  seq: number,
+): Promise<ChapterSnapshotDetail> {
+  return apiFetch<ChapterSnapshotDetail>(`/manuscript/${chapterNodeId}/snapshots/${seq}`);
+}
+
+/**
+ * 恢复到某份历史快照（响应与 PUT 同形）：
+ * - 服务端**先强制**把当前正文压一份快照（绕过节流）⇒ 恢复完还能退回恢复前那一版
+ * - 不带版本戳（服务端主动动作，不做 `base_updated_at` 冲突判定）；幂等：当前内容已是目标 → 不写库
+ * - 404 SNAPSHOT_NOT_FOUND = 快照不属于该章（可能已被裁剪）
+ */
+export function restoreChapterSnapshot(
+  chapterNodeId: string,
+  snapshotId: number,
+): Promise<SaveManuscriptRes> {
+  return apiFetch<SaveManuscriptRes>(`/manuscript/${chapterNodeId}/restore`, {
+    method: "POST",
+    body: { snapshot_id: snapshotId },
+  });
+}
+
 // ============ 回收站（S2.3 大纲侧 + S4.4 实体侧补齐；「回收站」L660-736） ============
 
 /** GET /api/v1/trash 响应（实体侧条目；type 为四类实体之一） */

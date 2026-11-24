@@ -39,6 +39,9 @@ export function AppShell({ route, children }: { route: Route; children: ReactNod
   const isDragging = dragSide !== null;
   // 专注模式（卡 13.4，仅章正文页）：为真时只渲染中栏（左栏 / 右栏 / 两根拖拽手柄全不渲染）
   const focusMode = useUiStore((s) => s.focusMode);
+  // 右栏临时收起（C2 章历史抽屉打开期间）：瞬态，不改 `layout.collapsedChat` 偏好
+  const chatSuppressed = useUiStore((s) => s.chatPanelSuppressed);
+  const chatVisible = !layout.collapsedChat && !chatSuppressed;
 
   // 全站 Ctrl/Cmd + S 的存档阶段（契约 DESIGN.md §设置页「快捷键」区）：
   // 挂在外壳层 = 任意页面（含专注模式、左栏收起）按快捷键都能生成存档；无项目时只保存不存档
@@ -145,7 +148,7 @@ export function AppShell({ route, children }: { route: Route; children: ReactNod
       {!focusMode && (
         <>
           {/* 中|右拖拽手柄：仅桌面 + 右栏展开时渲染 */}
-          {isDesktop && !layout.collapsedChat && (
+          {isDesktop && chatVisible && (
             <ResizeHandle
               label="调整右栏宽度"
               active={dragSide === "chat"}
@@ -156,7 +159,7 @@ export function AppShell({ route, children }: { route: Route; children: ReactNod
           )}
           {/* 右栏：桌面收起态 = 0px（整栏不渲染，无窄条/占位）；展开态 = ChatPanel（桌面传像素宽度）；
               小屏抽屉行为不变——open/onClose 仅小屏生效 */}
-          {(!isDesktop || !layout.collapsedChat) && (
+          {(!isDesktop || chatVisible) && (
             <ChatPanel
               open={chatOpen}
               onClose={() => setChatOpen(false)}
