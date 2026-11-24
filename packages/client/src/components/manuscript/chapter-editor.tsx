@@ -29,6 +29,7 @@ import {
   ArrowRightOutlined,
   ExportOutlined,
   ImportOutlined,
+  ThunderboltOutlined,
 } from "@ant-design/icons";
 import { PanelHeader } from "@/components/ui/panel-header";
 import {
@@ -68,7 +69,9 @@ import {
 import { findNode, numberOutline } from "../../lib/outline-tree";
 import { useSaveShortcut } from "../../lib/save-shortcut";
 import { errorBannerClass, skeletonClass } from "../../lib/styles";
+import { canRequestChapterSummary, CHAPTER_SUMMARY_MESSAGE } from "../../lib/writing-summary";
 import { navigate } from "../../hooks/use-route";
+import { useChatStore } from "../../stores/chat";
 import { useProjectStore } from "../../stores/project";
 import { useWritingSessionStore } from "../../stores/writing-session";
 import { useUiStore } from "../../stores/ui";
@@ -133,6 +136,11 @@ export function ChapterEditor({
   // 码字悬浮面板（会话累计）：当前项目 id + 变更记入口；数字只在客户端内存
   const projectId = useProjectStore((s) => s.config?.id ?? null);
   const recordDelta = useWritingSessionStore((s) => s.recordDelta);
+  // 「回填本章摘要」（C2）：一条普通用户消息 + 本次发送的 focus_node_id（照练习页既有姿势）
+  const sendMessage = useChatStore((s) => s.sendMessage);
+  const requestFocusInput = useChatStore((s) => s.requestFocusInput);
+  // 生成中：`sendMessage` 在 streaming 时直接 return（无任何可见反馈）⇒ 按钮必须同时禁点
+  const streaming = useChatStore((s) => s.streaming);
 
   /** 版本戳基准（保存时回传 base_updated_at）；null = 服务端从未写过 */
   const baseRef = useRef<string | null>(null);
@@ -280,6 +288,13 @@ export function ChapterEditor({
   async function overwriteRemote(): Promise<void> {
     setConflictOpen(false);
     await saveContent(latestRef.current ?? "", { force: true });
+  }
+
+  /** 「回填本章摘要」（C2）：一条普通用户消息 + 本次发送的 `focus_node_id`，并聚焦右栏输入框
+   *  （照练习页「让 AI 点评」的姿势；AI 读库里的本章正文，提案更新 `data.result_summary`） */
+  function requestChapterSummary(): void {
+    sendMessage(CHAPTER_SUMMARY_MESSAGE, { focus_node_id: chapterId });
+    requestFocusInput();
   }
 
   // ============ 导入导出（卡 12.6；2026-11 补 TXT） ============
@@ -495,6 +510,18 @@ export function ChapterEditor({
                   aria-label="导出"
                 />
               </Dropdown>
+              {/* 回填本章摘要（C2）：发一条普通用户消息 + 本章 focus_node_id（不新增端点 / 通道）；
+                  窄屏同样渲染——它在本页头动作组里，与 rail 是否可见无关 */}
+              <Button
+                color="default"
+                variant="text"
+                size="small"
+                disabled={streaming || !canRequestChapterSummary(charCount)}
+                icon={<ThunderboltOutlined className="text-sm" />}
+                title="回填本章摘要"
+                aria-label="回填本章摘要"
+                onClick={requestChapterSummary}
+              />
               {headerActions}
             </>
           }
