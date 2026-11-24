@@ -9,7 +9,7 @@
   "type": "module",
   "main": "dist/main.js",
   "scripts": {
-    "build": "tsc -p tsconfig.json",
+    "build": "node -e \"require('fs').rmSync('dist',{recursive:true,force:true})\" && tsc -p tsconfig.json",
     "start": "pnpm run build && electron .",
     "test": "vitest run",
     "dist": "pnpm run build && node scripts/pack.mjs"
