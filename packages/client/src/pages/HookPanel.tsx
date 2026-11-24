@@ -47,11 +47,13 @@ import {
   createRelation,
   deleteEntity,
   getEntityDetail,
+  getWrittenUnresolvedHooks,
   listEntities,
   listRelations,
   updateEntity,
   type EntityDetailRes,
   type RelationSummaryItem,
+  type WrittenUnresolvedHookItem,
 } from "../lib/api";
 import { detailFieldsForType, diffData, type DetailFieldConfig } from "../lib/entity-detail";
 import { HOOK_STATUS_LABEL, HOOK_TIMING_LABEL } from "../lib/entity-list";
@@ -61,11 +63,14 @@ import {
   dependentsCount,
   dependencyNames,
   expandDependencyChain,
+  filterWrittenUnresolved,
   groupHooksByStatus,
   involvesNames,
   relationsOfType,
   runAbandonWrite,
   runLifecycleWrite,
+  WRITTEN_UNRESOLVED_LABEL,
+  writtenUnresolvedByHookId,
   type DepChainNode,
   type HookGroups,
   type HookLifecycleKind,
@@ -114,6 +119,10 @@ export default function HookPanel() {
   /** 全量 depends_on 边（GET /relation 一次拉全；行内「依赖:」与依赖者计数用；失败不阻塞列表） */
   const [depEdges, setDepEdges] = useState<RelationSummaryItem[]>([]);
   const [depEdgesFailed, setDepEdgesFailed] = useState(false);
+  /** 「已写未回收」伏笔（服务端已判定；行标记 + 筛选的数据源；失败静默 = 无标记、不影响列表） */
+  const [writtenUnresolved, setWrittenUnresolved] = useState<WrittenUnresolvedHookItem[]>([]);
+  /** 只看已写未回收（组件态：不写 localStorage、不进 URL，刷新即清） */
+  const [onlyWrittenUnresolved, setOnlyWrittenUnresolved] = useState(false);
 
   // 详情对话框（relations 全览）
   const [detailTarget, setDetailTarget] = useState<EntityDetailRes | null>(null);
@@ -149,7 +158,12 @@ export default function HookPanel() {
   const outline = useProjectStore((s) => s.outline);
  // 节点选择器只列章（卡片 1.3：伏笔锚点仅章——卷/场景写入必 400，不入选项）
   const nodeOptions = chapterNodeOptions(outline);
-  const groups: HookGroups | null = items === null ? null : groupHooksByStatus(items);
+  const writtenUnresolvedById = writtenUnresolvedByHookId(writtenUnresolved);
+  const visibleItems =
+    items === null
+      ? null
+      : filterWrittenUnresolved(items, writtenUnresolvedById, onlyWrittenUnresolved);
+  const groups: HookGroups | null = visibleItems === null ? null : groupHooksByStatus(visibleItems);
 
   // 列表加载（reloadTick 驱动重试/刷新；卸载或重载丢弃过期响应）
   useEffect(() => {
@@ -179,6 +193,14 @@ export default function HookPanel() {
       })
       .finally(() => {
         if (!cancelled) setLoading(false);
+      });
+    // 「已写未回收」（行标记 + 筛选）：失败静默降级为无命中，不拦列表
+    void getWrittenUnresolvedHooks()
+      .then((res) => {
+        if (!cancelled) setWrittenUnresolved(res.hooks);
+      })
+      .catch(() => {
+        if (!cancelled) setWrittenUnresolved([]);
       });
     return () => {
       cancelled = true;
@@ -429,13 +451,28 @@ export default function HookPanel() {
 
   return (
     <section>
-      {/* 页头（统一壳）：标题 + 控件行（本页无筛选控件，仅操作按钮靠右）+ 分割线 */}
+      {/* 页头（统一壳）：标题 + 控件行（左 = 「只看已写未回收」；右 = 新建）+ 分割线 */}
       <PageHeader
         title="伏笔池"
         controls={
-          <Button type="primary" className="ml-auto" onClick={() => setCreateOpen(true)}>
-            + 新建伏笔
-          </Button>
+          <>
+            <button
+              type="button"
+              onClick={() => setOnlyWrittenUnresolved((cur) => !cur)}
+              aria-pressed={onlyWrittenUnresolved}
+              className={cn(
+                "rounded-full border px-2.5 py-0.5 text-xs transition-colors",
+                onlyWrittenUnresolved
+                  ? "border-primary bg-primary text-primary-foreground"
+                  : "border-border bg-muted text-muted-foreground hover:text-foreground",
+              )}
+            >
+              只看{WRITTEN_UNRESOLVED_LABEL}
+            </button>
+            <Button type="primary" className="ml-auto" onClick={() => setCreateOpen(true)}>
+              + 新建伏笔
+            </Button>
+          </>
         }
       />
 
@@ -485,6 +522,20 @@ export default function HookPanel() {
         </EmptyState>
       )}
 
+      {/* 筛选无命中（组件态筛掉全部命中；分组卡照旧显示，只加一句提示 + 清筛入口） */}
+      {onlyWrittenUnresolved &&
+        items !== null &&
+        items.length > 0 &&
+        visibleItems !== null &&
+        visibleItems.length === 0 && (
+        <div className="mb-3 flex items-center gap-2 text-sm text-muted-foreground">
+          <span>没有命中「{WRITTEN_UNRESOLVED_LABEL}」的伏笔。</span>
+          <Button size="small" onClick={() => setOnlyWrittenUnresolved(false)}>
+            清空筛选
+          </Button>
+        </div>
+      )}
+
       {/* 分组列表（活跃/已回收/已废弃—— 线框） */}
       {groups !== null && items && items.length > 0 && (
         <div className="space-y-4">
@@ -492,6 +543,7 @@ export default function HookPanel() {
             title="活跃"
             icon={<span className="size-2 shrink-0 rounded-full bg-primary" />}
             hooks={groups.active}
+            writtenUnresolvedById={writtenUnresolvedById}
             depEdges={depEdges}
             depEdgesFailed={depEdgesFailed}
             chains={chains}
@@ -506,6 +558,7 @@ export default function HookPanel() {
             title="已回收"
             icon={<CheckCircleFilled className="shrink-0 text-sm text-primary" />}
             hooks={groups.resolved}
+            writtenUnresolvedById={writtenUnresolvedById}
             depEdges={depEdges}
             depEdgesFailed={depEdgesFailed}
             chains={chains}
@@ -520,6 +573,7 @@ export default function HookPanel() {
             title="已废弃"
             icon={<MinusCircleFilled className="shrink-0 text-sm text-muted-foreground" />}
             hooks={groups.abandoned}
+            writtenUnresolvedById={writtenUnresolvedById}
             depEdges={depEdges}
             depEdgesFailed={depEdgesFailed}
             chains={chains}
@@ -706,10 +760,11 @@ export default function HookPanel() {
 // ============ 子组件 ============
 
 /** 分组卡片（活跃/已回收/已废弃；行主信息 = name + category 徽标 + 直接操作按钮 + 依赖链） */
-function HookGroupSection({
+export function HookGroupSection({
   title,
   icon,
   hooks,
+  writtenUnresolvedById,
   depEdges,
   depEdgesFailed,
   chains,
@@ -723,6 +778,8 @@ function HookGroupSection({
   title: string;
   icon: ReactNode;
   hooks: EntitySummary[];
+  /** 已写未回收伏笔（id → 条目）：命中行带标记，`title` 给出预计回收章 */
+  writtenUnresolvedById: Map<string, WrittenUnresolvedHookItem>;
   depEdges: RelationSummaryItem[];
   depEdgesFailed: boolean;
   chains: Record<string, ChainState>;
@@ -750,6 +807,7 @@ function HookGroupSection({
             const deps = depEdgesFailed ? [] : dependencyNames(depEdges, hook.id);
             const chain = chains[hook.id];
             const category = typeof hook.summary.category === "string" ? hook.summary.category : "";
+            const writtenUnresolved = writtenUnresolvedById.get(hook.id);
             return (
               // 行级右键菜单：注入会话上下文（focus_entity_type=hook）+ 建立关联
               // （源端点按行实体类型预填）；操作按钮全部展开（H3）不受影响
@@ -772,6 +830,15 @@ function HookGroupSection({
                     {hook.name}
                   </span>
                   {category && <TypeChip className="shrink-0">{category}</TypeChip>}
+                  {/* 「已写未回收」标记（服务端已判定：预计回收章写过正文却仍未回收）；`title` 给预计回收章 */}
+                  {writtenUnresolved && (
+                    <TypeChip
+                      className="shrink-0"
+                      title={`预计回收：第${writtenUnresolved.expectedResolveChapterNumber}章 ${writtenUnresolved.expectedResolveChapterTitle}`}
+                    >
+                      {WRITTEN_UNRESOLVED_LABEL}
+                    </TypeChip>
+                  )}
                   {/* 操作按钮全部展开（H3：禁止收进 ⋯ 二级展开；图标 + title/aria-label）；
                       AskAiButton 已移除——右键菜单替代 */}
                   <span className="ml-auto flex shrink-0 items-center gap-0.5">

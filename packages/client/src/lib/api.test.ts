@@ -30,6 +30,7 @@ import {
   getSessionThinking,
   getSettingsLlm,
   getTrashList,
+  getWrittenUnresolvedHooks,
   importCloudBook,
   importProjectZip,
   listEntities,
@@ -1637,5 +1638,48 @@ describe("云端远程书架端点（docs/api/100-api-cloud.md）", () => {
 
     expect((err as ApiError).code).toBe("PROJECT_ALREADY_EXISTS");
     expect((err as ApiError).message).toContain("本机书架已有这本书");
+  });
+});
+
+/** 伏笔专属只读端点（docs/api/30-api-entity.md）：`written-unresolved` 无查询参数、无分页 */
+describe("hook 端点（已写未回收）", () => {
+  it("getWrittenUnresolvedHooks：GET /api/v1/hook/written-unresolved，解析 hooks 字段", async () => {
+    const calls = mockFetchOnce({
+      body: {
+        success: true,
+        data: {
+          hooks: [
+            {
+              id: "hook-1",
+              name: "断剑来历",
+              status: "planted",
+              expectedResolveNodeId: "ch-2",
+              expectedResolveChapterNumber: 2,
+              expectedResolveChapterTitle: "旧盟友",
+            },
+          ],
+        },
+      },
+    });
+
+    const res = await getWrittenUnresolvedHooks();
+
+    expect(calls[0].url).toBe("/api/v1/hook/written-unresolved");
+    expect(calls[0].init?.method).toBe("GET");
+    expect(res.hooks).toEqual([
+      {
+        id: "hook-1",
+        name: "断剑来历",
+        status: "planted",
+        expectedResolveNodeId: "ch-2",
+        expectedResolveChapterNumber: 2,
+        expectedResolveChapterTitle: "旧盟友",
+      },
+    ]);
+  });
+
+  it("getWrittenUnresolvedHooks：无命中 = 空数组（不抛错）", async () => {
+    mockFetchOnce({ body: { success: true, data: { hooks: [] } } });
+    await expect(getWrittenUnresolvedHooks()).resolves.toEqual({ hooks: [] });
   });
 });

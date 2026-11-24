@@ -22,16 +22,21 @@ import { useMediaQuery } from "../hooks/use-media-query";
 import { useDataRefresh } from "../hooks/use-data-refresh";
 import { useOutlineLoader } from "../hooks/use-outline-loader";
 import { useWritingRail } from "../hooks/use-writing-rail";
-import { getExpectedHooks } from "../lib/api";
+import {
+  getExpectedHooks,
+  getWrittenUnresolvedHooks,
+  type ExpectedHookItem,
+  type WrittenUnresolvedHookItem,
+} from "../lib/api";
 import { errorBannerClass, skeletonClass } from "../lib/styles";
 import { cn } from "../lib/utils";
 import {
   buildWritingRailRows,
-  expectedHooksForChapter,
+  loadedForCurrentChapter,
   readLastOpenedChapter,
   resolveWritingTarget,
   writeLastOpenedChapter,
-  type LoadedExpectedHooks,
+  type LoadedChapterList,
 } from "../lib/writing";
 import { useProjectStore } from "../stores/project";
 import { useUiStore } from "../stores/ui";
@@ -76,31 +81,44 @@ export default function Writing({ chapterId }: { chapterId?: string }) {
     chapterId !== undefined &&
     rows.some((row) => row.kind === "chapter" && row.id === chapterId);
 
-  // 「本章待回收」伏笔（rail 附带信息块）：失败静默（不挡写作，无命中整块不渲染）；
-  // seq 守卫丢弃快速切章时旧章的迟到响应；items 与来源章绑存，渲染侧只认当前章
-  // （`expectedHooksForChapter`）——否则切章那一两帧新章行下会挂旧章的坑。
-  // 数据源 = `GET /hook/expected?node_id=`（docs/api/30-api-entity.md）。
-  const [expectedHooksData, setExpectedHooksData] = useState<LoadedExpectedHooks | null>(null);
+  // rail 附带的两块伏笔信息（失败静默：不挡写作，无命中整块不渲染）：
+  // 「本章待回收」= `GET /hook/expected?node_id=`（docs/api/30-api-entity.md）；
+  // 「已写未回收」= `GET /hook/written-unresolved`（全书，不按章过滤）。
+  // 两者**共用一套口径**：seq 守卫丢弃快速切章时旧章的迟到响应；数据与来源章绑存，渲染侧只认当前章
+  // （`loadedForCurrentChapter`）——否则切章那一两帧新章行下会挂旧章的数据。
+  const [expectedHooksData, setExpectedHooksData] =
+    useState<LoadedChapterList<ExpectedHookItem> | null>(null);
+  const [writtenUnresolvedData, setWrittenUnresolvedData] =
+    useState<LoadedChapterList<WrittenUnresolvedHookItem> | null>(null);
   const [expectedCollapsed, setExpectedCollapsed] = useState(false);
-  const expectedSeq = useRef(0);
-  const reloadExpectedHooks = useCallback(() => {
-    const seq = ++expectedSeq.current;
+  const railHooksSeq = useRef(0);
+  const reloadRailHooks = useCallback(() => {
+    const seq = ++railHooksSeq.current;
     if (chapterId === undefined || !chapterExists) {
       setExpectedHooksData(null);
+      setWrittenUnresolvedData(null);
       return;
     }
     getExpectedHooks(chapterId).then(
       (res) => {
-        if (expectedSeq.current === seq) setExpectedHooksData({ chapterId, items: res.items });
+        if (railHooksSeq.current === seq) setExpectedHooksData({ chapterId, items: res.items });
       },
       () => {
-        if (expectedSeq.current === seq) setExpectedHooksData(null);
+        if (railHooksSeq.current === seq) setExpectedHooksData(null);
+      },
+    );
+    getWrittenUnresolvedHooks().then(
+      (res) => {
+        if (railHooksSeq.current === seq) setWrittenUnresolvedData({ chapterId, items: res.hooks });
+      },
+      () => {
+        if (railHooksSeq.current === seq) setWrittenUnresolvedData(null);
       },
     );
   }, [chapterId, chapterExists]);
-  useEffect(reloadExpectedHooks, [reloadExpectedHooks]);
+  useEffect(reloadRailHooks, [reloadRailHooks]);
   // 提案确认写库 / 刷新按钮（伏笔可能刚被回收）
-  useDataRefresh(reloadExpectedHooks);
+  useDataRefresh(reloadRailHooks);
   const toggleExpected = useCallback(() => setExpectedCollapsed((prev) => !prev), []);
 
   // 大纲加载失败（以 store 的错误标记为准：首帧 / 加载中 outlineError 为 null，不误报失败）。
@@ -190,9 +208,10 @@ export default function Writing({ chapterId }: { chapterId?: string }) {
         // 详情收起时右钮回到本 header 右端组末尾（详情展开时在正文页头动作组末尾）
         detailCollapsed={isDesktop ? railLayout.detailCollapsed : undefined}
         onToggleDetail={detailHidden ? toggleRailDetail : undefined}
-        expectedHooks={expectedHooksForChapter(expectedHooksData, chapterId)}
+        expectedHooks={loadedForCurrentChapter(expectedHooksData, chapterId)}
         expectedCollapsed={expectedCollapsed}
         onToggleExpected={toggleExpected}
+        writtenUnresolved={loadedForCurrentChapter(writtenUnresolvedData, chapterId)}
       />
     ) : null;
 

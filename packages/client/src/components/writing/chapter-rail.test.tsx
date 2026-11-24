@@ -10,7 +10,7 @@ import type {
   OutlineTree,
   OutlineVolume,
 } from "@whispering233/ai-editor-shared";
-import type { ExpectedHookItem } from "../../lib/api";
+import type { ExpectedHookItem, WrittenUnresolvedHookItem } from "../../lib/api";
 import { buildWritingRailRows } from "../../lib/writing";
 import { ChapterRail, type ChapterRailProps } from "./chapter-rail";
 import { PanelToggleButton } from "../ui/panel-toggle-button";
@@ -272,5 +272,50 @@ describe("ChapterRail · 本章待回收伏笔", () => {
     expect(render({ selectedId: null, expectedHooks: HOOKS, onToggleExpected: () => {} })).not.toContain(
       "本章待回收",
     );
+  });
+});
+
+describe("ChapterRail · 已写未回收", () => {
+  const WRITTEN: WrittenUnresolvedHookItem[] = [
+    {
+      id: "hook-1",
+      name: "断剑来历",
+      status: "planted",
+      expectedResolveNodeId: "ch-2",
+      expectedResolveChapterNumber: 2,
+      expectedResolveChapterTitle: "旧盟友",
+    },
+    {
+      id: "hook-3",
+      name: "无名信",
+      status: "progressing",
+      expectedResolveNodeId: "ch-2",
+      expectedResolveChapterNumber: 2,
+      expectedResolveChapterTitle: "旧盟友",
+    },
+  ];
+  const withWritten = (overrides: Partial<ChapterRailProps> = {}): string =>
+    render({ selectedId: "ch-2", writtenUnresolved: WRITTEN, ...overrides });
+
+  it("无命中：整行不渲染（没有一行点开是空的入口）", () => {
+    const html = render({ selectedId: "ch-2" });
+    expect(html).not.toContain("已写未回收");
+    expect(html).not.toContain('href="#/hooks"');
+  });
+
+  it("有命中：一行计数 + 跳 `#/hooks`（普通链接，不是 div onClick）", () => {
+    const html = withWritten();
+    expect(html).toContain("已写未回收 · 2");
+    expect(html).toContain('href="#/hooks"');
+  });
+
+  it("紧跟当前章行之后、与「本章待回收」块相邻；无选中章时不渲染", () => {
+    const html = withWritten({
+      expectedHooks: [{ id: "hook-9", name: "旧盟友背叛", status: "progressing" }],
+      onToggleExpected: () => {},
+    });
+    expect(html.indexOf("旧盟友背叛")).toBeLessThan(html.indexOf("已写未回收"));
+    expect(html.indexOf("已写未回收")).toBeLessThan(html.indexOf("第二卷"));
+    expect(render({ selectedId: null, writtenUnresolved: WRITTEN })).not.toContain("已写未回收");
   });
 });

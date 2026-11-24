@@ -2,7 +2,7 @@
 // 分组逻辑、依赖链解析（含环守卫/深度限制）、废弃锚点、复合写请求序列（delta → relation → status 同步）
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { EntitySummary, OutlineTree, ProjectConfig } from "@whispering233/ai-editor-shared";
-import { ApiError, type RelationSummaryItem } from "./api";
+import { ApiError, type RelationSummaryItem, type WrittenUnresolvedHookItem } from "./api";
 
 // 部分 mock api：保留 ApiError 真实实现，替换写函数为 spy（断言调用序列与请求体形状）
 vi.mock("./api", async (importOriginal) => {
@@ -24,12 +24,15 @@ import {
   dependentsCount,
   dependencyNames,
   expandDependencyChain,
+  filterWrittenUnresolved,
   groupHooksByStatus,
   hookGroupOf,
   involvesNames,
   lastChapterNode,
   runAbandonWrite,
   runLifecycleWrite,
+  WRITTEN_UNRESOLVED_LABEL,
+  writtenUnresolvedByHookId,
 } from "./hook-panel";
 import { createDelta, createRelation, updateEntity } from "./api";
 
@@ -530,5 +533,47 @@ describe("runAbandonWrite（废弃复合写序列）", () => {
       data: { status: "abandoned" },
     });
     expect(mocked.createRelation).not.toHaveBeenCalled();
+  });
+});
+
+describe("已写未回收（行标记 + 「只看已写未回收」筛选的取数）", () => {
+  const written: WrittenUnresolvedHookItem[] = [
+    {
+      id: "hook-1",
+      name: "断剑来历",
+      status: "planted",
+      expectedResolveNodeId: "ch-2",
+      expectedResolveChapterNumber: 2,
+      expectedResolveChapterTitle: "旧盟友",
+    },
+  ];
+  const items = [
+    summaryOf("hook-1", "断剑来历", "planted"),
+    summaryOf("hook-2", "旧盟友背叛", "progressing"),
+  ];
+
+  it("标记 = 命中 id 带标记，其余不带（判定在服务端，客户端只做 id 命中）", () => {
+    const byId = writtenUnresolvedByHookId(written);
+    expect(byId.get("hook-1")?.expectedResolveChapterNumber).toBe(2);
+    expect(byId.get("hook-2")).toBeUndefined();
+    expect(WRITTEN_UNRESOLVED_LABEL).toBe("已写未回收");
+  });
+
+  it("筛选开：只留命中行（不重排，保持原顺序）", () => {
+    const byId = writtenUnresolvedByHookId(written);
+    expect(filterWrittenUnresolved(items, byId, true).map((it) => it.id)).toEqual(["hook-1"]);
+  });
+
+  it("筛选关：原样返回（无命中集合时也不影响列表）", () => {
+    const empty = writtenUnresolvedByHookId([]);
+    expect(filterWrittenUnresolved(items, empty, false).map((it) => it.id)).toEqual([
+      "hook-1",
+      "hook-2",
+    ]);
+  });
+
+  it("筛选开但无命中：空列表（页面给「没有命中」提示，不是整页空态）", () => {
+    expect(filterWrittenUnresolved(items, writtenUnresolvedByHookId([]), true)).toEqual([]);
+    expect(filterWrittenUnresolved([], writtenUnresolvedByHookId(written), true)).toEqual([]);
   });
 });

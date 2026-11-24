@@ -13,6 +13,7 @@ import {
   updateEntity,
   type CreateRelationBody,
   type RelationSummaryItem,
+  type WrittenUnresolvedHookItem,
 } from "./api";
 import { chapterNodeExists, chapterNodeOptions } from "./outline-tree";
 
@@ -42,6 +43,27 @@ export function groupHooksByStatus(items: readonly EntitySummary[]): HookGroups 
   const groups: HookGroups = { active: [], resolved: [], abandoned: [] };
   for (const item of items) groups[hookGroupOf(item.summary.status)].push(item);
   return groups;
+}
+
+// ============ 已写未回收（`GET /hook/written-unresolved`） ============
+
+/** 行标记 / 筛选控件文案（列表标记与页头筛选共用一份） */
+export const WRITTEN_UNRESOLVED_LABEL = "已写未回收";
+
+/** 已写未回收列表 → 按伏笔 id 索引（行标记与筛选同源；命中判定已在服务端完成，客户端只做 id 命中） */
+export function writtenUnresolvedByHookId(
+  hooks: readonly WrittenUnresolvedHookItem[],
+): Map<string, WrittenUnresolvedHookItem> {
+  return new Map(hooks.map((hook) => [hook.id, hook]));
+}
+
+/** 「只看已写未回收」收窄列表（组件态筛选；`only = false` 原样返回） */
+export function filterWrittenUnresolved(
+  items: readonly EntitySummary[],
+  byHookId: Map<string, WrittenUnresolvedHookItem>,
+  only: boolean,
+): EntitySummary[] {
+  return only ? items.filter((item) => byHookId.has(item.id)) : [...items];
 }
 
 // ============ 关系解析（depends_on：source 依赖 target——「B 依赖 A 先解开」） ============

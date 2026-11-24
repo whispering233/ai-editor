@@ -340,6 +340,27 @@ export function getExpectedHooks(nodeId: string): Promise<ExpectedHooksRes> {
   return apiFetch<ExpectedHooksRes>("/hook/expected", { query: { node_id: nodeId } });
 }
 
+/** 「已写未回收」条目（`GET /api/v1/hook/written-unresolved`：预计回收章**已写过正文**却仍未回收） */
+export interface WrittenUnresolvedHookItem {
+  id: string;
+  name: string;
+  status: HookStatus;
+  expectedResolveNodeId: string;
+  /** 预计回收章的章号（服务端 `deriveChapterOrder` 口径） */
+  expectedResolveChapterNumber: number;
+  expectedResolveChapterTitle: string;
+}
+
+/** GET /api/v1/hook/written-unresolved 响应（无分页；空命中 = `hooks: []`） */
+export interface WrittenUnresolvedHooksRes {
+  hooks: WrittenUnresolvedHookItem[];
+}
+
+/** 全书「已写未回收」伏笔（不按章过滤；两处消费：写作页 rail 的计数 + 伏笔页的行标记 / 筛选） */
+export function getWrittenUnresolvedHooks(): Promise<WrittenUnresolvedHooksRes> {
+  return apiFetch<WrittenUnresolvedHooksRes>("/hook/written-unresolved");
+}
+
 // ============ 码字统计（docs/api/130-api-writing-stats.md） ============
 
 /** GET /api/v1/writing-stats（当前小说全部按天统计行；空库 → totalChars 0 / totalDays 0 / days []） */

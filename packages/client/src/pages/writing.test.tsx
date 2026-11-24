@@ -534,3 +534,20 @@ describe("写作页 · 错误态", () => {
     expect(html).not.toContain("animate-pulse");
   });
 });
+
+describe("写作页 · rail 伏笔信息块（无数据 / 空项目不影响可用）", () => {
+  it("空项目（无章）：rail 照常给空态，两块伏笔信息（本章待回收 / 已写未回收）都不渲染", () => {
+    const html = render({ outline: EMPTY_OUTLINE });
+    expect(html).toContain("还没有章节");
+    expect(html).not.toContain("本章待回收");
+    expect(html).not.toContain("已写未回收");
+  });
+
+  it("无选中章 / 无命中（含请求失败静默降级）：rail 与正文列照常渲染", () => {
+    for (const html of [render(), render({ chapterId: "ch-2" })]) {
+      expect(html).toContain(">卷章<");
+      expect(html).not.toContain("本章待回收");
+      expect(html).not.toContain("已写未回收");
+    }
+  });
+});

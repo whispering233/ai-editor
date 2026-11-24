@@ -8,8 +8,8 @@ import type {
 } from "@whispering233/ai-editor-shared";
 import {
   buildWritingRailRows,
-  expectedHooksForChapter,
   LAST_OPENED_CHAPTERS_KEY,
+  loadedForCurrentChapter,
   parseLastOpenedChapters,
   pickRecentChapter,
   readLastOpenedChapter,
@@ -304,19 +304,26 @@ describe("resolveWritingTarget（最近打开优先 → 服务端回退）", () 
   });
 });
 
-describe("expectedHooksForChapter（切章瞬间不显示上一章的坑）", () => {
+describe("loadedForCurrentChapter（切章瞬间不显示上一章数据的唯一口径）", () => {
   const HOOKS = [{ id: "hook-1", name: "断剑来历", status: "planted" as const }];
 
   it("来源章 = 当前章 → 渲染该批条目", () => {
-    expect(expectedHooksForChapter({ chapterId: "ch-1", items: HOOKS }, "ch-1")).toEqual(HOOKS);
+    expect(loadedForCurrentChapter({ chapterId: "ch-1", items: HOOKS }, "ch-1")).toEqual(HOOKS);
   });
 
   it("来源章 ≠ 当前章（旧响应还没被新章的替换）→ 空", () => {
-    expect(expectedHooksForChapter({ chapterId: "ch-1", items: HOOKS }, "ch-2")).toEqual([]);
+    expect(loadedForCurrentChapter({ chapterId: "ch-1", items: HOOKS }, "ch-2")).toEqual([]);
   });
 
-  it("未加载 / 无选中章 → 空", () => {
-    expect(expectedHooksForChapter(null, "ch-1")).toEqual([]);
-    expect(expectedHooksForChapter({ chapterId: "ch-1", items: HOOKS }, undefined)).toEqual([]);
+  it("未加载 / 无选中章 → 空（空项目、请求失败、聚焦下一帧都不会挂旧数据）", () => {
+    expect(loadedForCurrentChapter(null, "ch-1")).toEqual([]);
+    expect(loadedForCurrentChapter({ chapterId: "ch-1", items: HOOKS }, undefined)).toEqual([]);
+  });
+
+  it("同一口径也管「已写未回收」：切章那一两帧派生出空，不把上一章批次挂到新章行下", () => {
+    const written = [{ id: "hook-9", name: "旧盟友背叛", status: "progressing" as const }];
+    expect(loadedForCurrentChapter({ chapterId: "ch-1", items: written }, "ch-1")).toEqual(written);
+    expect(loadedForCurrentChapter({ chapterId: "ch-1", items: written }, "ch-2")).toEqual([]);
+    expect(loadedForCurrentChapter(null, "ch-2")).toEqual([]);
   });
 });
