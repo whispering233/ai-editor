@@ -20,3 +20,4 @@ export * from "./queries/trash.js";
 export * from "./queries/document.js";
 export * from "./queries/practice.js";
 export * from "./queries/writing-stats.js";
+export * from "./queries/document-snapshots.js";

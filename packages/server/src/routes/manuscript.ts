@@ -1,6 +1,8 @@
-// 章正文路由（卡 12.4）：GET/PUT /api/v1/manuscript/:chapterNodeId
+// 章正文路由（卡 12.4 + 章级历史）：GET/PUT /api/v1/manuscript/:chapterNodeId、
+// GET .../snapshots、GET .../snapshots/:seq、POST .../restore
 //
-// 契约单一来源：docs/api/110-api-manuscript.md；表与派生口径见 docs/db/schema.md「document_records」。
+// 契约单一来源：docs/api/110-api-manuscript.md；表与派生口径见 docs/db/schema.md
+// 「document_records」与「document_snapshots」。
 // 口径：
 // - **仅 chapter**——卷/场景 → 400 VALIDATION_ERROR（与 current_position / Delta 锚点 / 伏笔锚点同宽）；
 // - 节点不存在或已软删 → 404 OUTLINE_NODE_NOT_FOUND（软删章的行保留，还原后原样可见）；
@@ -11,12 +13,14 @@
 // - **码字日统计**：保存前后 `content_text.length` 的正差累加到服务端本地日（只加不扣）；
 //   统计写入是 best-effort——失败只记日志，不回滚正文、不改变 200（唯一写入点，见
 //   docs/api/130-api-writing-stats.md）；
-// - 保存正文**不产生 Delta、不推进 current_position**（内容不是状态事实）。
+// - 保存正文**不产生 Delta、不推进 current_position**（内容不是状态事实）；
+// - **章级历史**：保存前把「被覆盖的旧内容」压一份快照（节流 + 去重，见 db `insertSnapshotIfDue`），
+//   恢复 = 先强压当前内容（绕过节流）再走同一个保存核心；历史随 data.db 进备份 / 云端。
 import { Hono } from "hono";
-import { findOutlineNode, getDocument, readOutlineFile, upsertDocument, addWritingChars } from "@whispering233/ai-editor-db";
+import { addWritingChars, findOutlineNode, getDocument, getSnapshot, insertSnapshotIfDue, listSnapshots, readOutlineFile, trimSnapshots, upsertDocument } from "@whispering233/ai-editor-db";
 import type { OutlineFileNode } from "@whispering233/ai-editor-shared";
 import { blocksToPlainMd, isBlockArray } from "@whispering233/ai-editor-shared";
-import { manuscriptPutReqSchema } from "@whispering233/ai-editor-shared/schemas";
+import { manuscriptPutReqSchema, manuscriptRestoreReqSchema } from "@whispering233/ai-editor-shared/schemas";
 import { nowIso } from "@whispering233/ai-editor-db";
 import { HttpError, ok } from "../middleware/error.js";
 import { requireCurrentProject, type ProjectContext } from "../middleware/project.js";
@@ -51,6 +55,68 @@ function parseBlockContent(content: string): unknown[] {
   return parsed;
 }
 
+/** 保存入参：`forceSnapshot` = 绕过节流（恢复前强压当前内容） */
+interface SaveChapterInput {
+  content: string;
+  baseUpdatedAt?: string;
+  forceSnapshot?: boolean;
+}
+
+/**
+ * 保存核心（PUT 与 restore **共用**，禁止另起第二份保存逻辑）：
+ * 浅校验 → 版本戳比对 → 派生投影 → 压被覆盖的旧内容快照（节流/去重 + 裁剪）→ upsert → 码字统计正差。
+ *
+ * 快照与裁剪失败只记日志、不影响保存（历史是附加能力，正文主数据优先）。
+ * @returns 写入后的版本戳与重算字数（PUT / restore 同形响应字段）
+ */
+function saveChapterContent(
+  project: ProjectContext,
+  nodeId: string,
+  input: SaveChapterInput,
+): { updatedAt: string; charCount: number } {
+  const blocks = parseBlockContent(input.content);
+ // 版本戳比对：仅携带 base_updated_at 时校验（库内无行 ⇒ 现有版本戳为 null，传了非空 base 即不一致）
+  const existing = getDocument(project.db, "chapter", nodeId);
+  const base = input.baseUpdatedAt;
+  if (base !== undefined && (existing?.updated_at ?? null) !== base) {
+    throw new HttpError(409, "DOCUMENT_STALE", "正文已被其他窗口修改");
+  }
+  const contentText = blocksToPlainMd(blocks); // 容错投影（绝不抛错）；失败退化为尽力抽取的文本
+ // 正增量：保存前后 content_text 长度的正差（缩短 / 清空 / 覆盖为空 不扣减）
+  const statsDelta = contentText.length - (existing?.content_text.length ?? 0);
+ // 快照钩子（upsert 之前）：只压「被覆盖的旧内容」——内容未变不压（去重）、过不了节流不压
+  if (existing !== null && existing.content !== input.content) {
+    try {
+      const { inserted } = insertSnapshotIfDue(project.db, {
+        ownerKind: "chapter",
+        ownerId: nodeId,
+        content: existing.content,
+        charCount: existing.content_text.length,
+        now: nowIso(),
+        force: input.forceSnapshot === true,
+      });
+      if (inserted) trimSnapshots(project.db, "chapter", nodeId);
+    } catch (err) {
+      console.error("[snapshots] 历史快照写入失败（正文照常保存）:", err); // best-effort：不回滚、不改 200
+    }
+  }
+  const { updatedAt } = upsertDocument(project.db, {
+    ownerKind: "chapter",
+    ownerId: nodeId,
+    content: input.content, // 真相原样存（不重新序列化）
+    contentText,
+    now: nowIso(),
+  });
+  if (statsDelta > 0) {
+    try {
+      addWritingChars(project.db, localDateKey(), statsDelta, updatedAt);
+    } catch (err) {
+      console.error("[stats] 码字统计写入失败（正文已保存）:", err); // best-effort：不回滚、不改 200
+    }
+  }
+  return { updatedAt, charCount: contentText.length };
+}
+
 // GET /api/v1/manuscript/:chapterNodeId —— 读取正文（含版本戳；从未写过 = 空文档语义）
 manuscriptRoutes.get("/:chapterNodeId", (c) => {
   const project = requireCurrentProject();
@@ -67,6 +133,32 @@ manuscriptRoutes.get("/:chapterNodeId", (c) => {
   );
 });
 
+// GET /api/v1/manuscript/:chapterNodeId/snapshots —— 历史列表（seq 降序 = 新→旧，不带正文）
+manuscriptRoutes.get("/:chapterNodeId/snapshots", (c) => {
+  const project = requireCurrentProject();
+  const nodeId = c.req.param("chapterNodeId");
+  requireChapterNode(project, nodeId);
+  return c.json(ok({ snapshots: listSnapshots(project.db, "chapter", nodeId) }));
+});
+
+// GET /api/v1/manuscript/:chapterNodeId/snapshots/:seq —— 单份快照正文（只读预览）
+manuscriptRoutes.get("/:chapterNodeId/snapshots/:seq", (c) => {
+  const project = requireCurrentProject();
+  const nodeId = c.req.param("chapterNodeId");
+  requireChapterNode(project, nodeId);
+  const seq = Number(c.req.param("seq"));
+  if (!Number.isInteger(seq) || seq <= 0) {
+    throw new HttpError(400, "VALIDATION_ERROR", `快照 seq 必须是正整数: ${c.req.param("seq")}`);
+  }
+  const row = getSnapshot(project.db, "chapter", nodeId, seq);
+  if (row === null) {
+    throw new HttpError(404, "SNAPSHOT_NOT_FOUND", `快照不存在: ${seq}`);
+  }
+  return c.json(
+    ok({ seq: row.seq, createdAt: row.created_at, charCount: row.char_count, content: row.content }),
+  );
+});
+
 // PUT /api/v1/manuscript/:chapterNodeId —— 整篇覆盖保存（服务端派生投影 + 版本戳防覆盖）
 manuscriptRoutes.put("/:chapterNodeId", async (c) => {
   const project = requireCurrentProject();
@@ -77,29 +169,38 @@ manuscriptRoutes.put("/:chapterNodeId", async (c) => {
   if (!parsed.success) {
     throw parsed.error; // → 400 VALIDATION_ERROR（content 缺失/非字符串/未知字段）
   }
-  const blocks = parseBlockContent(parsed.data.content);
- // 版本戳比对：仅携带 base_updated_at 时校验（库内无行 ⇒ 现有版本戳为 null，传了非空 base 即不一致）
-  const existing = getDocument(project.db, "chapter", nodeId);
-  const base = parsed.data.base_updated_at;
-  if (base !== undefined && (existing?.updated_at ?? null) !== base) {
-    throw new HttpError(409, "DOCUMENT_STALE", "正文已被其他窗口修改");
-  }
-  const contentText = blocksToPlainMd(blocks); // 容错投影（绝不抛错）；失败退化为尽力抽取的文本
- // 正增量：保存前后 content_text 长度的正差（缩短 / 清空 / 覆盖为空 不扣减）
-  const statsDelta = contentText.length - (existing?.content_text.length ?? 0);
-  const { updatedAt } = upsertDocument(project.db, {
-    ownerKind: "chapter",
-    ownerId: nodeId,
-    content: parsed.data.content, // 真相原样存（不重新序列化）
-    contentText,
-    now: nowIso(),
+  const { updatedAt, charCount } = saveChapterContent(project, nodeId, {
+    content: parsed.data.content,
+    baseUpdatedAt: parsed.data.base_updated_at,
   });
-  if (statsDelta > 0) {
-    try {
-      addWritingChars(project.db, localDateKey(), statsDelta, updatedAt);
-    } catch (err) {
-      console.error("[stats] 码字统计写入失败（正文已保存）:", err); // best-effort：不回滚、不改 200
-    }
+  return c.json(ok({ updated: true as const, updatedAt, charCount }));
+});
+
+// POST /api/v1/manuscript/:chapterNodeId/restore —— 恢复到某份历史快照（响应与 PUT 同形）
+manuscriptRoutes.post("/:chapterNodeId/restore", async (c) => {
+  const project = requireCurrentProject();
+  const nodeId = c.req.param("chapterNodeId");
+  requireChapterNode(project, nodeId);
+  const raw = await c.req.json().catch(() => null);
+  const parsed = manuscriptRestoreReqSchema.safeParse(raw);
+  if (!parsed.success) {
+    throw parsed.error; // → 400 VALIDATION_ERROR（snapshot_id 缺失/非正整数/未知字段）
   }
-  return c.json(ok({ updated: true as const, updatedAt, charCount: contentText.length }));
+  const target = getSnapshot(project.db, "chapter", nodeId, parsed.data.snapshot_id);
+  if (target === null) {
+    throw new HttpError(404, "SNAPSHOT_NOT_FOUND", `快照不存在: ${parsed.data.snapshot_id}`);
+  }
+ // 幂等：当前内容已是目标版本 → 不写库、不压无意义快照
+  const current = getDocument(project.db, "chapter", nodeId);
+  if (current !== null && current.content === target.content) {
+    return c.json(
+      ok({ updated: true as const, updatedAt: current.updated_at, charCount: current.content_text.length }),
+    );
+  }
+ // 强压当前内容（绕过节流，保存核心的快照钩子负责）→ 写入目标版本
+  const { updatedAt, charCount } = saveChapterContent(project, nodeId, {
+    content: target.content,
+    forceSnapshot: true,
+  });
+  return c.json(ok({ updated: true as const, updatedAt, charCount }));
 });

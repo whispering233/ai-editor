@@ -89,6 +89,7 @@ describe("ErrorCode 完整性", () => {
     expect(ERROR_CODES).toContain("CHAT_BUSY");
     expect(ERROR_CODES).toContain("THINKING_NOT_FOUND");
     expect(ERROR_CODES).toContain("DOCUMENT_STALE"); // 块文档版本戳冲突（仅携带 base_updated_at 时校验）
+    expect(ERROR_CODES).toContain("SNAPSHOT_NOT_FOUND"); // 章级历史快照未命中（restore / 单份读取）
   });
 
   it("workspace kind 两码：KIND_MISMATCH 400 / PRACTICE_NOT_FOUND 404 经 errorCodeSchema 可解析", () => {

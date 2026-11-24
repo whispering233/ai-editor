@@ -73,7 +73,7 @@ describe("迁移 012（v11 → v12：练习两表）", () => {
     const { applied } = runMigrations(db, { migrations: [migration012], dbPath });
     expect(applied.map((m) => m.version)).toEqual([12]);
     expect(getUserVersion(db)).toBe(12);
-    expect(SCHEMA_VERSION).toBe(14); // 当前版本已越过 012（练习模型重建 + 码字日统计）
+    expect(SCHEMA_VERSION).toBe(15); // 当前版本已越过 012（练习模型重建 + 码字日统计）
 
  // 旧形状逐列核对（013 的拆除目标即它们）
     expect(columnNames(db, "practice_targets")).toEqual(["id", "name", "observation", "created_at", "updated_at"]);

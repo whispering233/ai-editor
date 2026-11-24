@@ -59,6 +59,9 @@
 | :--- | :--- | :--- |
 | GET | `/api/v1/manuscript/:chapterNodeId` | 章正文（块文档） |
 | PUT | `/api/v1/manuscript/:chapterNodeId` | 章正文（块文档） |
+| GET | `/api/v1/manuscript/:chapterNodeId/snapshots` | 章级历史（列表） |
+| GET | `/api/v1/manuscript/:chapterNodeId/snapshots/:seq` | 章级历史（单份正文） |
+| POST | `/api/v1/manuscript/:chapterNodeId/restore` | 章级历史（恢复） |
 
 ### 码字统计（[130-api-writing-stats.md](./130-api-writing-stats.md)）
 
