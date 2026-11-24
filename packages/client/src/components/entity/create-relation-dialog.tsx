@@ -15,7 +15,7 @@
 import { useEffect, useState } from "react";
 import type { FormEvent } from "react";
 import { AutoComplete, Button, Select } from "antd";
-import { ENTITY_TYPES } from "@whispering233/ai-editor-shared";
+import { ENTITY_TYPE_LABELS, ENTITY_TYPES } from "@whispering233/ai-editor-shared";
 import type { EntitySummary, EntityType, RelationEndpointRef } from "@whispering233/ai-editor-shared";
 import {
   ApiError,
@@ -45,18 +45,6 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 
-const TYPE_LABEL: Record<EntityType, string> = {
-  character: "人物",
-  setting: "设定",
-  location: "地点",
-  hook: "伏笔",
-  // C1 类型补全（event 时间轴事件；时间轴专属 UI 由 C2 实现）
-  event: "事件",
-  // G2.3 类型补全（G2 时间标签点；源端下拉随 ENTITY_TYPES 出现——挂载关系不在此对话框创建）
-  timepoint: "时间点",
-  // 参考资料 reference
-  reference: "参考资料",
-};
 
 /**
  * `select-free-input` 的 `filterOption`：antd 6.6.2 combobox 模式该项默认 `false`
@@ -263,14 +251,14 @@ export function CreateRelationDialog({
                     className="w-full"
                     value={sourceType}
                     onChange={(value) => setSourceType(value as EntityType)}
-                    options={ENTITY_TYPES.map((t) => ({ value: t, label: TYPE_LABEL[t] }))}
+                    options={ENTITY_TYPES.map((t) => ({ value: t, label: ENTITY_TYPE_LABELS[t] }))}
                   />
                   <Select
                     className="w-full"
                     value={sourceId}
                     onChange={(value) => setSourceId(value)}
                     options={[
-                      { value: "", label: `选择${TYPE_LABEL[sourceType]}…` },
+                      { value: "", label: `选择${ENTITY_TYPE_LABELS[sourceType]}…` },
                       ...(sourceEntities ?? []).map((it) => ({ value: it.id, label: it.name })),
                     ]}
                   />
@@ -336,7 +324,7 @@ export function CreateRelationDialog({
               ) : (
                 /* 类型锁定态：只读卡片（同源端样式）——人物关系网仅人↔人 */
                 <div className="min-w-0 truncate rounded-md border border-border bg-muted/40 px-3 py-1.5 text-sm text-foreground">
-                  {TYPE_LABEL[lockTargetType]}
+                  {ENTITY_TYPE_LABELS[lockTargetType]}
                 </div>
               )}
               {otherType === "outline_node" ? (
@@ -358,7 +346,7 @@ export function CreateRelationDialog({
                   value={otherId}
                   onChange={(value) => setOtherId(value)}
                   options={[
-                    { value: "", label: `选择${TYPE_LABEL[otherType]}…` },
+                    { value: "", label: `选择${ENTITY_TYPE_LABELS[otherType]}…` },
                     ...(otherEntities ?? []).map((it) => ({ value: it.id, label: it.name })),
                   ]}
                 />

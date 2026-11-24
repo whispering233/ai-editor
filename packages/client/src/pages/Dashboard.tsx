@@ -10,7 +10,7 @@
 // 错误/加载/空态按：区块级骨架、区块内「加载失败 [重试]」、空态一句说明 + 主操作
 import { useEffect, useRef, useState } from "react";
 import type { ChangeEvent, FormEvent } from "react";
-import { formatRelativeTime } from "@whispering233/ai-editor-shared";
+import { ENTITY_TYPE_LABELS, formatRelativeTime } from "@whispering233/ai-editor-shared";
 import type {
   AuthorEntry,
   EntityType,
@@ -81,18 +81,7 @@ import { useDataRefresh } from "../hooks/use-data-refresh";
 import { useUiStore } from "../stores/ui";
 
 /** 创作要素卡类型中文名（与 EntityList 本地映射一致；四卡顺序 = 统计请求顺序） */
-const TYPE_LABEL: Record<EntityType, string> = {
-  character: "人物",
-  setting: "设定",
-  location: "地点",
-  hook: "伏笔",
-  // C1 类型补全（event 时间轴事件；概览卡仍为四卡，时间轴专属 UI 由 C2 实现）
-  event: "事件",
-  // G2.3 类型补全（G2 时间标签点；概览卡仍为四卡——时间点无独立统计卡）
-  timepoint: "时间点",
-  // 参考资料 reference
-  reference: "参考资料",
-};
+
 const ENTITY_ORDER: EntityType[] = ["character", "setting", "location", "hook"];
 
 /** 大纲概览统计结果（「信息层级」：无现成汇总字段，前端自算） */
@@ -1183,13 +1172,13 @@ export default function Dashboard({ mode }: { mode: DashboardMode }) {
                     key={t}
                     href={`#${entityListHost(t)}`}
                     className="group rounded-lg border border-border bg-background p-3 transition-colors hover:border-primary/40 hover:bg-muted"
-                    title={`查看${TYPE_LABEL[t]}列表`}
+                    title={`查看${ENTITY_TYPE_LABELS[t]}列表`}
                   >
                     <p className="text-xl font-semibold text-foreground">
                       {entityCounts?.[t] ?? "–"}
                     </p>
                     <p className="mt-0.5 text-xs text-muted-foreground transition-colors group-hover:text-foreground">
-                      {TYPE_LABEL[t]}
+                      {ENTITY_TYPE_LABELS[t]}
                     </p>
                   </a>
                 ))}

@@ -19,7 +19,7 @@
 // 软删：服务端默认过滤；回收站入口 #/trash 由 S4 卡实现，本卡不提供入口
 import { useEffect, useRef, useState } from "react";
 import type { FormEvent } from "react";
-import { ENTITY_TYPES } from "@whispering233/ai-editor-shared";
+import { ENTITY_TYPE_LABELS, ENTITY_TYPES } from "@whispering233/ai-editor-shared";
 import type { EntitySummary, EntityType } from "@whispering233/ai-editor-shared";
 import { Alert, Button, Input, Pagination, Select, Skeleton, Typography } from "antd";
 import { SearchOutlined } from "@ant-design/icons";
@@ -50,16 +50,6 @@ import { RelationsView } from "../components/entity/relations-view";
 import { SuggestionDatalist, uniqueStrings } from "../components/ui/suggestion-datalist";
 import { EmptyState } from "../components/ui/empty-state";
 
-const TYPE_LABEL: Record<ListableEntityType, string> = {
-  character: "人物",
-  setting: "设定",
-  location: "地点",
-  hook: "伏笔",
-  // C1 类型补全（event 时间轴事件；时间轴专属 UI 由 C2 实现）
-  event: "事件",
-  // G2.3 类型补全（G2 时间标签点；tab 随 ENTITY_TYPES 自动出现，列表 = 泛型视图）
-  timepoint: "时间点",
-};
 // 注：TYPE_LABEL.reference 已随T3 移除——实体二级 tab 不再渲染参考资料
 //（独立中栏 tab #/references，旧路由重定向）。
 // 泛型入口收敛：导航仅保留列表宿主类型（hook/event/timepoint 已由富页/宿主段承接，
@@ -260,7 +250,7 @@ export default function EntityList({ type }: { type: string }) {
         }
       }
       const res = await createEntity(entityType, { name, data });
-      useUiStore.getState().showToast(`已创建${TYPE_LABEL[entityType]}《${name}》`);
+      useUiStore.getState().showToast(`已创建${ENTITY_TYPE_LABELS[entityType]}《${name}》`);
       // 创建后留在列表（2026-08 用户反馈：不自动跳详情页——打断性行为；关行 + 刷新列表
       // 让新项按排序出现在当前视图，需要进详情可点行进入）；A2：新行滚动到位 + 高亮 + 聚焦
       setCreateOpen(false);
@@ -289,7 +279,7 @@ export default function EntityList({ type }: { type: string }) {
           allowClear
           value={qInput}
           onChange={(e) => setQInput(e.target.value)}
-          placeholder={`搜索${TYPE_LABEL[entityType]}名称…`}
+          placeholder={`搜索${ENTITY_TYPE_LABELS[entityType]}名称…`}
         />
       </div>
       <span className="flex items-center gap-2">
@@ -314,7 +304,7 @@ export default function EntityList({ type }: { type: string }) {
           设定（树）与关联（关系总览）的控件行在各自视图内渲染（工具栏随视图结构）——
           那两页的页头不带分割线（`className` 给标题到工具栏的 12px 间距），由视图在工具栏之后放 `PageDivider` */}
       <PageHeader
-        title={isRelations ? "关联" : TYPE_LABEL[entityType]}
+        title={isRelations ? "关联" : ENTITY_TYPE_LABELS[entityType]}
         className={viewOwnsToolbar ? "mb-3" : undefined}
         divider={!viewOwnsToolbar}
         controls={headerControls}
@@ -437,14 +427,14 @@ export default function EntityList({ type }: { type: string }) {
                   <Button onClick={clearSearch}>清空搜索</Button>
                 ) : (
                   <Button type="primary" onClick={openCreateRow}>
-                    + 新建{TYPE_LABEL[entityType]}
+                    + 新建{ENTITY_TYPE_LABELS[entityType]}
                   </Button>
                 )
               }
             >
               {q
-                ? `没有匹配「${q}」的${TYPE_LABEL[entityType]}`
-                : `还没有${TYPE_LABEL[entityType]}，新建一个`}
+                ? `没有匹配「${q}」的${ENTITY_TYPE_LABELS[entityType]}`
+                : `还没有${ENTITY_TYPE_LABELS[entityType]}，新建一个`}
             </EmptyState>
           )}
 
