@@ -10,7 +10,6 @@ import type {
   OutlineChapter,
   OutlineTree,
 } from "@whispering233/ai-editor-shared";
-import type { ExpectedHookItem } from "./api";
 import { numberOutline } from "./outline-tree";
 
 /** 卷行：只做折叠分组与「N章」计数（rail 不是大纲页，无结构编辑能力） */
@@ -166,20 +165,21 @@ export function pickRecentChapter(outline: OutlineTree | null): string | null {
   return bestId;
 }
 
-/** 已加载的「本章待回收」条目 + 来源章 id（来源与 items 绑在一起，见下） */
-export interface LoadedExpectedHooks {
+/** 已加载的一组章级条目 + 来源章 id（rail 附带信息块：来源与 items 绑在一起，见下） */
+export interface LoadedChapterList<T> {
   chapterId: string;
-  items: ExpectedHookItem[];
+  items: T[];
 }
 
 /**
- * rail 显示的「本章待回收」条目：**只认来源章 = 当前章**。切到另一张存在的章时 state 还是旧章的
- * （等新响应才更新），此处直接派生为空，避免旧章伏笔挂到新章行下（seq 守卫只挡旧响应覆盖新章）。
+ * rail 显示的一组条目（「本章待回收」伏笔 / 「已写未回收」伏笔）：**只认来源章 = 当前章**。
+ * 切到另一张存在的章时 state 还是旧章的（等新响应才更新），此处直接派生为空，避免旧章数据挂到新章行下
+ * （seq 守卫只挡旧响应覆盖新章）。两处块共用本函数，不各自另写一套防抖口径。
  */
-export function expectedHooksForChapter(
-  loaded: LoadedExpectedHooks | null,
+export function loadedForCurrentChapter<T>(
+  loaded: LoadedChapterList<T> | null,
   chapterId: string | undefined,
-): ExpectedHookItem[] {
+): T[] {
   return loaded !== null && loaded.chapterId === chapterId ? loaded.items : [];
 }
 

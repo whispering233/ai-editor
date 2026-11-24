@@ -12,7 +12,7 @@
 import { Fragment, useEffect, useRef, type ReactNode } from "react";
 import { Button } from "antd";
 import { RightOutlined } from "@ant-design/icons";
-import type { ExpectedHookItem } from "../../lib/api";
+import type { ExpectedHookItem, WrittenUnresolvedHookItem } from "../../lib/api";
 import { entityDetailPath } from "../../lib/entity-paths";
 import { HOOK_STATUS_LABEL } from "../../lib/entity-list";
 import { formatTextLength } from "../../lib/manuscript";
@@ -52,6 +52,8 @@ export interface ChapterRailProps {
   /** 「本章待回收」折叠态（页面 state，同卷折叠口径：不写 localStorage） */
   expectedCollapsed?: boolean;
   onToggleExpected?: () => void;
+  /** 「已写未回收」伏笔（页面拉取；空数组 = 整行不渲染；点击跳 `#/hooks`） */
+  writtenUnresolved?: WrittenUnresolvedHookItem[];
 }
 
 export function ChapterRail({
@@ -70,6 +72,7 @@ export function ChapterRail({
   expectedHooks = [],
   expectedCollapsed = false,
   onToggleExpected,
+  writtenUnresolved = [],
 }: ChapterRailProps) {
   // 换章后把选中行滚进可视区（`nearest`：已在视野内则不跳）。SSR 不跑 effect。
   const selectedRef = useRef<HTMLAnchorElement | null>(null);
@@ -267,6 +270,23 @@ export function ChapterRail({
                           ))}
                         </ul>
                       )}
+                    </li>
+                  )}
+                  {/* 「已写未回收 · N」在上一块旁（预计回收的章已写过正文却仍未回收）：单行链接跳 `#/hooks`，
+                      无命中整行不渲染；数据与「本章待回收」同一防抖 / 来源章守卫口径（见写入侧）。 */}
+                  {selected && writtenUnresolved.length > 0 && (
+                    <li>
+                      <a
+                        href="#/hooks"
+                        title="预计回收的章已经写过正文，但伏笔还没回收"
+                        className="flex h-8 w-full items-center gap-2 rounded-sm px-2 text-muted-foreground transition-colors hover:bg-muted"
+                      >
+                        {/* 缩进占位：与相邻折叠头同一条占位链 */}
+                        <span className="-ml-2 w-6 shrink-0" aria-hidden />
+                        <span className="min-w-0 flex-1 truncate text-xs">
+                          已写未回收 · {writtenUnresolved.length}
+                        </span>
+                      </a>
                     </li>
                   )}
                 </Fragment>
