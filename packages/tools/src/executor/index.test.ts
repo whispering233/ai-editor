@@ -307,7 +307,7 @@ describe("executeProposal（proposal.type → 执行函数映射）", () => {
 });
 
 describe("执行类不注册 registry", () => {
-  it("LLM 可见工具表（listTools）不包含任何 EXECUTOR_TOOLS 名；入口冒烟 48 个注册数不变", () => {
+  it("LLM 可见工具表（listTools）不包含任何 EXECUTOR_TOOLS 名；入口冒烟 49 个注册数不变", () => {
     const names = new Set(listTools().map((t) => t.name));
     for (const name of EXECUTOR_TOOLS) {
       expect(names.has(name)).toBe(false);

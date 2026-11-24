@@ -129,7 +129,7 @@ export const EXECUTOR_TOOLS = [
   "reorder_timepoints",
 ] as const;
 
-/** 自动级工具（查询 12 + 分析 5 + 伏笔分析 5，共 22 个） */
+/** 自动级工具（查询 13 + 分析 5 + 伏笔分析 5，共 23 个） */
 export const AUTO_TOOLS = [...QUERY_TOOLS, ...ANALYSIS_TOOLS, ...HOOK_ANALYSIS_TOOLS] as const;
 
 /**
@@ -158,7 +158,7 @@ export const PRACTICE_TOOLS = [
   "submit_practice_topic", // AI 出题（只写 practice_free_pieces.topic / brief）
 ] as const;
 
-/** 全部工具名（自动 22 + 通用 2 + 练习 7 + 提案 17 + 执行 13 = 61 个） */
+/** 全部工具名（自动 23 + 通用 2 + 练习 7 + 提案 17 + 执行 13 = 62 个） */
 export const TOOL_NAMES = [
   ...AUTO_TOOLS,
   ...COMMON_TOOLS,

@@ -1,7 +1,7 @@
 // 冒烟测试：验证 @whispering233/ai-editor-tools 入口可正常导入（T0.3 语义）
 // 冒烟断言为新入口形态：注册表 API + 工具副作用注册（查询 12 + 分析 5 +
 // S6.5 伏笔 5 + S6.6 提案 17 + S6.7 卡 12.9（get_chapter_text）1 + D4（get_deduction_marks）1
-// + 练习 7（四读三写，scope = practice）+ 通用 2（web_search / fetch_content，scope = common）= 48 个；执行 13 个不暴露）；
+// + 练习 7（四读三写，scope = practice）+ 通用 2（web_search / fetch_content，scope = common）= 49 个；执行 13 个不暴露）；
 // workspace 依赖 @whispering233/ai-editor-db / @whispering233/ai-editor-shared 解析由 import 在编译/运行期验证
 import { describe, expect, it } from "vitest";
 import { AUTO_TOOLS, CHARACTER_PRIORITIES, CHARACTER_PRIORITY_LABELS, COMMON_TOOLS, DEFAULT_HALF_LIFE, MAX_CHAPTER_RESULT_SUMMARY_CHARS, MAX_ENTITY_LIST_LIMIT, MAX_FEEDBACK_DIMENSIONS, MAX_PRACTICE_BRIEF_CHARS, MAX_PRACTICE_TOPIC_CHARS, PRACTICE_TOOLS, PROPOSAL_TOOLS, TOOL_SCOPES } from "@whispering233/ai-editor-shared";

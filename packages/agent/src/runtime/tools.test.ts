@@ -25,7 +25,7 @@ function findTool(name: string) {
 }
 
 describe("createCustomTools", () => {
-  it("只装配属于该工作区的工具（novel + common；注册表 48 个中 39 个是 novel，7 个是 practice，2 个是 common）", () => {
+  it("只装配属于该工作区的工具（novel + common；注册表 49 个中 40 个是 novel，7 个是 practice，2 个是 common）", () => {
     const defs = listTools().filter((def) => def.scope === "novel" || def.scope === "common");
     const tools = createCustomTools({ toolContext: stubContext(), kind: "novel" });
     expect(tools.map((tool) => tool.name)).toEqual(defs.map((def) => def.name));
