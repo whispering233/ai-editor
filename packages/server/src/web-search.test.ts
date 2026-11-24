@@ -1,7 +1,11 @@
 // server 联网检索通道单测（createDeepSeekWebSearch）
 // 覆盖：请求形状（URL / Authorization / body / 不返正文）、结果投影（两种列表形态 + 无 url 丢弃）、
-// 缺凭据文案（不调 fetch）、401/402/429/5xx 文案、网络错误原因、超时中止、调用方中止。
+// 缺凭据文案（不调 fetch）、默认凭据来源只有 search.json（DEEPSEEK_API_KEY 不顶用）、
+// 401/402/429/5xx 文案、网络错误原因、超时中止、调用方中止。
 // **零真实网络**：fetch 与凭据解析都是注入的 fake。
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { describe, expect, it, vi } from "vitest";
 import type { AuthResult } from "@earendil-works/pi-ai";
 import { createDeepSeekWebSearch, SEARCH_TIMEOUT_MS } from "./web-search.js";
@@ -68,16 +72,43 @@ describe("createDeepSeekWebSearch", () => {
     expect(await asWrapped.port.search({ query: "q", count: 3 })).toHaveLength(2);
   });
 
-  it("未配置凭据：抛设置页可照做的文案，且不发请求", async () => {
+  it("未配置凭据：抛设置页可照做的文案（设置 → 高级），且不发请求", async () => {
     const fetchImpl = vi.fn(async () => jsonResponse([])) as unknown as typeof fetch;
     const port = createDeepSeekWebSearch({ resolveAuth: async () => undefined, fetchImpl });
-    await expect(port.search({ query: "q", count: 1 })).rejects.toThrow("未配置 DeepSeek API Key：设置 → 模型 → DeepSeek");
+    await expect(port.search({ query: "q", count: 1 })).rejects.toThrow(
+      "未配置搜索凭据：设置 → 高级（search.json 的 apiKey）——搜索 / 网页抓取目前仅接入 DeepSeek",
+    );
     expect((fetchImpl as unknown as ReturnType<typeof vi.fn>).mock.calls).toEqual([]);
   });
 
   it("凭据是空串同样按未配置处理", async () => {
     const port = createDeepSeekWebSearch({ resolveAuth: async () => ({ auth: { apiKey: "   " } }) });
-    await expect(port.search({ query: "q", count: 1 })).rejects.toThrow(/未配置 DeepSeek API Key/);
+    await expect(port.search({ query: "q", count: 1 })).rejects.toThrow(/未配置搜索凭据/);
+  });
+
+  // 默认接线（不注入 resolveAuth）= 只读 ~/.ai-editor/search.json：模型凭据（环境变量 / auth.json）不顶用。
+  // 临时把家目录指到空目录：既证明无回退，又不读真实家目录。
+  it("设置了 DEEPSEEK_API_KEY 也仍报未配置（无回退，默认来源只是 search.json）", async () => {
+    const home = mkdtempSync(join(tmpdir(), "ai-editor-home-"));
+    const saved = { HOME: process.env.HOME, USERPROFILE: process.env.USERPROFILE, DEEPSEEK_API_KEY: process.env.DEEPSEEK_API_KEY };
+    process.env.HOME = home;
+    process.env.USERPROFILE = home; // Windows 的 homedir() 只看 USERPROFILE
+    process.env.DEEPSEEK_API_KEY = "sk-env-should-not-be-read";
+    vi.resetModules(); // 重算 search-config 的 SEARCH_CONFIG_PATH
+    try {
+      const fresh = await import("./web-search.js");
+      const fetchImpl = vi.fn(async () => jsonResponse([])) as unknown as typeof fetch;
+      const port = fresh.createDeepSeekWebSearch({ fetchImpl });
+      await expect(port.search({ query: "q", count: 1 })).rejects.toThrow(/未配置搜索凭据/);
+      expect((fetchImpl as unknown as ReturnType<typeof vi.fn>).mock.calls).toEqual([]);
+    } finally {
+      for (const [name, value] of Object.entries(saved)) {
+        if (value === undefined) delete process.env[name];
+        else process.env[name] = value;
+      }
+      rmSync(home, { recursive: true, force: true });
+      vi.resetModules();
+    }
   });
 
   it.each([
