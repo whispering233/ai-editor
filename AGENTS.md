@@ -51,6 +51,13 @@
 - 表结构声明单源（建表 SQL 与迁移 DDL 逐字同形，不按 `kind` 建表）；语义不同的数据各用**专属表**，禁止塞进 `entities` 或通用 kv 表。
 - Delta 字段白名单单一定义 = `shared/src/constants/delta.ts`（`SET_ONLY_FIELDS` / `REMOVED_CHARACTER_FIELDS` / `IMMUTABLE_FIELDS`），client / tools 禁止手抄。
 
+### 章级正文历史
+
+- 快照记的是**被覆盖的旧内容**（保存钩子里把 `existing.content` 压入），当前内容永不进历史；节流（同一章最小间隔）与去重（内容未变跳过）**只在服务端**判定——客户端零改动，跨标签页天然一致。唯一执行点 = `packages/db/src/queries/document-snapshots.ts` 的 `insertSnapshotIfDue`。
+- **恢复必须复用保存核心**（`routes/manuscript.ts` 的 `saveChapterContent`），且恢复前**强制**压当前内容（绕过节流但不去重）；禁止为恢复复制第二份保存逻辑——那会让码字统计、`base_updated_at` 冲突保护、投影派生三处逐渐分叉。
+- 深度由**两个上限共同**决定：`MAX_SNAPSHOTS_PER_DOCUMENT` 与 `SNAPSHOT_BUDGET_MULTIPLIER`（预算 = 该书正文总量 × 倍数）。**两者必须同值同抬**——只抬一个会被另一个静默压回，表现为「历史莫名很短」且不报错。
+- 快照表随 `data.db` 进备份 / 云端 / 导入导出（零额外代码）；**不做自动 `VACUUM`**（独占锁会撞备份 tick）。
+
 ### 云端存档
 
 契约、协议与实测口径见 `docs/design/40-cloud-sync.md`、`docs/api/100-api-cloud.md`；实现侧单点：
