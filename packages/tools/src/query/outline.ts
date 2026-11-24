@@ -1,5 +1,5 @@
 // 查询类工具：大纲侧实现（S6.3）
-// get_outline / get_outline_path（「大纲查询」）
+// get_outline / get_outline_path / search_outline（「大纲查询」）
 //
 // db 层能力确认与分工：
 // - get_outline：db readOutlineFile 返回存储形态 OutlineFileTree——
@@ -9,13 +9,15 @@
 // `TOOL_RESULT_MAX_TOKENS`，导航靠「地图（depth=1）→ 放大（volume_id）→ 检索」。
 // - get_outline_path：db getOutlinePathIds 返回根 → 目标节点路径（含 root）；
 // 节点不存在抛错——工具层转 null（查询无结果）；路径上任一节点软删 → null（不可见）
+// - search_outline：全文检索落在 outline.json（卷/章/场景一棵树，无表）——不经 FTS5 也不开迁移，
+// 千章全树扫描是 ms 级；阅读序与章号一律取 db deriveChapterOrder（**不再另写一套遍历**）
 
-import { findOutlineNode, getDocumentTextLengths, getOutlinePathIds, readOutlineFile } from "@whispering233/ai-editor-db";
-import { OUTLINE_STATUS, mapOutlineFileToTree } from "@whispering233/ai-editor-shared";
-import type { OutlineFileNode, OutlineNode, OutlineTree } from "@whispering233/ai-editor-shared";
+import { deriveChapterOrder, findOutlineNode, getDocumentTextLengths, getOutlinePathIds, readOutlineFile } from "@whispering233/ai-editor-db";
+import { mapOutlineFileToTree, OUTLINE_STATUS } from "@whispering233/ai-editor-shared";
+import type { OutlineFileChapter, OutlineFileNode, OutlineFileTree, OutlineNode, OutlineStatus, OutlineTree } from "@whispering233/ai-editor-shared";
 import type { Db } from "@whispering233/ai-editor-db";
 import type { ToolContext } from "../context.js";
-import type { GetOutlineArgs, GetOutlinePathArgs } from "../schemas/index.js";
+import type { GetOutlineArgs, GetOutlinePathArgs, SearchOutlineArgs } from "../schemas/index.js";
 
 /**
  * 递归剔除软删节点：deleted === true 的节点整棵不可见——
@@ -162,4 +164,153 @@ export function runGetOutlinePath(ctx: ToolContext, args: GetOutlinePathArgs): s
     if (node?.deleted === true) return null;
   }
   return path;
+}
+
+// ============ search_outline ============
+
+/**
+ * search_outline 单页条数上限（分页口径与 search_entities 同构：total / truncated / next_offset）。
+ * 单项 ≈ 标题 + 片段（≤ 2 × 窗宽 + 省略号），整页连 JSON 信封仍远低于单条工具结果预算。
+ */
+export const MAX_OUTLINE_SEARCH_LIMIT = 50;
+
+/** 片段窗宽：命中位置**前后各取**的字符数（省略号另计，见 `snippetOf`） */
+export const OUTLINE_SEARCH_SNIPPET_CHARS = 30;
+
+/** search_outline 结果项（章；卷 / 场景不上结果——见 `runSearchOutline` 注释） */
+export interface OutlineSearchItem {
+  id: string;
+  title: string;
+  /** 全局章号（阅读序，来源 = db deriveChapterOrder，与 get_chapter_text 的 chapter_number 同口径） */
+  chapterNumber: number;
+  /** 所属卷 id；存量直挂 root 的章 = ""（同 shared numberVisibleOutline 口径） */
+  volumeId: string;
+  /** 所属卷标题；存量直挂 root 的章 = "" */
+  volumeTitle: string;
+  /** 写作状态；`data.status` 缺省 / 未知值 = draft（缺省即草稿，见 10-data-model §8） */
+  status: OutlineStatus;
+  tags: string[];
+  snippet: string;
+}
+
+/** search_outline 结果：命中页 + 命中总数；未取完时附续页信息（字段稀疏，取完不出现） */
+export interface SearchOutlineResult {
+  items: OutlineSearchItem[];
+  total: number;
+  /** true = 后面还有未返回的命中（items 不完整） */
+  truncated?: boolean;
+  /** 下一页的 offset（仅 truncated = true 时出现） */
+  next_offset?: number;
+}
+
+/** 可见章索引项：章节点 + 所属卷归属（直挂 root 的章两项为空串） */
+interface VisibleChapter {
+  node: OutlineFileChapter;
+  volumeId: string;
+  volumeTitle: string;
+}
+
+/**
+ * 可见章索引（软删节点整棵不进索引——卷软删时其章也随级联不可见，畸形树同此防御）。
+ * 只收章：卷 / 场景没有章号与写作状态，检索面的每一项都要「第 N 章 + 所属卷」。
+ */
+function indexVisibleChapters(tree: OutlineFileTree): Map<string, VisibleChapter> {
+  const index = new Map<string, VisibleChapter>();
+  for (const child of tree.children) {
+    if (child.deleted === true) continue;
+    if (child.type === "chapter") {
+      index.set(child.id, { node: child, volumeId: "", volumeTitle: "" });
+      continue;
+    }
+    for (const chapter of child.children ?? []) {
+      if (chapter.type !== "chapter" || chapter.deleted === true) continue;
+      index.set(chapter.id, { node: chapter, volumeId: child.id, volumeTitle: child.title });
+    }
+  }
+  return index;
+}
+
+/** 章写作状态：缺省 / 脏值按 draft（缺省即草稿，与客户端表单归一一致） */
+function chapterStatus(data: Record<string, unknown>): OutlineStatus {
+  const raw = data.status;
+  return typeof raw === "string" && (OUTLINE_STATUS as readonly string[]).includes(raw)
+    ? (raw as OutlineStatus)
+    : "draft";
+}
+
+/** 章标签（脏值容错：非数组 / 非字符串项一律忽略） */
+function chapterTags(data: Record<string, unknown>): string[] {
+  const raw = data.tags;
+  return Array.isArray(raw) ? raw.filter((tag): tag is string => typeof tag === "string" && tag !== "") : [];
+}
+
+/**
+ * 片段：命中位置前后各取 `OUTLINE_SEARCH_SNIPPET_CHARS` 字，切掉的部分补省略号。
+ * `query` 为空（只给结构化过滤）时取文本开头一屏——与命中场景同一窗宽，输出长度可预期。
+ */
+function snippetOf(text: string, query: string): string {
+  const hit = query === "" ? 0 : text.toLowerCase().indexOf(query.toLowerCase());
+  const from = Math.max(0, hit - OUTLINE_SEARCH_SNIPPET_CHARS);
+  const to = Math.min(text.length, hit + query.length + OUTLINE_SEARCH_SNIPPET_CHARS);
+  return `${from > 0 ? "…" : ""}${text.slice(from, to)}${to < text.length ? "…" : ""}`;
+}
+
+/**
+ * 大纲检索（search_outline(query?, status?, tags?, volume_id?, offset?) → 命中章分页）。
+ * - **至少一个条件**：四个条件全空 → 抛错（本工具不承担「列全书」，那会把整棵树的标题灌进上下文）
+ * - 命中面 = `title` / `summary`（计划摘要）/ `data.result_summary`（实际摘要）；子串匹配
+ *   （大小写不敏感，同 LIKE 语义；数据在 outline.json 里，不值得为 5–9ms 的全表扫上 FTS5）
+ * - status / tags 为结构化过滤：tags **全含**（与 db `listEntities` 的 filters 同口径）
+ * - 排序 + 章号 = db `deriveChapterOrder`（阅读序：卷序 → 卷内章序；工具层不再自排）
+ * - 软删章不出现（可见章索引，见 `indexVisibleChapters`）
+ */
+export function runSearchOutline(ctx: ToolContext, args: SearchOutlineArgs): SearchOutlineResult {
+  const query = args.query?.trim() ?? "";
+  const tags = (args.tags ?? []).filter((tag) => tag !== "");
+  if (query === "" && args.status === undefined && tags.length === 0 && args.volume_id === undefined) {
+    throw new Error(
+      "search_outline 至少需要一个条件（query / status / tags / volume_id）——本工具不用于列出全书；看整体结构请用 get_outline",
+    );
+  }
+
+  const index = indexVisibleChapters(readOutlineFile(ctx.outlineDir));
+  const lowerQuery = query.toLowerCase();
+  const matched: OutlineSearchItem[] = [];
+  // 阅读序单源：deriveChapterOrder 已是先序升序（含软删章的号位），按它的顺序逐章判定/收集
+  for (const { chapterId, chapterNumber } of deriveChapterOrder(ctx.outlineDir)) {
+    const entry = index.get(chapterId);
+    if (entry === undefined) continue; // 软删 / 无归属（畸形树）→ 不可见
+    const data = entry.node.data ?? {};
+    const status = chapterStatus(data);
+    if (args.status !== undefined && status !== args.status) continue;
+    const nodeTags = chapterTags(data);
+    if (tags.length > 0 && !tags.every((tag) => nodeTags.includes(tag))) continue;
+    if (args.volume_id !== undefined && entry.volumeId !== args.volume_id) continue;
+    const summary = entry.node.summary ?? "";
+    const resultSummary = typeof data.result_summary === "string" ? data.result_summary : "";
+    // 命中面 = 标题 / 计划摘要 / 实际摘要；无 query（只给结构化过滤）时片段取后两者之一，再回落标题
+    const texts = [entry.node.title, summary, resultSummary];
+    const hit =
+      query === ""
+        ? (texts.slice(1).find((text) => text !== "") ?? entry.node.title)
+        : texts.find((text) => text.toLowerCase().includes(lowerQuery));
+    if (hit === undefined) continue;
+    matched.push({
+      id: entry.node.id,
+      title: entry.node.title,
+      chapterNumber,
+      volumeId: entry.volumeId,
+      volumeTitle: entry.volumeTitle,
+      status,
+      tags: nodeTags,
+      snippet: snippetOf(hit, query),
+    });
+  }
+
+  const offset = Math.max(0, Math.trunc(args.offset ?? 0));
+  const items = matched.slice(offset, offset + MAX_OUTLINE_SEARCH_LIMIT);
+  const nextOffset = offset + items.length;
+  return nextOffset < matched.length
+    ? { items, total: matched.length, truncated: true, next_offset: nextOffset }
+    : { items, total: matched.length };
 }

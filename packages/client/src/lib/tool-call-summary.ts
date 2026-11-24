@@ -45,6 +45,15 @@ const TOOL_DISPLAY_SPECS: Record<string, ToolDisplaySpec> = {
   },
   get_outline: { lead: "读取大纲", fields: {} },
   get_outline_path: { lead: "读取节点路径", fields: { node_id: { label: "节点", id: true } } },
+  search_outline: {
+    lead: "检索大纲",
+    fields: {
+      query: { label: "关键词" },
+      status: { label: "状态" },
+      tags: { label: "标签" },
+      volume_id: { label: "卷", id: true },
+    },
+  },
   get_chapter_text: { lead: "读取章正文", fields: {}, render: summarizeChapterText },
   compute_state: {
     lead: "计算状态",

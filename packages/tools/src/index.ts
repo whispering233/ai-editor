@@ -1,5 +1,5 @@
 // @whispering233/ai-editor-tools 入口：导出工具上下文 / 注册表 / 查询类与分析类工具实现
-// S6.3 查询类工具（自动权限，11 个）+ S6.4 分析类工具（自动权限，5 个）在此注册；
+// S6.3 查询类工具（自动权限，12 个）+ S6.4 分析类工具（自动权限，5 个）在此注册；
 // S6.5 伏笔 / S6.6 提案通过 registry.registerTool(s) 继续挂载（注册表是唯一事实来源）。
 // S6.7 执行类 13 个**不注册 registry**（LLM 不可见，「核心设计原则」）——
 // 仅经 executor 门面（executeProposal）导出，S7.5 提案确认后调用。
@@ -8,7 +8,7 @@
 // 工具定义集中在本入口（name/description/parameters/permission/scope/run），
 // 参数 TypeBox schema 统一从 ./schemas 出口取（见 docs/api/tool-calling.md）。
 //
-// scope（工作区作用域，2026-10）：本入口的 37 个小说语义工具（实体/大纲/伏笔/Delta/参考资料）
+// scope（工作区作用域，2026-10）：本入口的 38 个小说语义工具（实体/大纲/伏笔/Delta/参考资料）
 // 一律 `scope: "novel"`——练习工作区不注册它们（含全部 propose_*）；七个练习工具
 // （四个只读 + 三个写 AI 产出）标 `scope: "practice"`；两个通用工具（web_search / fetch_content）标 `scope: "common"`
 // （装配过滤见 agent `createCustomTools`）。
@@ -67,18 +67,19 @@ import {
   getOutlinePathArgsSchema,
   queryRelationshipsArgsSchema,
   searchEntitiesArgsSchema,
+  searchOutlineArgsSchema,
   searchReferencesArgsSchema,
 } from "./schemas/index.js";
 import { registerTools, type ToolDefinition } from "./registry.js";
 import { runGetEntity, runGetEntitySummary, runSearchEntities } from "./query/entity.js";
 import { runSearchReferences } from "./query/reference.js";
 import { runQueryRelationships } from "./query/relation.js";
-import { runGetOutline, runGetOutlinePath } from "./query/outline.js";
+import { runGetOutline, runGetOutlinePath, runSearchOutline, MAX_OUTLINE_SEARCH_LIMIT, OUTLINE_SEARCH_SNIPPET_CHARS } from "./query/outline.js";
 import { runGetChapterText, DEFAULT_TEXT_PAGE_CHARS, MAX_TEXT_PAGE_CHARS } from "./query/manuscript.js";
 import { runGetDeductionMarks } from "./query/deduction.js";
 import { runComputeState, runGetDeltaHistory } from "./query/delta.js";
 
-/** 查询类工具定义（S6.3 + 卡 12.9 + D4，「查询类（自动）」11 个；权限全为 AUTO） */
+/** 查询类工具定义（S6.3 + 卡 12.9 + D4 + C2，「查询类（自动）」12 个；权限全为 AUTO） */
 const queryToolDefs: ToolDefinition[] = [
   {
     name: "get_entity",
@@ -148,6 +149,26 @@ const queryToolDefs: ToolDefinition[] = [
     permission: TOOL_PERMISSION.AUTO,
     scope: "novel",
     run: runGetOutlinePath,
+  },
+  {
+    name: "search_outline",
+    // 分页上限与片段窗宽插值自 query/outline.ts 的常量（模型可见数字的唯一来源，禁止手写）
+    description:
+      "大纲检索：按关键词 / 写作状态 / 标签 / 卷检索**章**，返回阅读序的命中页（每项含 chapterNumber + volumeTitle）。" +
+      "**至少一个条件**（query / status / tags / volume_id 全空即报错）：query 子串匹配标题、计划摘要（summary）" +
+      "与实际摘要（data.result_summary）；status 为章写作状态（draft/revision/final，缺省即 draft）；" +
+      "tags 要求 data.tags 包含**全部**指定标签；volume_id 限定某一卷。软删章不出现。" +
+      "千章书里的典型用法：先用 get_outline 看整体结构，再用本工具跨卷定位（或按 status/tags 收窄范围）。" +
+      "单页最多 " +
+      MAX_OUTLINE_SEARCH_LIMIT +
+      " 条：total 为命中总数，未取完时返回 truncated=true 与 next_offset，用 offset 续读；" +
+      "snippet = 命中字段的前后各 " +
+      OUTLINE_SEARCH_SNIPPET_CHARS +
+      " 字片段。",
+    parameters: searchOutlineArgsSchema,
+    permission: TOOL_PERMISSION.AUTO,
+    scope: "novel",
+    run: runSearchOutline,
   },
   {
     name: "get_chapter_text",
