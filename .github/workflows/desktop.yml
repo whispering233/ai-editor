@@ -68,6 +68,21 @@ jobs:
       - run: pnpm -r build
       # 打包（deploy + electron-builder；平台参数由矩阵给出）
       - run: node packages/desktop/scripts/pack.mjs ${{ matrix.args }}
+      # 打包态启动冒烟：验「包能起来」，不只「包能构建」。
+      # 判据 = 以 `--user-data-dir=<临时目录>` 起
+      #   `release/win-unpacked/ai-editor.exe`，等待上限内断言
+      #   `<临时目录>/logs/ai-editor.log` 含「菜单已就绪」（main.ts 在窗口创建
+      #   + 装菜单之后打的那行），且日志 / 进程输出都不含 `SyntaxError` /
+      #   `Uncaught Exception`——v0.0.44 的 electron-updater 具名导入只在
+      #   打包态报错，typecheck / lint / 单测全绿（build.md「打包态启动冒烟
+      #   不可省」）。失败即红（脚本非零退出），下面的 Release 上传步骤随之
+      #   跳过：坏包发不出去。
+      # 退路（脚本内置，2026-11-24）：若 Windows runner 没有可建窗口的交互
+      #   会话，主判据永远不来 ⇒ 退化为断言「主进程跑到 server 启动行」
+      #   （`[desktop] server: http://127.0.0.1:`，即配置解析 + in-process
+      #   server 启动成功），并打 `::warning::` 标注「走的是退路」；两条判据
+      #   都没有照样红。
+      - run: node packages/desktop/scripts/smoke.mjs
       - uses: softprops/action-gh-release@v2
         with:
           # push tag 时用 tag 名；手动触发时用输入（补包到已有 Release）
