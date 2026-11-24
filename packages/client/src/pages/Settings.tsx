@@ -12,13 +12,14 @@ import { PageHeader } from "@/components/ui/page-header";
 import { BackupSection } from "../components/settings/backup-section";
 import { LibraryLocationPanel } from "../components/settings/library-location-panel";
 import { LlmSection } from "../components/settings/llm-section";
+import { PiConfigSection } from "../components/settings/pi-config-section";
 import { ProjectRulesSection } from "../components/settings/project-rules-section";
 import { ShortcutsSection } from "../components/settings/shortcuts-section";
 import { desktopBridge } from "../lib/desktop";
 import { useCloudStore } from "../stores/cloud";
 
 /** 二级 tab 键（顺序 = 应用级配置 → 配置 AI → 配置项目 → 数据安全 → 快捷键说明） */
-type TabKey = "general" | "llm" | "rules" | "backup" | "shortcuts";
+type TabKey = "general" | "llm" | "advanced" | "rules" | "backup" | "shortcuts";
 
 export default function Settings() {
   const [tab, setTab] = useState<TabKey>("llm");
@@ -41,6 +42,8 @@ export default function Settings() {
             ? [{ key: "general", label: "通用", children: <LibraryLocationPanel /> }]
             : []),
           { key: "llm", label: "AI 模型", children: <LlmSection /> },
+          // 「高级」两种形态都渲染：pi 配置目录 + 本机配置文件编辑器（本机级，与项目无关）
+          { key: "advanced", label: "高级", children: <PiConfigSection /> },
           { key: "rules", label: "项目规则", children: <ProjectRulesSection /> },
           { key: "backup", label: "备份", children: <BackupSection /> },
           // 「快捷键」恒在末位：纯说明页（无可交互控件），浏览器与桌面版都渲染

@@ -39,6 +39,7 @@ import type {
   WritingStatsRes,
 } from "@whispering233/ai-editor-shared";
 import type { EntityType, HookStatus } from "@whispering233/ai-editor-shared";
+import type { ConfigFileName } from "@whispering233/ai-editor-shared/schemas";
 import type { FocusContext } from "./focus";
 
 const API_BASE = "/api/v1";
@@ -1573,4 +1574,39 @@ export function deletePracticeSample(id: string): Promise<{ deleted: true }> {
  */
 export function deletePracticePiece(id: string): Promise<{ deleted: true }> {
   return apiFetch<{ deleted: true }>(`/practice/free/${id}`, { method: "DELETE" });
+}
+
+// ============ 本机配置文件（设置 → 高级；docs/api/90-api-settings.md） ============
+
+/** GET/PUT /api/v1/settings/pi/dir：生效目录 + 缺省目录（同形） */
+export interface PiConfigDir {
+  dir: string;
+  defaultDir: string;
+}
+
+/** pi 配置目录（缺省 `~/.ai-editor/pi-agent`；改完服务端立即生效） */
+export function getPiConfigDir(): Promise<PiConfigDir> {
+  return apiFetch<PiConfigDir>("/settings/pi/dir");
+}
+
+/** 改 pi 配置目录：绝对路径；有在途对话 → 409 CHAT_BUSY */
+export function setPiConfigDir(dir: string): Promise<PiConfigDir> {
+  return apiFetch<PiConfigDir>("/settings/pi/dir", { method: "PUT", body: { dir } });
+}
+
+/** GET /api/v1/settings/config-file/:name（不存在 → exists=false + 空文本） */
+export interface ConfigFileText {
+  name: ConfigFileName;
+  exists: boolean;
+  content: string;
+}
+
+/** 读一份本机配置文件（明文：只在本机回环端点回传） */
+export function getConfigFile(name: ConfigFileName): Promise<ConfigFileText> {
+  return apiFetch<ConfigFileText>(`/settings/config-file/${name}`);
+}
+
+/** 整份保存一份本机配置文件（服务端按 pi 读口径校验，失败 400 且不落盘） */
+export function saveConfigFile(name: ConfigFileName, content: string): Promise<{ saved: true }> {
+  return apiFetch<{ saved: true }>(`/settings/config-file/${name}`, { method: "PUT", body: { content } });
 }
