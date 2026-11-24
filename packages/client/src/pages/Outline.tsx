@@ -47,6 +47,7 @@ import {
 import { CHILD_TYPE, TYPE_LABEL } from "../components/outline/dialogs";
 import { InlineInput } from "../components/outline/inline-input";
 import { NodeHookMarkBadge } from "../components/outline/node-hook-badge";
+import { OutlineFilterControl } from "../components/outline/outline-filter-control";
 import { TypeChip } from "@/components/ui/tag-chip";
 import { DropIndicator } from "@/components/ui/drop-indicator";
 import { PanelHeader } from "@/components/ui/panel-header";
@@ -86,11 +87,14 @@ import {
   deleteInvalidatesSelection,
   dropInsertOrder,
   editFailureRecovery,
+  EMPTY_OUTLINE_FILTER,
+  filterOutlineNodes,
   findNode,
   findNodeChildren,
   findNodePath,
   initialCollapsedNodes,
   isNoopDrop,
+  isOutlineFilterActive,
   numberOutline,
   ROOT_NODE_ID,
   resolveDropPlan,
@@ -98,7 +102,9 @@ import {
   shouldCommitSummary,
   shouldCommitTitle,
   type DragTarget,
+  type OutlineFilter,
 } from "../lib/outline-tree";
+import { chapterTagPool } from "../lib/outline-detail";
 import { cn } from "../lib/utils";
 import { tagTintClass } from "../lib/tag-tint";
 import { outlineTagsFromData, previewOutlineTags } from "../lib/outline-tags";
@@ -555,11 +561,27 @@ function OutlineRail({
   const [dragTarget, setDragTarget] = useState<DragTarget>(null);
   /** 伏笔标记映射（S9.2）：节点 id → 标记列表；null = 未加载/树置空；加载失败 → 空 Map（等效隐藏降级，不阻塞大纲） */
   const [hookMarks, setHookMarks] = useState<Map<string, NodeHookMark[]> | null>(null);
+  /** 树筛选（状态 / 剧情线标签）：**组件态**——刷新即清，不写 localStorage、不进 URL、不重排 */
+  const [filter, setFilter] = useState<OutlineFilter>(EMPTY_OUTLINE_FILTER);
+  // 换书：筛选条件作废（旧书的标签池对新书无意义，留着会筛出空树）
+  useEffect(() => setFilter(EMPTY_OUTLINE_FILTER), [config?.id]);
+  const filterActive = isOutlineFilterActive(filter);
+  /** 标签池 = 全书章 / 场景出现过的标签（与详情页 datalist 同一派生，不新增标签接口） */
+  const filterTagOptions = useMemo(
+    () => chapterTagPool(outline?.children ?? []).map((tag) => tag.value),
+    [outline],
+  );
+  /** 渲染用的树 = 筛选后的树（命中 + 祖先链）；无筛选 = 原树 */
+  const visibleNodes = useMemo(
+    () => filterOutlineNodes(outline?.children ?? [], filter),
+    [outline, filter],
+  );
 
   const noProject = config === null && !configLoading;
 
   /** 大纲编号徽标文案（展示口径：卷序 + 全局章序，只计可见节点 ⇒ 删后重排；与
-   * `docs/design/10-data-model.md` §4 的服务端章序不同源） */
+   * `docs/design/10-data-model.md` §4 的服务端章序不同源）——**恒按全树**：筛选只改渲染哪些行，
+   * 不改「第 N 章」（否则筛掉的章会让后面的章编号前移） */
   const labels = useMemo(() => numberOutline(outline).labels, [outline]);
 
   /** 推演节点标记（§15）：**唯一来源 = shared `buildDeductionMarks`**（过滤失效/非章 → 树序排序 →
@@ -882,6 +904,9 @@ function OutlineRail({
   // 判定单源 = resolveDropPlan。
 
   function handleDragStart(e: DragEvent, node: OutlineNode) {
+    // 筛选生效时禁用拖拽：落点在隐藏行上必然歧义（不命中行不存在于渲染树里）——
+    // 这是所有行拖拽的唯一入口（行 `draggable` 同时置 false，本守卫兼防原生 DnD 残余事件）
+    if (filterActive) return;
     e.dataTransfer.setData("text/plain", node.id);
     e.dataTransfer.effectAllowed = "move";
     setDragNodeId(node.id);
@@ -1111,7 +1136,7 @@ function OutlineRail({
       // 行根元素 props（右键菜单 trigger 与普通 div 共用；编辑态退化为普通 div）
       const rowProps = {
         "data-node-id": node.id,
-        draggable: !editingTitle && !editingSummary && !isDragging && !busy,
+        draggable: !filterActive && !editingTitle && !editingSummary && !isDragging && !busy,
         tabIndex: -1,
         onDragStart: (e: DragEvent<HTMLDivElement>) => handleDragStart(e, node),
         onDragEnd: handleDragEnd,
@@ -1420,6 +1445,12 @@ function OutlineRail({
         insetClassName={leading !== undefined || onToggleDetail !== undefined ? "px-6" : undefined}
         actions={
           <>
+            {/* 树筛选（状态 / 剧情线标签）：组件态，隐藏不重排、不改编号 */}
+            <OutlineFilterControl
+              filter={filter}
+              tagOptions={filterTagOptions}
+              onChange={setFilter}
+            />
             {/* 一键清空推演标记（DESIGN.md「`推演节点` 徽标」）：仅**有可见标记**时渲染
                 （无标记时清空无意义，也不给一个点了没反应的按钮）；无二次确认 */}
             {deduction.marks.length > 0 && (
@@ -1561,7 +1592,12 @@ function OutlineRail({
           onDrop={(e) => void handleRootDrop(e)}
         >
           {renderRootCreateRow()}
-          {renderNodes(outline.children, 0)}
+          {filterActive && visibleNodes.length === 0 ? (
+            /* 筛选无命中：整树隐藏而不是给一棵空容器（否则看不出是「筛掉了」还是「本来就没节点」） */
+            <div className="px-2 py-4 text-sm text-muted-foreground">没有符合筛选条件的节点</div>
+          ) : (
+            renderNodes(visibleNodes, 0)
+          )}
         </div>
       )}
       </div>

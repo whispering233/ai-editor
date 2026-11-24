@@ -2,6 +2,7 @@
 import type { OutlineChapter, OutlineNode, OutlineTree } from "@whispering233/ai-editor-shared";
 import { numberVisibleOutline } from "@whispering233/ai-editor-shared";
 import type { OutlineNodeType } from "./api";
+import { outlineTagsFromData } from "./outline-tags";
 
 /** 大纲根（虚拟）id——**卷**挂 root 时使用的 parent_id（章只挂卷，2026-09） */
 export const ROOT_NODE_ID = "root";
@@ -402,4 +403,70 @@ export function numberOutline(tree: OutlineTree | null): OutlineNumbering {
     });
   }
   return { labels, chapterRows };
+}
+
+// ============ 树筛选（隐藏不重排：状态 / 剧情线标签，组件态不持久化） ============
+// 口径与画布筛选（`lib/outline-canvas-filter.ts`）一致：**同维度 OR、跨维度 AND、空数组 = 不限制**；
+// 筛选只决定渲染哪些行——不改结构、不重排、**不改编号**（编号恒按全树 `numberOutline` 派生）。
+
+/** 大纲树筛选条件（组件态：刷新即清，不写 localStorage、不进 URL） */
+export interface OutlineFilter {
+  /** 章写作状态（`OUTLINE_STATUS`；空 = 不限制）——**只有章有状态字段**，卷 / 场景不因状态命中 */
+  statuses: string[];
+  /** 剧情线标签（`data.tags`；空 = 不限制）——章与场景都有 */
+  tags: string[];
+}
+
+/** 无条件（= 不过滤；页面初始态） */
+export const EMPTY_OUTLINE_FILTER: OutlineFilter = { statuses: [], tags: [] };
+
+/** 是否有任何筛选条件（决定拖拽禁用 / 空结果提示 / 按钮高亮） */
+export function isOutlineFilterActive(filter: OutlineFilter): boolean {
+  return filter.statuses.length > 0 || filter.tags.length > 0;
+}
+
+/** 数组内切换一个值（不改原数组：筛选条件按引用比较） */
+export function toggleFilterValue(values: readonly string[], value: string): string[] {
+  return values.includes(value)
+    ? values.filter((candidate) => candidate !== value)
+    : [...values, value];
+}
+
+/**
+ * 单节点是否命中：跨维度 AND。**没带该维度字段的节点不命中**（卷无状态无标签、场景无状态）——
+ * 否则按状态筛选会把整棵树原样留下（卷 / 场景不带状态 ⇒ 无条件通过）。
+ */
+function matchesOutlineFilter(node: OutlineNode, filter: OutlineFilter): boolean {
+  if (filter.statuses.length > 0) {
+    if (node.type !== "chapter") return false;
+    const raw = node.data?.status;
+    const status = typeof raw === "string" ? raw : "draft"; // 缺省 / 非法值 = 草稿（同画布卡片口径）
+    if (!filter.statuses.includes(status)) return false;
+  }
+  if (filter.tags.length > 0) {
+    if (node.type === "volume") return false;
+    const tags = outlineTagsFromData(node.data);
+    if (!tags.some((tag) => filter.tags.includes(tag))) return false;
+  }
+  return true;
+}
+
+/**
+ * 按筛选条件过滤树：命中节点**连同其祖先链**保留（否则子节点无处挂），未命中的整枝丢弃；
+ * 全部不命中 → 空数组。软删节点及其子树跳过（与编号 `numberVisibleOutline` 同口径；
+ * 服务端 tree 已滤，此处防御）。无筛选条件 → 原样返回（不复制整树）。
+ */
+export function filterOutlineNodes(
+  nodes: readonly OutlineNode[],
+  filter: OutlineFilter,
+): OutlineNode[] {
+  if (!isOutlineFilterActive(filter)) return nodes as OutlineNode[];
+  const kept: OutlineNode[] = [];
+  for (const node of nodes) {
+    if (node.deleted === true) continue;
+    const children = node.type === "scene" ? [] : filterOutlineNodes(node.children ?? [], filter);
+    if (children.length === 0 && !matchesOutlineFilter(node, filter)) continue;
+    kept.push(node.type === "scene" ? node : ({ ...node, children } as OutlineNode));
+  }
+  return kept;
 }
