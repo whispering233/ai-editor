@@ -72,6 +72,8 @@ pnpm start:test     # 启动安装态服务
 pnpm test:packed    # 一键串联（backlog #8 打包安装测试：tarball 安装态冒烟）
 ```
 
+- **各包 `build` 先清自己的 `dist`**（`shared` / `tools` / `server` / `agent` / `db` / `desktop`，单行 `node -e "require('fs').rmSync('dist',{recursive:true,force:true})"`，不引 `rimraf`）：`tsc` 只覆盖不清理，源文件改名 / 删除后会留旧产物（如 `server/dist/decompose`），打进 `pnpm deploy` 的桌面包里变成幽灵模块。`client` 不需要——vite 的 `emptyOutDir` 已负责。
+
 ### 桌面版（electron-builder）
 
 ```

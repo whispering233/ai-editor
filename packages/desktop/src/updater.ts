@@ -14,9 +14,13 @@ import electronUpdater from "electron-updater";
 
 const { autoUpdater } = electronUpdater;
 
-/** 更新只对 Windows 安装态生效（其他平台不出包，也不检查） */
+/**
+ * 更新只对 Windows **安装**态生效：其他平台不出包；`app.isPackaged === false`（dev 态 `electron .`）时
+ * electron-updater 没有 `app-update.yml` 可读，「检查更新」必然失败——dev 态不说这种假话，
+ * 整项随之从菜单消失（同 `main.ts` 的「`onCheckUpdates` 为 null = 没有更新能力」）。
+ */
 export function isUpdateSupported(): boolean {
-  return process.platform === "win32";
+  return process.platform === "win32" && app.isPackaged;
 }
 
 export interface UpdateDeps {
