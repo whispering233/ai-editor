@@ -788,3 +788,47 @@ describe("大纲详情表单 dirty 判定", () => {
     });
   });
 });
+
+describe("大纲页 · 千章书首屏只展开卷", () => {
+  /** 造树：volumes 个卷、每卷 chaptersPer 章、每章 1 场景 */
+  const bigTree = (volumes: number, chaptersPer: number): OutlineTree => ({
+    id: "root",
+    type: "root",
+    schemaVersion: 1,
+    children: Array.from({ length: volumes }, (_, v) => ({
+      id: `big-vol-${v}`,
+      type: "volume" as const,
+      title: `大卷${v + 1}`,
+      updatedAt: "t",
+      children: Array.from({ length: chaptersPer }, (_, c) => ({
+        id: `big-ch-${v}-${c}`,
+        type: "chapter" as const,
+        title: `大章${v + 1}-${c + 1}`,
+        updatedAt: "t",
+        children: [
+          {
+            id: `big-sc-${v}-${c}`,
+            type: "scene" as const,
+            title: `大场${v + 1}-${c + 1}`,
+            updatedAt: "t",
+          },
+        ],
+      })),
+    })),
+  });
+
+  it("超阈值（默认 300 节点）→ 只渲染卷行，章/场景不入 DOM", () => {
+    // 10 卷 × 40 章（每章带 1 场景）= 10 + 400 + 400 = 810 节点
+    const html = render({ outline: bigTree(10, 40) });
+    expect(html).toContain("大卷1");
+    expect(html).not.toContain("大章1-1");
+    expect(html).not.toContain("大场1-1");
+  });
+
+  it("未超阈值 → 沿用既有行为：整树展开（章与场景都在）", () => {
+    const html = render({ outline: bigTree(2, 5) });
+    expect(html).toContain("大卷1");
+    expect(html).toContain("大章1-1");
+    expect(html).toContain("大场1-1");
+  });
+});

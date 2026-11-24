@@ -96,8 +96,26 @@ export function flattenTree(
   return acc;
 }
 
-/** targetId 是否在 nodeId 的子树中（含 nodeId 自身）——拖拽「不能挂自己/后代」判定 */
-export function isDescendant(nodes: OutlineNode[], nodeId: string, targetId: string): boolean {
+/**
+ * 节点总数超过该值时，大纲页初始只展开卷（实测：4,020 节点的书全展开 = 3,020 行 /
+ * 58,579 DOM / long task 共 4.3s；20 卷收起后首屏与二百节点级小书同量级）。
+ * 小书（≤ 阈值）行为不变——仍然全展开。
+ */
+export const OUTLINE_AUTO_COLLAPSE_NODE_LIMIT = 300;
+
+/**
+ * 大纲页的初始折叠集合：小树返回空集（= 全部展开，既有行为）；大树返回**全部卷 id**
+ * （章与场景收起，展开某一卷才渲染它的子树）。
+ * 只决定"初始"状态——调用方必须按项目初始化一次，不能在每次树重拉后重算
+ * （否则用户手动展开的卷会被 reload 反复重置）。
+ */
+export function initialCollapsedNodes(tree: OutlineTree | null): Set<string> {
+  if (tree === null) return new Set();
+  if (flattenTree(tree.children).length <= OUTLINE_AUTO_COLLAPSE_NODE_LIMIT) return new Set();
+  return new Set(tree.children.filter((node) => node.type === "volume").map((node) => node.id));
+}
+
+/** targetId 是否在 nodeId 的子树中（含 nodeId 自身）——拖拽「不能挂自己/后代」判定 */export function isDescendant(nodes: OutlineNode[], nodeId: string, targetId: string): boolean {
   const node = findNode(nodes, nodeId);
   if (!node) return false;
   const search = (n: OutlineNode): boolean => {

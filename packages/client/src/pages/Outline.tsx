@@ -29,7 +29,7 @@
 // 刷新策略：所有写操作成功后统一 loadOutline 重拉整树（服务端权威——move 重排 order、软删级联子树、
 // 还原级联；本地补丁易与服务端不一致；本地文件读取毫秒级，重拉成本可忽略）。outline 树数据仍在
 // project store（跨页共用：顶栏阅读进度标题映射、节点 id → title 映射），本页只持有 UI 态
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { DragEvent, KeyboardEvent, MouseEvent, ReactNode, RefObject } from "react";
 import { Button } from "antd";
 import { buildDeductionMarks, type OutlineNode } from "@whispering233/ai-editor-shared";
@@ -89,6 +89,7 @@ import {
   findNode,
   findNodeChildren,
   findNodePath,
+  initialCollapsedNodes,
   isNoopDrop,
   numberOutline,
   ROOT_NODE_ID,
@@ -525,8 +526,20 @@ function OutlineRail({
   const setCurrentFocus = useUiStore((s) => s.setCurrentFocus);
 
   const [error, setError] = useState<string | null>(null);
-  /** 折叠的节点 id 集合（空集 = 全部展开） */
-  const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
+  // 千章书首屏：节点过多时初始只展开卷（全展开会一次挂三千行，实测 4.3s long task）。
+  // 必须在**渲染期**就派生好，不能用 state + effect 事后修：那样会先把三千行挂上去再收起
+  // （实测白渲染≈1.3s）。`userCollapsed = null` = 还没手动操作过，跟自动值走；
+  // 一旦手动操作就固定下来（reload 不重置用户的展开状态）。
+  const autoCollapsed = useMemo(() => initialCollapsedNodes(outline), [outline]);
+  const [userCollapsed, setUserCollapsed] = useState<Set<string> | null>(null);
+  const collapsed = userCollapsed ?? autoCollapsed;
+  const collapsedRef = useRef(collapsed);
+  collapsedRef.current = collapsed;
+  const setCollapsed = useCallback((next: Set<string> | ((prev: Set<string>) => Set<string>)) => {
+    setUserCollapsed((prev) => (typeof next === "function" ? next(prev ?? collapsedRef.current) : next));
+  }, []);
+  // 换书：手动折叠态作废，回到该书的自动初值
+  useEffect(() => setUserCollapsed(null), [config?.id]);
   const [busy, setBusy] = useState(false);
   /** 新建/跨页定位的聚焦节点 id（A2：新建成功后滚动到位 + 键盘焦点落行；3s 自动消失） */
   const [focusedNodeId, setFocusedNodeId] = useState<string | null>(null);

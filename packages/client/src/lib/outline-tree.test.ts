@@ -14,9 +14,11 @@ import {
   findNodePosition,
   findParentIdOf,
   flattenTree,
+  initialCollapsedNodes,
   isDescendant,
   isNoopDrop,
   numberOutline,
+  OUTLINE_AUTO_COLLAPSE_NODE_LIMIT,
   parentOptionsForType,
   resolveDropPlan,
   ROOT_NODE_ID,
@@ -720,5 +722,79 @@ describe("numberOutline（展示口径编号：卷序 + 全局章序）", () => 
       labels: new Map(),
       chapterRows: [],
     });
+  });
+});
+
+describe("initialCollapsedNodes（千章书首屏只展开卷）", () => {
+  /** 造树：一卷 + count-1 章（总节点数 = count） */
+  const flatTree = (count: number): OutlineTree => ({
+    id: "root",
+    type: "root",
+    schemaVersion: 1,
+    children: [
+      {
+        id: "vol-only",
+        type: "volume",
+        title: "唯一卷",
+        updatedAt: "t",
+        children: Array.from({ length: count - 1 }, (_, i) => ({
+          id: `ch-${i}`,
+          type: "chapter",
+          title: `第${i + 1}章`,
+          updatedAt: "t",
+        })),
+      },
+    ],
+  });
+
+  it("小树（≤ 阈值）→ 空集 = 全部展开（既有行为不变）", () => {
+    expect(initialCollapsedNodes(null)).toEqual(new Set());
+    expect(initialCollapsedNodes(flatTree(1))).toEqual(new Set());
+    expect(initialCollapsedNodes(flatTree(OUTLINE_AUTO_COLLAPSE_NODE_LIMIT))).toEqual(new Set());
+  });
+
+  it("超过阈值 → 全部卷 id（章与场景收起）", () => {
+    const collapsed = initialCollapsedNodes(flatTree(OUTLINE_AUTO_COLLAPSE_NODE_LIMIT + 1));
+    expect(collapsed).toEqual(new Set(["vol-only"]));
+  });
+
+  it("只收卷、不收章/场景：多卷树里场景 id 不会进集合", () => {
+    const collapsed = initialCollapsedNodes({
+      id: "root",
+      type: "root",
+      schemaVersion: 1,
+      children: [
+        {
+          id: "vol-a",
+          type: "volume",
+          title: "A",
+          updatedAt: "t",
+          children: [
+            {
+              id: "ch-a",
+              type: "chapter",
+              title: "A1",
+              updatedAt: "t",
+              children: [{ id: "sc-a", type: "scene", title: "场", updatedAt: "t" }],
+            },
+          ],
+        },
+        {
+          id: "vol-b",
+          type: "volume",
+          title: "B",
+          updatedAt: "t",
+          children: Array.from({ length: 300 }, (_, i) => ({
+            id: `ch-b-${i}`,
+            type: "chapter" as const,
+            title: `B${i}`,
+            updatedAt: "t",
+          })),
+        },
+      ],
+    });
+    expect(collapsed).toEqual(new Set(["vol-a", "vol-b"]));
+    expect(collapsed.has("ch-a")).toBe(false);
+    expect(collapsed.has("sc-a")).toBe(false);
   });
 });
