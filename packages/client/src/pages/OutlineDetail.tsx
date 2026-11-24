@@ -78,13 +78,14 @@ export function isOutlineDetailDirty(
   dataForm: Record<string, unknown>,
 ): boolean {
   // 两侧都归一：末尾空行（TagsEditor 续输用）不算 dirty，基线里带空格的旧值也不会一进表单就脏
-  const baselineData = normalizeOutlineDataForm(baseline.data ?? {});
+  const rawBaseline = baseline.data ?? {};
+  const baselineData = normalizeOutlineDataForm(rawBaseline);
   return (
     shouldCommitTitle(baseline.title, titleValue) ||
     shouldCommitSummary(baseline.summary, summaryValue) ||
     diffData(
       baselineData,
-      normalizeDefaultStatus(baselineData, normalizeOutlineDataForm(dataForm)),
+      normalizeDefaultStatus(baselineData, normalizeOutlineDataForm(dataForm, rawBaseline)),
     ) !== null
   );
 }
@@ -230,8 +231,9 @@ export default function OutlineDetail({
     const patch: UpdateOutlineBody = {};
     if (shouldCommitTitle(baseline.title, titleValue)) patch.title = title;
     if (shouldCommitSummary(baseline.summary, summaryValue)) patch.summary = summaryValue.trim();
-    // 归一后再 diff / 提交：tags 末尾空行不能进 payload（nodeTagsSchema min(1) 会 400）
-    const normalizedData = normalizeOutlineDataForm(dataForm);
+    // 归一后再 diff / 提交：tags 末尾空行不能进 payload（nodeTagsSchema min(1) 会 400）；
+    // 带基线归一，清空实际摘要才落成 `""`（删键会被 diffData 当「不提交」）
+    const normalizedData = normalizeOutlineDataForm(dataForm, baseline.data ?? {});
     const dataDiff = diffData(baseline.data ?? {}, normalizedData);
     if (dataDiff !== null) patch.data = dataDiff;
     if (Object.keys(patch).length === 0) {
@@ -451,7 +453,7 @@ export default function OutlineDetail({
                   />
                 </div>
                 {/* 实际摘要（章专有，`data.result_summary`）：作者手填 / AI 读正文后提案回填；
-                    只在本表单出现（大纲树行不展示），空值由 normalizeOutlineDataForm 吞掉不提交 */}
+                    只在本表单出现（大纲树行不展示），空值由 normalizeOutlineDataForm 按基线决定吞不吞 */}
                 {node.type === "chapter" && (
                   <div>
                     <p className="mb-1 text-sm font-medium text-foreground">实际摘要</p>

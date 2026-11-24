@@ -218,6 +218,29 @@ describe("normalizeOutlineDataForm（tags 归一：末行空串 / 前后空格�
     expect(diffData({ result_summary: "主角拿到断剑" }, normalizeOutlineDataForm(form))).toBeNull();
   });
 
+  // 清空已有摘要 = 一次提交（空串 = 清空，与工具侧同口径；删键会被 diffData 当「不提交」）
+  it("result_summary：基线有值 + 表单清空 → 写空串（清空进 patches）", () => {
+    const baseline = { result_summary: "旧摘要" };
+    expect(normalizeOutlineDataForm({ result_summary: "" }, baseline)).toEqual({ result_summary: "" });
+    expect(normalizeOutlineDataForm({ result_summary: "   " }, baseline)).toEqual({ result_summary: "" });
+    expect(diffData(baseline, normalizeOutlineDataForm({ result_summary: "" }, baseline))).toEqual({
+      result_summary: "",
+    });
+    // 基线该键为纯空白 = 本来就没摘要 ⇒ 不写该键
+    expect(normalizeOutlineDataForm({ result_summary: "" }, { result_summary: "  " })).not.toHaveProperty(
+      "result_summary",
+    );
+  });
+
+  it("result_summary：基线有值 + 表单有值 → trim 后进 patches，与基线同值不提交", () => {
+    const baseline = { result_summary: "旧摘要" };
+    expect(normalizeOutlineDataForm({ result_summary: " 新摘要 " }, baseline)).toEqual({
+      result_summary: "新摘要",
+    });
+    const same = { result_summary: "新摘要" };
+    expect(diffData(same, normalizeOutlineDataForm({ result_summary: " 新摘要 " }, same))).toBeNull();
+  });
+
   it("result_summary：缺省 / 空默认值不判 dirty（diffData 无变化）", () => {
     expect(diffData({}, normalizeOutlineDataForm({}))).toBeNull();
     expect(diffData({}, normalizeOutlineDataForm({ result_summary: "" }))).toBeNull();

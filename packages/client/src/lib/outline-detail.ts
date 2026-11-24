@@ -151,11 +151,16 @@ export function sceneNodeOptions(
  * data 表单归一（保存提交与 dirty 判定共用）：
  * - `tags` 为数组时逐项 trim、丢弃空串——TagsEditor 为续输故意保留末行空串（回车 / `+ 添加`），
  *   原样提交会被 `nodeTagsSchema`（trim 后 min(1)）判 400。
- * - `result_summary`（章实际摘要，textarea）trim 后为空 = **不写该键**——空表单值不是一次提交，
+ * - `result_summary`（章实际摘要，textarea）trim 后有值 → 写 trim 值。trim 后为空：
+ *   基线（`baselineData`）本来有值 → 保留 `""`（**空串 = 清空**，与工具侧 `propose_update_outline_node`
+ *   同口径；`diffData` 会把 undefined 当「不提交」，删键清不掉）；基线也没有值 → 不写该键，
  *   否则「打开表单没填」也要进 patches / 判 dirty。
  * 其它 key 原样；两键都无需归一（类型不符 / 都无变化）时返回入参同一对象（不白造新对象）。
  */
-export function normalizeOutlineDataForm(data: Record<string, unknown>): Record<string, unknown> {
+export function normalizeOutlineDataForm(
+  data: Record<string, unknown>,
+  baselineData: Record<string, unknown> = {},
+): Record<string, unknown> {
   let form = data;
   if (Array.isArray(data.tags)) {
     const tags = data.tags
@@ -167,9 +172,20 @@ export function normalizeOutlineDataForm(data: Record<string, unknown>): Record<
   if (typeof form.result_summary === "string") {
     const { result_summary: raw, ...rest } = form;
     const resultSummary = raw.trim();
-    form = resultSummary === "" ? rest : { ...rest, result_summary: resultSummary };
+    const clearsExisting = baselineResultSummary(baselineData.result_summary) !== "";
+    form =
+      resultSummary !== ""
+        ? { ...rest, result_summary: resultSummary }
+        : clearsExisting
+          ? { ...rest, result_summary: "" }
+          : rest;
   }
   return form;
+}
+
+/** 基线实际摘要的有效值（非字符串 / 纯空白 = 没有摘要，与读取方同口径） */
+function baselineResultSummary(value: unknown): string {
+  return typeof value === "string" ? value.trim() : "";
 }
 
 /**
