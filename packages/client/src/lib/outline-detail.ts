@@ -12,6 +12,7 @@ import {
   OUTLINE_STATUS_LABEL,
 } from "@whispering233/ai-editor-shared";
 import type { OutlineNodeType } from "./api";
+import { diffData } from "./entity-detail";
 import { outlineTagsFromData } from "./outline-tags";
 
 /** 场景冲突层次 → 中文（麦基冲突三层次；checkbox 组标签） */
@@ -186,6 +187,19 @@ export function normalizeOutlineDataForm(
 /** 基线实际摘要的有效值（非字符串 / 纯空白 = 没有摘要，与读取方同口径） */
 function baselineResultSummary(value: unknown): string {
   return typeof value === "string" ? value.trim() : "";
+}
+
+/**
+ * data 表单 → 「归一再 diff」产物（保存提交与 dirty 判定共用同一把尺子）：
+ * `normalizedData` = 要回写表单 / 前移基线的归一值；`dataPatch` = 相对基线的部分提交（无变更 null）。
+ * **基线必须参与**：清空已有实际摘要要靠它落成 `""`（见 normalizeOutlineDataForm）。
+ */
+export function buildOutlineDetailPatch(
+  baselineData: Record<string, unknown>,
+  dataForm: Record<string, unknown>,
+): { normalizedData: Record<string, unknown>; dataPatch: Record<string, unknown> | null } {
+  const normalizedData = normalizeOutlineDataForm(dataForm, baselineData);
+  return { normalizedData, dataPatch: diffData(baselineData, normalizedData) };
 }
 
 /**

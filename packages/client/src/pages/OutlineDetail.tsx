@@ -45,6 +45,7 @@ import { SectionCard } from "@/components/ui/section-card";
 import { ApiError, updateOutlineNode, type UpdateOutlineBody } from "../lib/api";
 import { diffData } from "../lib/entity-detail";
 import {
+  buildOutlineDetailPatch,
   chapterTagPool,
   detailFieldsForNodeType,
   normalizeOutlineDataForm,
@@ -80,13 +81,11 @@ export function isOutlineDetailDirty(
   // 两侧都归一：末尾空行（TagsEditor 续输用）不算 dirty，基线里带空格的旧值也不会一进表单就脏
   const rawBaseline = baseline.data ?? {};
   const baselineData = normalizeOutlineDataForm(rawBaseline);
+  const { normalizedData } = buildOutlineDetailPatch(baselineData, dataForm);
   return (
     shouldCommitTitle(baseline.title, titleValue) ||
     shouldCommitSummary(baseline.summary, summaryValue) ||
-    diffData(
-      baselineData,
-      normalizeDefaultStatus(baselineData, normalizeOutlineDataForm(dataForm, rawBaseline)),
-    ) !== null
+    diffData(baselineData, normalizeDefaultStatus(baselineData, normalizedData)) !== null
   );
 }
 
@@ -231,11 +230,10 @@ export default function OutlineDetail({
     const patch: UpdateOutlineBody = {};
     if (shouldCommitTitle(baseline.title, titleValue)) patch.title = title;
     if (shouldCommitSummary(baseline.summary, summaryValue)) patch.summary = summaryValue.trim();
-    // 归一后再 diff / 提交：tags 末尾空行不能进 payload（nodeTagsSchema min(1) 会 400）；
+    // 归一后再 diff / 提交（lib 唯一实现）：tags 末尾空行不能进 payload（nodeTagsSchema min(1) 会 400）；
     // 带基线归一，清空实际摘要才落成 `""`（删键会被 diffData 当「不提交」）
-    const normalizedData = normalizeOutlineDataForm(dataForm, baseline.data ?? {});
-    const dataDiff = diffData(baseline.data ?? {}, normalizedData);
-    if (dataDiff !== null) patch.data = dataDiff;
+    const { normalizedData, dataPatch } = buildOutlineDetailPatch(baseline.data ?? {}, dataForm);
+    if (dataPatch !== null) patch.data = dataPatch;
     if (Object.keys(patch).length === 0) {
       // 表单已与基线同值：node 可能被外部改名（rail）/ AI 写库更新，先让表单跟随服务端再归零基线，
       // 否则旧表单会被判 dirty 卡死

@@ -4,6 +4,7 @@ import { describe, expect, it } from "vitest";
 import type { OutlineNode } from "@whispering233/ai-editor-shared";
 import {
   CONFLICT_LEVEL_LABEL,
+  buildOutlineDetailPatch,
   chapterTagPool,
   detailFieldsForNodeType,
   normalizeOutlineDataForm,
@@ -250,5 +251,31 @@ describe("normalizeOutlineDataForm（tags 归一：末行空串 / 前后空格�
   it("result_summary：非字符串脏值原样返回（不白造新对象、不改写）", () => {
     const dirty = { result_summary: 42 };
     expect(normalizeOutlineDataForm(dirty)).toBe(dirty);
+  });
+});
+
+// 回归钉：保存路径（handleSave）用的是这个函数——基线丢了就会把「清空实际摘要」再弄丢
+describe("buildOutlineDetailPatch（保存路径：归一再 diff，基线参与）", () => {
+  it("基线有值 + 表单清空 → patch 写空串（不是 {} / null）", () => {
+    const { normalizedData, dataPatch } = buildOutlineDetailPatch(
+      { result_summary: "旧" },
+      { result_summary: "" },
+    );
+    expect(normalizedData).toEqual({ result_summary: "" });
+    expect(dataPatch).toEqual({ result_summary: "" });
+  });
+
+  it("基线没摘要 + 表单纯空白 → 产物不含该键", () => {
+    const { normalizedData, dataPatch } = buildOutlineDetailPatch({}, { result_summary: "  " });
+    expect(normalizedData).not.toHaveProperty("result_summary");
+    expect(dataPatch).toBeNull();
+  });
+
+  it("其它字段：只提交变更，tags 末行空串不进 patch", () => {
+    expect(buildOutlineDetailPatch({ status: "draft" }, { status: "done", tags: ["主线", ""] })).toEqual({
+      normalizedData: { status: "done", tags: ["主线"] },
+      dataPatch: { status: "done", tags: ["主线"] },
+    });
+    expect(buildOutlineDetailPatch({ status: "done" }, { status: "done" }).dataPatch).toBeNull();
   });
 });
