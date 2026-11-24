@@ -75,16 +75,18 @@ describe("createDeepSeekFetch", () => {
     await expect(blank.port.fetchPage({ url: REQUESTED })).rejects.toThrow(/未返回可提取的正文/);
   });
 
-  it("未配置凭据：抛设置页可照做的文案，且不发请求", async () => {
+  it("未配置凭据：抛设置页可照做的文案（设置 → 高级），且不发请求", async () => {
     const fetchImpl = vi.fn(async () => jsonResponse({ content: "x" })) as unknown as typeof fetch;
     const port = createDeepSeekFetch({ resolveAuth: async () => undefined, fetchImpl });
-    await expect(port.fetchPage({ url: REQUESTED })).rejects.toThrow("未配置 DeepSeek API Key：设置 → 模型 → DeepSeek");
+    await expect(port.fetchPage({ url: REQUESTED })).rejects.toThrow(
+      "未配置搜索凭据：设置 → 高级（search.json 的 apiKey）——搜索 / 网页抓取目前仅接入 DeepSeek",
+    );
     expect((fetchImpl as unknown as ReturnType<typeof vi.fn>).mock.calls).toEqual([]);
   });
 
   it("凭据是空串同样按未配置处理", async () => {
     const port = createDeepSeekFetch({ resolveAuth: async () => ({ auth: { apiKey: "   " } }) });
-    await expect(port.fetchPage({ url: REQUESTED })).rejects.toThrow(/未配置 DeepSeek API Key/);
+    await expect(port.fetchPage({ url: REQUESTED })).rejects.toThrow(/未配置搜索凭据/);
   });
 
   it.each([

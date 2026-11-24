@@ -1219,6 +1219,18 @@ export const settingsLlmPutResSchema = z.object({
   saved: z.literal(true),
 });
 
+/**
+ * `search.json`（`~/.ai-editor/`，搜索 / 网页抓取凭据的唯一来源）：只有 `apiKey` 一个键。
+ * strict = 未知键拒绝（配置文件端点的写侧校验）；读侧（server `search-config.ts`）只认 `apiKey`，
+ * 不因多余键让整份凭据失效。
+ */
+export const searchConfigFileSchema = z
+  .object({
+    apiKey: z.string().optional(),
+  })
+  .strict();
+export type SearchConfigFile = z.infer<typeof searchConfigFileSchema>;
+
 // ============ names 端点（「POST /api/v1/names/resolve」，工具调用人类可读化） ============
 
 // 批量名称解析：把工具参数中的 id 解析为人类可读名称（label = 类型中文，name = 实体名/节点标题）
