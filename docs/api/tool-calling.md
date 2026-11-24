@@ -204,12 +204,16 @@ get_entity_summary(type)
   hook 口径不变：`byStatus`（生命周期）+ `byPayoffTiming`
 
 // === 参考资料查询 ===
-search_references(query, type?, tags?)
-  → 匹配的参考资料列表（标题 + 类型 + 标签 + 内容摘要定长截断）
+search_references(query, type?, tags?, body?)
+  → 匹配的参考资料列表（标题 + 类型 + 标签 + 内容摘要定长截断；正文命中的条目还带 `snippet`）
   用途：AI 不知道书里有哪些参考资料时先搜索（标题+tags 关键词命中）再按需取全文
   （详情取全文走 get_entity('reference', id) 的 reference 分支——列表摘要/详情全文分离防长文撑爆响应）
   type 参数（2026-08 修订）：**自由文本分类**（原预置枚举已取消），建议沿用项目内已有分类；
     过滤为结果层原始值比对（summary.type === type）
+  body 参数（2026-11）：`true` = 命中面再加**参考资料正文**（`document_records.content_text` 关键词匹配，
+    全表扫、实测毫秒级，不上 FTS5）；正文命中的条目带 `snippet`（命中位置前后各取一段，窗宽见
+    `query/reference.ts` 的 `REFERENCE_SNIPPET_WINDOW_CHARS`），只按名字/标签命中的条目不带。
+    **不传 / false = 只搜名字与标签**（旧行为逐字保留：顺序与 total 都不变）
 ```
 
 ### 外部检索（自动）
@@ -295,6 +299,11 @@ suggest_connections(entity_id)
 - **章级存在性提示口径（2026-09）**：章级聚合后，埋设机会规则 R3/R4 改为「本章（含其下场景）存在即提示」——**不追求场景级精度**（麦基口径下"没有不转折的场景"→ R4 在成熟大纲里近乎恒真）；reason 带命中计数与最典型场景以保留判别信息。**最典型 = 子树先序第一个命中场景**（确定性判据，不做启发式猜测）；**软删场景不参与计数与典型判定**（与 `suggest_hook_payoff` 同口径）。R2 按角色去重（修掉跨场景重复计数）；
 - `data.expected_resolve_node_id` 为宽松 data 字段（服务端不硬校验），UI 选择器只列章；
 - 「当前章节」= `project.json` 的 `current_position` 所属章（未设置/失效 → 退化树末章），伏笔健康指标与孤儿诊断同口径。
+
+**`overdue` vs `written_unresolved`（2026-11）**：两个字段名近义但口径无关，不可互相替代或改名——
+
+- `overdue`（`analyze_hook_health`）= **时间衰减**：埋设龄期 > 半衰期 × 2，与写作进度无关。
+- `written_unresolved`（`analyze_hook_health` 返回字段，数据源 = `GET /api/v1/hook/written-unresolved`）= **写作进度**：预计回收的章**已写正文**却仍未回收（未软删 + `status ∈ {planted, progressing}` + 设了 `expected_resolve_node_id` + 该章 `content_text` 非空，四个条件一个 SQL 判定），每项带预计回收章号与章标题。
 
 ### 提案类（需确认）
 

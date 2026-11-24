@@ -119,6 +119,21 @@ export function searchChapterIds(db: Db, query: string): string[] {
 }
 
 /**
+ * 参考资料正文全文检索（`search_references` 的 `body` 分支）：`content_text LIKE %query%`，只回命中参考资料 id。
+ *
+ * 口径同 `searchChapterIds`（LIKE 通配符原样透传、无排序分页、不上 FTS5），差别只在 `owner_kind`；
+ * 软删过滤不在这里做——调用方拿 id 与可见参考资料列表求交（见 tools `query/reference.ts`）。
+ */
+export function searchReferenceIds(db: Db, query: string): string[] {
+  const rows = queryDb(db)
+    .select({ ownerId: documentRecords.owner_id })
+    .from(documentRecords)
+    .where(and(eq(documentRecords.owner_kind, "reference"), like(documentRecords.content_text, `%${query}%`)))
+    .all();
+  return rows.map((row) => row.ownerId);
+}
+
+/**
  * 批量取多个 owner 的 `content_text` 投影（列表摘要来源：实体列表的 reference 摘要、章 textLength）。
  *
  * - **一次查询**（IN 集合）——调用方勿逐 owner 调 `getDocument` 造成 N+1

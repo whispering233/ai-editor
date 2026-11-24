@@ -11,7 +11,7 @@ import type { ToolContext } from "../context.js";
 import { closeDatabase, openDatabase, type Db } from "@whispering233/ai-editor-db";
 import { createEntity, softDeleteEntity, upsertDocument } from "@whispering233/ai-editor-db";
 import { runGetEntity } from "./query/entity.js";
-import { runSearchReferences } from "./query/reference.js";
+import { REFERENCE_SNIPPET_WINDOW_CHARS, runSearchReferences } from "./query/reference.js";
 import { buildProposeCreateReference, runProposeCreateReference } from "./proposal/reference.js";
 import { executeCreateReference } from "./executor/reference.js";
 
@@ -72,6 +72,70 @@ describe("search_references", () => {
     softDeleteEntity(db, row.id, "2026-08-02T00:00:00Z");
     const r = runSearchReferences(makeCtx(), { query: "" });
     expect(r.total).toBe(0);
+  });
+});
+
+describe("search_references body（正文命中面，2026-11）", () => {
+  /** 参考资料（正文写进 document_records.content_text） */
+  function makeReference(name: string, contentText?: string, data: Record<string, unknown> = {}): string {
+    const row = createEntity(db, { type: "reference", name, data });
+    if (contentText !== undefined) {
+      upsertDocument(db, {
+        ownerKind: "reference",
+        ownerId: row.id,
+        content: "[]",
+        contentText,
+        now: "2026-11-01T00:00:00Z",
+      });
+    }
+    return row.id;
+  }
+
+  it("body: true → 名称未命中但正文命中的参考资料也列出，且带 snippet", () => {
+    const bodyOnly = makeReference("摘抄三", "第一节：木曰曲直，火曰炎上。");
+    makeReference("摘抄四", "无关内容");
+
+    const r = runSearchReferences(makeCtx(), { query: "木曰曲直", body: true });
+    expect(r.total).toBe(1);
+    expect(r.items[0].id).toBe(bodyOnly);
+    expect(r.items[0].snippet).toContain("木曰曲直");
+  });
+
+  it("不传 body → 正文命中不可见（只搜名字与标签，旧行为逐字保留）", () => {
+    const bodyOnly = makeReference("摘抄三", "第一节：木曰曲直，火曰炎上。");
+    const byName = makeReference("木曰曲直考", "无关内容");
+
+    const r = runSearchReferences(makeCtx(), { query: "木曰曲直" });
+    expect(r.total).toBe(1);
+    expect(r.items[0].id).toBe(byName);
+    expect(r.items[0]).not.toHaveProperty("snippet");
+    expect(r.items.map((item) => item.id)).not.toContain(bodyOnly);
+  });
+
+  it("名称与正文同时命中 → 条目只出现一次（带 snippet）；无正文命中时行为与旧版一致", () => {
+    const both = makeReference("五行摘抄", "金生水、水生木，五行相生。");
+    const r = runSearchReferences(makeCtx(), { query: "五行", body: true });
+    expect(r.items.map((item) => item.id)).toEqual([both]);
+    expect(r.items[0].snippet).toContain("五行相生");
+
+    const noBodyHit = runSearchReferences(makeCtx(), { query: "五行", body: false });
+    expect(noBodyHit.items.map((item) => item.id)).toEqual([both]);
+    expect(noBodyHit.items[0]).not.toHaveProperty("snippet");
+  });
+
+  it("snippet 窗宽 = REFERENCE_SNIPPET_WINDOW_CHARS（前后各取，两侧补省略号）", () => {
+    const target = "命中词";
+    const text = `${"前".repeat(REFERENCE_SNIPPET_WINDOW_CHARS + 10)}${target}${"后".repeat(REFERENCE_SNIPPET_WINDOW_CHARS + 10)}`;
+    makeReference("长摘抄", text);
+
+    const [item] = runSearchReferences(makeCtx(), { query: target, body: true }).items;
+    expect(item.snippet).toBe(`…${"前".repeat(REFERENCE_SNIPPET_WINDOW_CHARS)}${target}${"后".repeat(REFERENCE_SNIPPET_WINDOW_CHARS)}…`);
+  });
+
+  it("软删参考资料即使正文命中也不出现（可见性以实体为准）", () => {
+    const dropped = makeReference("已删摘抄", "木曰曲直");
+    softDeleteEntity(db, dropped, "2026-11-02T00:00:00Z");
+    expect(runSearchReferences(makeCtx(), { query: "木曰曲直", body: true }).total).toBe(0);
   });
 });
 

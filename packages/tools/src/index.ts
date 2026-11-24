@@ -261,6 +261,8 @@ const queryToolDefs: ToolDefinition[] = [
     description:
       "参考资料搜索：按关键词搜索标题+标签命中的参考资料摘要列表（type 分类可选过滤：自由文本分类，" +
       "建议沿用项目内已有分类；tags 标签 AND 过滤）。" +
+      "body: true 时命中面再加**正文**（参考资料摘抄正文关键词匹配；全表扫、毫秒级，代价可接受），" +
+      "正文命中的条目带 snippet（命中位置前后各取一段）；不传或 false = 只搜名字与标签（旧行为）。" +
       "返回摘要（content 为截断后的投影摘要，非全文；截断长度见 db toSummary）——取全文请用 get_entity 的 reference 类型。" +
       "用于 AI 不知道书里有哪些参考资料时先检索。",
     parameters: searchReferencesArgsSchema,
@@ -377,8 +379,11 @@ const hookToolDefs: ToolDefinition[] = [
     name: "analyze_hook_health",
     description:
       "伏笔健康总览（无参）：统计全部活跃伏笔（planted/progressing）——stale（休眠超过半衰期）、" +
-      "overdue（埋设超过两倍半衰期）、blocked（依赖尚未回收）及人类可读 warnings。" +
-      "返回 { current_chapter, active_count, stale, overdue, blocked_chains, warnings }；" +
+      "overdue（埋设超过两倍半衰期）、written_unresolved（预计回收的章**已写正文**却仍未回收，带章号与章标题）、" +
+      "blocked（依赖尚未回收）及人类可读 warnings。" +
+      "**overdue 与 written_unresolved 不是一回事**：overdue 是时间衰减（埋设龄期超过两倍半衰期，与写作进度无关），" +
+      "written_unresolved 是「该回收的章已经写了、伏笔却没回收」（看正文是否已写，不看龄期）。" +
+      "返回 { current_chapter, active_count, stale, overdue, written_unresolved, blocked_chains, warnings }；" +
       "半衰期显式 half_life 优先、缺省按 payoff_timing 映射（" + halfLifeDefaultsText + "）。",
     parameters: analyzeHookHealthArgsSchema,
     permission: TOOL_PERMISSION.AUTO,

@@ -52,6 +52,7 @@
 | PUT | `/api/v1/entity/setting/:id/move` | 实体 CRUD |
 | POST | `/api/v1/entity/event/:id/move_to` | 实体 CRUD |
 | GET | `/api/v1/hook/expected` | 实体 CRUD（伏笔专属只读：本章待回收） |
+| GET | `/api/v1/hook/written-unresolved` | 实体 CRUD（伏笔专属只读：已写未回收） |
 
 ### 章正文（[110-api-manuscript.md](./110-api-manuscript.md))
 

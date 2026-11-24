@@ -128,6 +128,15 @@ describe("@whispering233/ai-editor-tools 入口冒烟", () => {
     for (const [timing, chapters] of Object.entries(DEFAULT_HALF_LIFE)) {
       expect(hookHealthDescription).toContain(`${timing}=${chapters}`);
     }
+ // written_unresolved 与 overdue 名近义反：模型必须能从描述知道两者口径不同（时间衰减 vs 写作进度）
+    expect(hookHealthDescription).toContain("written_unresolved");
+    expect(hookHealthDescription).toContain("overdue");
+    expect(hookHealthDescription).toContain("时间衰减");
+ // search_references 的 body 语义与代价（全表扫）+ 缺省行为（只搜名字与标签）必须写在描述里
+    const referenceSearchDescription = m.getTool("search_references")!.description;
+    expect(referenceSearchDescription).toContain("body");
+    expect(referenceSearchDescription).toContain("snippet");
+    expect(referenceSearchDescription).toContain("只搜名字与标签");
  // 角色优先级档防漂移：两处实体提案 description 的档位片段由 shared 常量插值生成——
  // 期望值现算于常量（不手抄中文 / 不复述清单）；改成手写、漏一档、顺序漂移，逐项比对即报红
     const priorityPairs = CHARACTER_PRIORITIES.map((key) => `${key}(${CHARACTER_PRIORITY_LABELS[key]})`).join("/");

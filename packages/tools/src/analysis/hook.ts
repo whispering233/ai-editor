@@ -18,9 +18,9 @@
 // 软删过滤：listEntities/listRelations/getEntity 默认过滤。
 // signal：全量 hook 遍历为长任务候选，循环中检查（AbortedError）。
 
-import { findOutlineNode, getEntity, listEntities, listRelations, readOutlineFile } from "@whispering233/ai-editor-db";
+import { findOutlineNode, getEntity, listEntities, listHooksWrittenUnresolved, listRelations, readOutlineFile } from "@whispering233/ai-editor-db";
 import { DEFAULT_HALF_LIFE, MAX_ENTITY_LIST_LIMIT, PAYOFF_TIMING } from "@whispering233/ai-editor-shared";
-import type { EntityRow, OutlineFileNode, RelationRecord } from "@whispering233/ai-editor-shared";
+import type { EntityRow, HookStatus, OutlineFileNode, RelationRecord } from "@whispering233/ai-editor-shared";
 import type { ToolContext } from "../context.js";
 import {
   buildChapterIndex,
@@ -196,6 +196,17 @@ export function computeHookHealth(
 
 // ============ analyze_hook_health（伏笔健康总览） ============
 
+/** 「已写未回收」条目（snake_case 输出；数据源 = db `listHooksWrittenUnresolved`） */
+export interface WrittenUnresolvedHook {
+  id: string;
+  name: string;
+  status: HookStatus;
+  expected_resolve_node_id: string;
+  /** 预计回收章的全局章序号（`deriveChapterOrder` 口径） */
+  expected_resolve_chapter_number: number;
+  expected_resolve_chapter_title: string;
+}
+
 /** 伏笔健康总览结果（analyze_hook_health 返回结构，字段名逐字对齐 snake_case） */
 export interface HookHealthOverview {
  /** 当前章节（current_position 口径；未设置时退化树末章） */
@@ -204,8 +215,10 @@ export interface HookHealthOverview {
   active_count: number;
  /** 休眠超过半衰期的活跃伏笔 id */
   stale: string[];
- /** 埋设超过两倍半衰期的活跃伏笔 id */
+ /** 埋设超过两倍半衰期的活跃伏笔 id（**时间衰减**口径，与 written_unresolved 无关） */
   overdue: string[];
+ /** 预计回收章**已写正文**却仍未回收的活跃伏笔（写作进度口径，看正文是否已写，不看龄期） */
+  written_unresolved: WrittenUnresolvedHook[];
  /** 被依赖阻塞的伏笔（blocked）及其阻塞源 */
   blocked_chains: { hookId: string; blockedBy: string[] }[];
  /** 人类可读警告（stale/overdue/blocked 各一条） */
@@ -221,6 +234,9 @@ function isActive(hookStatuses: ReadonlyMap<string, string>, hookId: string): bo
 /**
  * 伏笔健康总览（analyze_hook_health，无参全项目扫描）。
  * 仅统计活跃伏笔（planted/progressing）；_health 为运行时计算，不写回 data。
+ * `written_unresolved` 与健康指标无关联名无关：它是「预计回收章已写正文、伏笔仍未回收」的
+ * 写作进度口径（db `listHooksWrittenUnresolved` 单查询），与 `overdue`（龄期 > 半衰期×2 的时间衰减）
+ * 各自独立——同名不同义会让模型误改。
  * 输出按 hook id 升序（稳定排序）；signal：循环中检查。
  */
 export function runAnalyzeHookHealth(ctx: ToolContext, _args: AnalyzeHookHealthArgs, signal?: AbortSignal): HookHealthOverview {
@@ -232,6 +248,14 @@ export function runAnalyzeHookHealth(ctx: ToolContext, _args: AnalyzeHookHealthA
     active_count: 0,
     stale: [],
     overdue: [],
+    written_unresolved: listHooksWrittenUnresolved(ctx.db, ctx.outlineDir).map((hook) => ({
+      id: hook.id,
+      name: hook.name,
+      status: hook.status,
+      expected_resolve_node_id: hook.expectedResolveNodeId,
+      expected_resolve_chapter_number: hook.expectedResolveChapterNumber,
+      expected_resolve_chapter_title: hook.expectedResolveChapterTitle,
+    })),
     blocked_chains: [],
     warnings: [],
   };
