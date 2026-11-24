@@ -1,0 +1,4 @@
+# 统一 LF：Windows 侧 core.autocrlf 会把工作树转成 CRLF，而「读源码比对字符串」的测试
+# （design-discipline / *-wiring / chapter-editor）断言里写的是 \n，换行一变就整批失效。
+# 本仓开发环境为 Linux/WSL，全仓 LF（二进制由 text=auto 自动识别，不做转换）。
+* text=auto eol=lf
