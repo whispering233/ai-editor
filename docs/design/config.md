@@ -19,6 +19,8 @@
 
 **pi 配置目录的落地方式（单点）**：生效目录 = `pi.json` 的 `agentDir`（键缺失 / 空串）→ 缺省 `~/.ai-editor/pi-agent`；服务启动最早期把它写入 `process.env.PI_CODING_AGENT_DIR`（pi 官方覆盖点，`pi-coding-agent` `dist/config.js` 的 `getAgentDir()`）——本仓**不**从父进程继承的环境变量里取值（这个变量是输出，不是输入）。此后 pi 的**一切**路径都从它派生（凭据 / 模型 / settings / 缓存 / 资源目录），所以只有这一个开关，不存在逐调用点传参。桌面版、CLI 形态、浏览器形态共用同一个默认值，**与用户自己的 pi CLI 配置目录（`~/.pi/agent`）完全隔离**：这里没有的凭据就是没有，pi CLI 那边的扩展 / 会话 / 缓存也不会流进来。
 
+**环境变量是第二来源，不随目录隔离**（pi 语义，本仓不干预）：目录里没有该家凭据时，pi 会去 `process.env` 找 provider 内置变量（`DEEPSEEK_API_KEY` 等，名单在 pi 的 provider 定义里），设置页把这种来源标为「环境变量」。影响：shell 里 export 过 key 时浏览器形态显示「已配置」，而**双击启动的桌面版通常看不到 shell 环境变量** → 同一台机器上两种形态可能不一致；要让文件成为唯一来源，就在 `auth.json` 里写一条（存量优先）。**禁止**在启动时删除进程里的 provider 环境变量（2026-11 决策）：那等于自建一套凭据语义，且 docker / CI 用 env 注入的方式会直接失效。
+
 **首次启用新目录**：新目录是空的（没有凭据 / 模型覆盖 / 参数）——**不做任何拷贝与迁移**，用户自己在设置页重新配置（新写入自然落在 `~/.ai-editor/pi-agent`）。用户旧 `~/.pi/agent` 目录一个字节不动，pi CLI 不受影响；想沿用旧配置就把 `agentDir` 改成 `~/.pi/agent`（或反过来把 `PI_CODING_AGENT_DIR` 指过来共用一份）。
 
 ## 2. 创作根级（`<创作根>/.ai-editor/`，agent 在各本书之间共用）
