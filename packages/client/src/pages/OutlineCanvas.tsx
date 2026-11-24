@@ -244,7 +244,13 @@ function CanvasFlow({ projectId, cards, marks, readingId, deductionIds }: Canvas
           deduction: deductionIds.has(card.id),
           filtered: !matchedIds.has(card.id),
         },
-        // 卡片尺寸 = lib 常量 / 逐卡高度（网格步长与卡片几何同源；颜色仍全走主题表 / token 类）
+        // 卡片尺寸 = lib 常量 / 逐卡高度（网格步长与卡片几何同源；颜色仍全走主题表 / token 类）。
+        // 必须写在 **node.width/height** 而不是只写 style：库的尺寸口径是
+        // `measured ?? node.width ?? initialWidth`（不读 style）——只写 style 时，
+        // 视口外节点（`onlyRenderVisibleElements` 不挂载）尺寸为 0（fitView/边定位不准），
+        // 且每个已挂载节点都会装一个 ResizeObserver 去量它。
+        width: CANVAS_CARD_WIDTH,
+        height: canvasCardHeight(card),
         style: { width: CANVAS_CARD_WIDTH, height: canvasCardHeight(card) },
       })),
     [cards, positions, marks, readingId, deductionIds, matchedIds],
@@ -400,6 +406,8 @@ function CanvasFlow({ projectId, cards, marks, readingId, deductionIds }: Canvas
           fitViewOptions={FIT_VIEW_OPTIONS}
           minZoom={CANVAS_MIN_ZOOM}
           maxZoom={CANVAS_MAX_ZOOM}
+          // 千章书：1000 张卡全量挂载实测 long task 共 5.2s ⇒ 只挂视口内的节点与边
+          onlyRenderVisibleElements
           zoomOnDoubleClick={false}
           attributionPosition="bottom-left"
           ariaLabelConfig={ARIA_LABEL_CONFIG}
