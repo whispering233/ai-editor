@@ -450,7 +450,7 @@
 
 - **GitHub Actions 的 Node 20 弃用告警（v0.0.44 首现）** — 现状：Desktop workflow 报 `actions/upload-artifact@v4` 与 `softprops/action-gh-release@v2` 被强制跑在 Node 24（`Node.js 20 is deprecated`），**仅告警、任务成功**。触发条件：上游改成硬报错，或两个 action 各抬一个 major（`upload-artifact@v5` / `action-gh-release@v3`）时。最小修法：两个 action 各抬一个 major，其余 `actions/*` 一并核对（三个 workflow 共用）。
 
-- **打包态冒烟的「退路判据」可能长期生效**（2026-11 随脚本落地登记，报告级）— 现状：`packages/desktop/scripts/smoke.mjs` 主判据 = 日志含「菜单已就绪」（真建出窗口 + 装好菜单），退路 = 只含 server 启动行；命中退路只打 `::warning::` 并以 0 退出。触发条件：首次 `workflow_dispatch` 后核对 run 日志里有没有那条 warning——若长期走退路，「冒烟绿」会被误读成「窗口验证过」。最小修法：确认 runner 能建窗后删掉退路，只在本地自查时用。
+- **打包态冒烟的判据档位**（2026-11-24 v0.0.66 首发已实测）— 主判据 = 日志含「菜单已就绪」（真建出窗口 + 装好菜单）；退路 = 只含 server 启动行（打 `::warning::` 后仍以 0 退出）。**首发那一次 windows-latest 命中主判据**（日志：「主进程建出窗口并装好菜单」）⇒ Windows runner 能建窗，退路不是常态，不必再假设它长期生效。触发条件：冒烟开始出现 `::warning::`（= 走了退路）或 runner 镜像变动时——先核是不是窗口创建退化了，再决定是否收敛成单一判据。
 
 - **Windows 自动更新的真机闭环** — ✅ **已完成（2026-09-16/17，连续五跳：0.0.44→0.45→0.46→0.47→0.48）**；明细与「代码新旧指纹」见 `50-desktop.md` §5.2 与 `CHANGELOG.md`。**残留两个未专门观测的小项**：升级时是否弹 UAC（预期不弹，per-user）、安装对话框的 Esc/Enter 是否都走「稍后」——真机顺手验。
 - **macOS / Linux 安装包的恢复** — 现状：matrix 里两项已注释（无真实用户需求 + 无 mac 环境可验）。触发条件：出现相应平台的真实用户。（Linux 包本机可随时出；macOS 需 mac runner。）
