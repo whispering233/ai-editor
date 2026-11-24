@@ -8,6 +8,7 @@ import type {
 } from "@whispering233/ai-editor-shared";
 import {
   buildWritingRailRows,
+  expectedHooksForChapter,
   LAST_OPENED_CHAPTERS_KEY,
   parseLastOpenedChapters,
   pickRecentChapter,
@@ -300,5 +301,22 @@ describe("resolveWritingTarget（最近打开优先 → 服务端回退）", () 
 
   it("无最近打开且无已保存正文 → null（空态，不跳第一章）", () => {
     expect(resolveWritingTarget(tree([volume("vol-1", "卷一", [chapter("ch-1", "空章")])]), null)).toBeNull();
+  });
+});
+
+describe("expectedHooksForChapter（切章瞬间不显示上一章的坑）", () => {
+  const HOOKS = [{ id: "hook-1", name: "断剑来历", status: "planted" as const }];
+
+  it("来源章 = 当前章 → 渲染该批条目", () => {
+    expect(expectedHooksForChapter({ chapterId: "ch-1", items: HOOKS }, "ch-1")).toEqual(HOOKS);
+  });
+
+  it("来源章 ≠ 当前章（旧响应还没被新章的替换）→ 空", () => {
+    expect(expectedHooksForChapter({ chapterId: "ch-1", items: HOOKS }, "ch-2")).toEqual([]);
+  });
+
+  it("未加载 / 无选中章 → 空", () => {
+    expect(expectedHooksForChapter(null, "ch-1")).toEqual([]);
+    expect(expectedHooksForChapter({ chapterId: "ch-1", items: HOOKS }, undefined)).toEqual([]);
   });
 });

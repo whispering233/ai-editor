@@ -38,7 +38,7 @@ import type {
   WorkspaceKind,
   WritingStatsRes,
 } from "@whispering233/ai-editor-shared";
-import type { EntityType } from "@whispering233/ai-editor-shared";
+import type { EntityType, HookStatus } from "@whispering233/ai-editor-shared";
 import type { FocusContext } from "./focus";
 
 const API_BASE = "/api/v1";
@@ -321,6 +321,23 @@ export interface ManuscriptRes {
 /** 读取章正文（404 OUTLINE_NODE_NOT_FOUND = 章不存在/已软删；400 VALIDATION_ERROR = 非章节点） */
 export function getManuscript(chapterNodeId: string): Promise<ManuscriptRes> {
   return apiFetch<ManuscriptRes>(`/manuscript/${chapterNodeId}`);
+}
+
+/** 「本章待回收」条目（`GET /api/v1/hook/expected`：只需 rail 一行展示的字段） */
+export interface ExpectedHookItem {
+  id: string;
+  name: string;
+  status: HookStatus;
+}
+
+/** GET /api/v1/hook/expected?node_id= 响应（无分页；空命中 = `items: []`） */
+export interface ExpectedHooksRes {
+  items: ExpectedHookItem[];
+}
+
+/** 取某大纲节点上「待回收」的伏笔（未软删、`data.expected_resolve_node_id` 字面相等、状态未回收） */
+export function getExpectedHooks(nodeId: string): Promise<ExpectedHooksRes> {
+  return apiFetch<ExpectedHooksRes>("/hook/expected", { query: { node_id: nodeId } });
 }
 
 // ============ 码字统计（docs/api/130-api-writing-stats.md） ============

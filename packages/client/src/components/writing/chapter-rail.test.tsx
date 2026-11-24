@@ -10,6 +10,7 @@ import type {
   OutlineTree,
   OutlineVolume,
 } from "@whispering233/ai-editor-shared";
+import type { ExpectedHookItem } from "../../lib/api";
 import { buildWritingRailRows } from "../../lib/writing";
 import { ChapterRail, type ChapterRailProps } from "./chapter-rail";
 import { PanelToggleButton } from "../ui/panel-toggle-button";
@@ -218,5 +219,58 @@ describe("ChapterRail · 否定契约（rail 不是第二个大纲页）", () =>
       expect(html).not.toContain('aria-label="收起卷章导航栏"');
       expect(html).not.toContain('aria-label="展开卷章导航栏"');
     }
+  });
+});
+
+describe("ChapterRail · 本章待回收伏笔", () => {
+  const HOOKS: ExpectedHookItem[] = [
+    { id: "hook-1", name: "断剑来历", status: "planted" },
+    { id: "hook-2", name: "旧盟友背叛", status: "progressing" },
+  ];
+  const withHooks = (overrides: Partial<ChapterRailProps> = {}): string =>
+    render({
+      selectedId: "ch-2",
+      expectedHooks: HOOKS,
+      onToggleExpected: () => {},
+      ...overrides,
+    });
+
+  it("空命中：整块不渲染（无折叠头、无条目链接）", () => {
+    const html = render({ selectedId: "ch-2" });
+    expect(html).not.toContain("本章待回收");
+    expect(html).not.toContain("#/hooks/");
+  });
+
+  it("有命中：折叠头带条数 + 条目 = 伏笔名 + 状态下标 + 跳 `#/hooks/:id`", () => {
+    const html = withHooks();
+    expect(html).toContain("本章待回收 · 2");
+    expect(html).toContain("断剑来历");
+    expect(html).toContain("已埋设");
+    expect(html).toContain("推进中");
+    expect(html).toContain('href="#/hooks/hook-1"');
+    // 折叠头是我们自己的 button（键盘可达），不是 div onClick
+    expect(html).toContain('aria-expanded="true"');
+  });
+
+  it("条目行缩进走同一条占位链（不手写 pl-* 像素）", () => {
+    const html = withHooks();
+    expect(html).toContain('<span class="-ml-2 w-6 shrink-0" aria-hidden="true"></span>');
+    expect(html).not.toContain("pl-8");
+  });
+
+  it("折叠态：只留折叠头，条目与链接不渲染", () => {
+    const html = withHooks({ expectedCollapsed: true });
+    expect(html).toContain("本章待回收 · 2");
+    expect(html).not.toContain("#/hooks/hook-1");
+    expect(html).toContain('aria-expanded="false"');
+  });
+
+  it("紧跟当前章行之后（不是 rail 尾部）；无选中章时不渲染", () => {
+    const html = withHooks();
+    expect(html.indexOf("旧盟友")).toBeLessThan(html.indexOf("本章待回收"));
+    expect(html.indexOf("本章待回收")).toBeLessThan(html.indexOf("第二卷"));
+    expect(render({ selectedId: null, expectedHooks: HOOKS, onToggleExpected: () => {} })).not.toContain(
+      "本章待回收",
+    );
   });
 });

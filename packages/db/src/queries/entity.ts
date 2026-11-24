@@ -28,7 +28,7 @@
 // parseDataColumn 防御解析不动（坏行返回 {}，.2 验证）
 // 事务沿用 withTransaction（native db.transaction），连接级共享已验证（15.2 验证记录①）。
 
-import type { EntityRow, EntitySummary, EntityType, RelationRow } from "@whispering233/ai-editor-shared";
+import type { EntityRow, EntitySummary, EntityType, HookStatus, RelationRow } from "@whispering233/ai-editor-shared";
 import { CHARACTER_PRIORITIES, DEFAULT_ENTITY_LIST_LIMIT, ENTITY_TYPES, MAX_ENTITY_LIST_LIMIT, generateEntityId, panelTopLevelNames } from "@whispering233/ai-editor-shared";
 import { and, asc, count, desc, eq, inArray, isNull, like, or, sql, type SQLWrapper } from "drizzle-orm";
 import { nowIso } from "../storage/atomic.js";
@@ -341,6 +341,47 @@ export function getEntity(db: Db, id: string): EntityRow | null {
     .where(and(eq(entities.id, id), isNull(entities.deleted_at)))
     .get() as unknown as Record<string, unknown> | undefined;
   return row === undefined ? null : rowToEntityRow(row);
+}
+
+/** 「本章待回收」列表项（`GET /api/v1/hook/expected`）：只需 id / name / status（rail 一行展示） */
+export interface ExpectedHookItem {
+  id: string;
+  name: string;
+  /** 归一后的状态：`resolved` / `abandoned` 已被本查询排除，其余未知值按 planted（创建即埋设） */
+  status: HookStatus;
+}
+
+/**
+ * 写作页「本章待回收伏笔」：`data.expected_resolve_node_id === nodeId` 的 hook（未软删、状态未回收）。
+ *
+ * - **JSON 提取带 `json_valid` 守卫**：裸 `json_extract` 遇坏 JSON 直接抛 `malformed JSON`，单条坏行
+ *   会打挂整表查询。CASE 懒求值 ⇒ 只有合法 JSON 才求值内层，坏行 / NULL 走 ELSE（NULL = 不匹配）。
+ * - **只做字面相等**：不派生「已过期 / 该回收了」（那层判定属分析层 `hook.ts` 的 `ready_to_resolve`）。
+ * - 无 limit：单章命中量天然很小（rail 附带信息块），分页无意义。
+ * - 状态口径与客户端 `hookGroupOf` 同源：resolved / abandoned 不列（已回收、已弃用都不再「待回收」）。
+ */
+export function listExpectedHooks(db: Db, nodeId: string): ExpectedHookItem[] {
+  const rows = queryDb(db)
+    .select({ id: entities.id, name: entities.name, data: entities.data })
+    .from(entities)
+    .where(
+      and(
+        isNull(entities.deleted_at),
+        eq(entities.type, "hook"),
+        sql`CASE WHEN json_valid(${entities.data}) THEN json_extract(${entities.data}, '$.expected_resolve_node_id') END = ${nodeId}`,
+      ),
+    )
+    // 名称升序 + id 稳定次序（rail 行序可预期，不随创建序漂移）
+    .orderBy(asc(entities.name), asc(entities.id))
+    .all();
+
+  const items: ExpectedHookItem[] = [];
+  for (const row of rows) {
+    const status = parseDataColumn(row.data).status;
+    if (status === "resolved" || status === "abandoned") continue;
+    items.push({ id: row.id, name: row.name, status: status === "progressing" ? "progressing" : "planted" });
+  }
+  return items;
 }
 
 /** 实体的 Delta 计数（详情响应 deltaCount；目标实体软删的 Delta 不可见） */

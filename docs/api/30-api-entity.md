@@ -365,3 +365,36 @@ id: string;                    // 事件 id（ev- 前缀）
 4. `moveEvent` 重排全局事件线性序（组内序 = 全局序投影，跨组后全数组重排）。
 
 ---
+
+### GET /api/v1/hook/expected
+
+伏笔专属只读端点（不属泛型 `/entity` 面）：取**挂在某个大纲节点上的待回收伏笔**，供写作页卷章导航栏的「本章待回收 · N」块使用。
+
+**为什么不走 `GET /api/v1/entity/hook?filters=`**：`data.expected_resolve_node_id` 是伏笔专属语义，通用 `filters` 只有 `status` / `tags`——把节点过滤塞进通用查询面，等于让一条伏笔规则漏进所有实体类型的口径。
+
+```typescript
+// Query（必填；缺省 / 空串 → 400 VALIDATION_ERROR）
+{
+  node_id: string;   // 大纲节点 id（通常为当前章 ch-…）
+}
+
+// Res: 200（无分页：单章命中量天然很小）
+{
+  items: Array<{
+    id: string;                // hook- 前缀
+    name: string;
+    status: "planted" | "progressing";   // 已归一到「未回收」两态（缺失 status → planted）
+  }>;
+}
+
+// Res: 400
+{ error: { code: "VALIDATION_ERROR" } }   // 缺 node_id
+```
+
+**语义**：
+
+- 命中 = 未软删 + `type = 'hook'` + `data.expected_resolve_node_id` **字面相等**于 `node_id`（**不做**「已过期 / 该回收了」派生——那层判定属分析层 `packages/tools` 的 `ready_to_resolve`）。
+- 状态未回收：`resolved` / `abandoned` 不列（已回收、已弃用都不再「待回收」），口径与客户端 `hookGroupOf` 的 active 分组同源；`data.status` 缺失按 `planted`（创建即埋设）。
+- **坏 JSON 不打挂列表**：`data` 提取带 `json_valid` 守卫（SQLite `CASE` 懒求值），单条非法 JSON 行不匹配、不打挂整表查询（同 `listEntities` 的 `parseDataColumn` 防御口径）。
+- 排序 = `name` 升序 + `id` 升序（rail 行序稳定）；空命中 → `items: []`（客户端据此不渲染整块）。
+- 写侧不变：预计回收节点仍是 `data.expected_resolve_node_id`（`hookDataSchema`，UI 选择器只列章）。
