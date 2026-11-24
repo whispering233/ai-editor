@@ -252,6 +252,12 @@ describe("ChapterRail · 本章待回收伏笔", () => {
     expect(html).toContain('aria-expanded="true"');
   });
 
+  it("条目行缩进走同一条占位链（不手写 pl-* 像素）", () => {
+    const html = withHooks();
+    expect(html).toContain('<span class="-ml-2 w-6 shrink-0" aria-hidden="true"></span>');
+    expect(html).not.toContain("pl-8");
+  });
+
   it("折叠态：只留折叠头，条目与链接不渲染", () => {
     const html = withHooks({ expectedCollapsed: true });
     expect(html).toContain("本章待回收 · 2");

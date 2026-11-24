@@ -10,6 +10,7 @@ import type {
   OutlineChapter,
   OutlineTree,
 } from "@whispering233/ai-editor-shared";
+import type { ExpectedHookItem } from "./api";
 import { numberOutline } from "./outline-tree";
 
 /** 卷行：只做折叠分组与「N章」计数（rail 不是大纲页，无结构编辑能力） */
@@ -163,6 +164,23 @@ export function pickRecentChapter(outline: OutlineTree | null): string | null {
     }
   }
   return bestId;
+}
+
+/** 已加载的「本章待回收」条目 + 来源章 id（来源与 items 绑在一起，见下） */
+export interface LoadedExpectedHooks {
+  chapterId: string;
+  items: ExpectedHookItem[];
+}
+
+/**
+ * rail 显示的「本章待回收」条目：**只认来源章 = 当前章**。切到另一张存在的章时 state 还是旧章的
+ * （等新响应才更新），此处直接派生为空，避免旧章伏笔挂到新章行下（seq 守卫只挡旧响应覆盖新章）。
+ */
+export function expectedHooksForChapter(
+  loaded: LoadedExpectedHooks | null,
+  chapterId: string | undefined,
+): ExpectedHookItem[] {
+  return loaded !== null && loaded.chapterId === chapterId ? loaded.items : [];
 }
 
 /** 最近打开仍在该书可见大纲 → 用它；否则回退 `pickRecentChapter`；大纲未加载 → null */

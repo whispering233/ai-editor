@@ -22,10 +22,17 @@ import { useMediaQuery } from "../hooks/use-media-query";
 import { useDataRefresh } from "../hooks/use-data-refresh";
 import { useOutlineLoader } from "../hooks/use-outline-loader";
 import { useWritingRail } from "../hooks/use-writing-rail";
-import { getExpectedHooks, type ExpectedHookItem } from "../lib/api";
+import { getExpectedHooks } from "../lib/api";
 import { errorBannerClass, skeletonClass } from "../lib/styles";
 import { cn } from "../lib/utils";
-import { buildWritingRailRows, readLastOpenedChapter, resolveWritingTarget, writeLastOpenedChapter } from "../lib/writing";
+import {
+  buildWritingRailRows,
+  expectedHooksForChapter,
+  readLastOpenedChapter,
+  resolveWritingTarget,
+  writeLastOpenedChapter,
+  type LoadedExpectedHooks,
+} from "../lib/writing";
 import { useProjectStore } from "../stores/project";
 import { useUiStore } from "../stores/ui";
 
@@ -70,22 +77,24 @@ export default function Writing({ chapterId }: { chapterId?: string }) {
     rows.some((row) => row.kind === "chapter" && row.id === chapterId);
 
   // 「本章待回收」伏笔（rail 附带信息块）：失败静默（不挡写作，无命中整块不渲染）；
-  // seq 守卫丢弃快速切章时旧章的迟到响应。数据源 = `GET /hook/expected?node_id=`（docs/api/30-api-entity.md）。
-  const [expectedHooks, setExpectedHooks] = useState<ExpectedHookItem[]>([]);
+  // seq 守卫丢弃快速切章时旧章的迟到响应；items 与来源章绑存，渲染侧只认当前章
+  // （`expectedHooksForChapter`）——否则切章那一两帧新章行下会挂旧章的坑。
+  // 数据源 = `GET /hook/expected?node_id=`（docs/api/30-api-entity.md）。
+  const [expectedHooksData, setExpectedHooksData] = useState<LoadedExpectedHooks | null>(null);
   const [expectedCollapsed, setExpectedCollapsed] = useState(false);
   const expectedSeq = useRef(0);
   const reloadExpectedHooks = useCallback(() => {
     const seq = ++expectedSeq.current;
     if (chapterId === undefined || !chapterExists) {
-      setExpectedHooks([]);
+      setExpectedHooksData(null);
       return;
     }
     getExpectedHooks(chapterId).then(
       (res) => {
-        if (expectedSeq.current === seq) setExpectedHooks(res.items);
+        if (expectedSeq.current === seq) setExpectedHooksData({ chapterId, items: res.items });
       },
       () => {
-        if (expectedSeq.current === seq) setExpectedHooks([]);
+        if (expectedSeq.current === seq) setExpectedHooksData(null);
       },
     );
   }, [chapterId, chapterExists]);
@@ -181,7 +190,7 @@ export default function Writing({ chapterId }: { chapterId?: string }) {
         // 详情收起时右钮回到本 header 右端组末尾（详情展开时在正文页头动作组末尾）
         detailCollapsed={isDesktop ? railLayout.detailCollapsed : undefined}
         onToggleDetail={detailHidden ? toggleRailDetail : undefined}
-        expectedHooks={expectedHooks}
+        expectedHooks={expectedHooksForChapter(expectedHooksData, chapterId)}
         expectedCollapsed={expectedCollapsed}
         onToggleExpected={toggleExpected}
       />

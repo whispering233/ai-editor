@@ -249,8 +249,10 @@ export function ChapterRail({
                               <a
                                 href={`#${entityDetailPath("hook", hook.id)}`}
                                 data-expected-hook-id={hook.id}
-                                className="flex h-7 items-center gap-2 rounded-sm py-0 pl-8 pr-2 text-foreground transition-colors hover:bg-muted"
+                                className="flex h-7 items-center gap-2 rounded-sm px-2 text-foreground transition-colors hover:bg-muted"
                               >
+                                {/* 缩进占位：与上一级折叠头同一条占位链（`px-2` + 24px 盒 + `gap-2`） */}
+                                <span className="-ml-2 w-6 shrink-0" aria-hidden />
                                 <span
                                   className="min-w-0 flex-1 truncate text-sm"
                                   title={hook.name}
