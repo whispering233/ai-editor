@@ -1,6 +1,7 @@
 // 桌面版 preload（**必须 CJS**：沙箱 preload 不支持 ESM，见 `docs/design/50-desktop.md` §3）。
 //
-// 只经 `contextBridge` 暴露**目录选择一个能力**——不暴露 fs / shell / ipcRenderer 原语。
+// 只经 `contextBridge` 暴露两个能力（目录选择 + 关窗落盘回执）——不暴露 fs / shell / ipcRenderer 原语。
+// 通道名在这里写字面量而非 import：沙箱 preload 只能 require electron（`50-desktop.md` §3）。
 // 浏览器形态（npm CLI + 浏览器）没有这个桥，client 侧一律能力检测（见 `client/src/lib/desktop.ts`）。
 import { contextBridge, ipcRenderer } from "electron";
 
@@ -11,4 +12,25 @@ contextBridge.exposeInMainWorld("aiEditorDesktop", {
   getLibraryRoot: (): Promise<string | null> => ipcRenderer.invoke("desktop:get-library-root"),
   /** 更改书库位置：写配置 + 重启应用；返回新路径，用户取消返回 null */
   changeLibraryRoot: (): Promise<string | null> => ipcRenderer.invoke("desktop:change-library-root"),
+  /**
+   * 关窗前落盘（`50-desktop.md` §1.1）：主进程拦 close 后调一次 handler，把结果当回执发回。
+   * 返回注销函数；handler 抛错按失败回执（不让主进程白等到超时）。
+   */
+  onFlushRequest: (handler: () => Promise<boolean>): (() => void) => {
+    const listener = (): void => {
+      void (async () => {
+        let ok = false;
+        try {
+          ok = (await handler()) === true;
+        } catch {
+          ok = false;
+        }
+        ipcRenderer.send("desktop:flush-done", ok);
+      })();
+    };
+    ipcRenderer.on("desktop:flush-request", listener);
+    return () => {
+      ipcRenderer.removeListener("desktop:flush-request", listener);
+    };
+  },
 });

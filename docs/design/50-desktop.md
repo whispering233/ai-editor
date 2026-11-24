@@ -15,6 +15,18 @@
 
 **不变式**：桌面版启动路径**不得**依赖 `process.cwd()` 或命令行参数——macOS 下 cwd 是 `/`，双击启动没有可控参数。
 
+### 1.1 退出前的未保存内容（flush 通道，2026-09）
+
+正文只在页面自己的保存动作里落盘，而空闲自动保存（`AUTOSAVE_DELAY_MS`）窗口内的改动还没落盘 ⇒ 关窗是「最后一次落盘机会」，必须经一条通道，**不得在 `before-quit` 里抢跑 `closeServer()`**（落盘要打 HTTP，服务端得活到那时）：
+
+1. 主进程 `win.on("close")` 拦一次：`preventDefault()` → `webContents.send("desktop:flush-request")` → 等渲染侧 `desktop:flush-done(ok)` 回执，上限 `FLUSH_TIMEOUT_MS`（`main.ts`）。
+2. 渲染侧 flush = **栈顶保存动作**：`await triggerSaveShortcut()`（`save-shortcut.ts` 的注册栈）。`null` / `undefined` / `true` = 成功（`null` = 本页无保存动作）；`false` 或 reject = 失败。判定单源 = `client/src/lib/desktop-flush.ts` 的 `flushSucceeded`，接线在外壳层 `AppShell`（任意页面关窗都落盘）。
+3. 失败或超时 → **一次**原生确认框（`type: "warning"`，按钮 `["留在这里", "仍要退出"]`，`defaultId: 0` 且 `cancelId: 0`）：选「留在这里」不关窗并落日志；选「仍要退出」照关并落日志（用户选择留痕）。
+4. 成功 → 直接关。等待期间的第二次 close 只 `preventDefault()`、不再发请求（防重入标志），选「留在这里」后复位。
+5. 退出链不变：`window-all-closed → app.quit()`、`before-quit → closeServer()`——flush 已在关窗前收口。
+
+**不做**（有意）：浏览器形态的 `pagehide` 兜底（flush 通道只属桌面版）、崩溃 / 断电恢复（另一个问题域）——两者触发条件见 `backlog.md`。
+
 ## 2. 配置与数据位置
 
 | 载体 | 内容 | 归属 |
@@ -51,13 +63,14 @@
 | 主进程 | **ESM** | 主进程走 Node ESM loader；与全仓 ESM 一致 |
 | preload | **必须 CJS**（源文件 `preload.cts`） | 沙箱 preload 不支持 ESM（Electron 官方 ESM 文档明列）——问题 4 定了 `sandbox: true`，所以这不是风格选择而是硬约束 |
 
-窗口安全基线：`contextIsolation: true`、`nodeIntegration: false`、`sandbox: true`。preload 经 `contextBridge` **只暴露目录选择一个能力**，不暴露 fs / shell / ipcRenderer 原语。
+窗口安全基线：`contextIsolation: true`、`nodeIntegration: false`、`sandbox: true`。preload 经 `contextBridge` **只暴露两个能力**（目录选择、关窗落盘回执，见 §1.1），不暴露 fs / shell / ipcRenderer 原语；通道名在 `preload.cts` 里写字面量而非 import——沙箱 preload 只能 `require("electron")`。
 
 ## 4. 原生能力边界
 
 | 能力 | 处理 |
 | :--- | :--- |
 | 目录选择 | preload `pickDirectory()` → 主进程 `dialog.showOpenDialog({properties:['openDirectory']})`。client 侧**能力检测**（无该 API 则不渲染按钮），浏览器形态保留手输路径框 |
+| 关窗前落盘 | 主进程拦 `win.close` → preload 转发的 `onFlushRequest(handler)` → 渲染侧保存后回执 `ok`；口径与失败分支见 §1.1。不暴露 `ipcRenderer` 原语 |
 | 应用菜单 | 最小模板：Edit 角色（undo/redo/cut/copy/paste/selectAll）+ reload + devtools（仅 dev）+ 打开书库目录 + 打开日志目录 + quit/close。**macOS 上不设菜单 ⇒ Cmd+C/V 失效**（输入框粘贴全废），菜单是刚需不是装饰 |
 | 外链与导航 | `setWindowOpenHandler` → **一律 deny** + `shell.openExternal`；`will-navigate` 只放行同源 `http://127.0.0.1:<端口>`（含 SPA hash 变化），其余 `preventDefault` 后转外部浏览器；**非 http(s) 协议直接丢弃**（不调 openExternal）。参考资料页有 `target="_blank"` 外链，不拦就弹出无地址栏的怪窗口 |
 | 导出下载（项目 zip / 小说文档 zip / 纯文本 TXT） | **零改动**：Electron 默认弹保存对话框（只有显式调 `setSavePath` 才会静默落盘）；三条导出共用同一 `<a download>` 管道，「目录选择」属未排期项（见 `backlog.md`） |
