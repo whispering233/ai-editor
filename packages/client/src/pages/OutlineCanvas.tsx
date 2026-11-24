@@ -10,8 +10,8 @@
 // 有存量视口则用它。卡片高度随内容（无状态无标签 = 68、有 = 92）。
 // 缩放分级（LOD）只换容器上的 `lod-full` / `lod-far` 类（跨档才 setState，不逐帧重渲染节点），
 // 显隐规则全在 components/outline-canvas/canvas-theme.css。
-// 筛选（组件态，刷新即清）= 左上工具条的筛选按钮 + Popover：状态 / 剧情线标签，「同维度 OR、跨维度 AND」
-// （判定全在 lib/outline-canvas-filter）——未命中卡只降透明度（坐标与拖拽 / 选中交互保留），
+// 筛选（组件态，刷新即清）= 左上工具条的筛选按钮 + Popover：卷 / 状态 / 剧情线标签，「同维度 OR、跨维度 AND」
+// （判定全在 lib/outline-canvas-filter）——未命中卡只降透明度（坐标与拖拽 / 选中交互保留、不重排），
 // 端点被筛掉的连线不画，命中 0 张时画布中央提示「没有符合条件的章节」。
 //
 // 连线 = `plot_edge`（章 → 章）：关系的列表是唯一事实源（`listRelations`），边每次从它派生
@@ -82,6 +82,7 @@ import {
 import {
   applyCanvasFilter,
   canvasTagOptions,
+  canvasVolumeOptions,
   EMPTY_CANVAS_FILTER,
   isCanvasFilterActive,
   type CanvasFilter,
@@ -186,7 +187,8 @@ function CanvasFlow({ projectId, cards, marks, readingId, deductionIds }: Canvas
   }, []);
   /** 画布筛选（组件态：刷新即清，不写 localStorage / 不进 URL） */
   const [filter, setFilter] = useState<CanvasFilter>(EMPTY_CANVAS_FILTER);
-  /** 标签池 = 全量卡片派生（不随筛选收窄，否则勾一个标签后其余选项就消失） */
+  /** 筛选池 = 全量卡片派生（不随筛选收窄，否则勾一项后其余选项就消失） */
+  const volumeOptions = useMemo(() => canvasVolumeOptions(cards), [cards]);
   const tagOptions = useMemo(() => canvasTagOptions(cards), [cards]);
 
   // ===== 连线（plot_edge）=====
@@ -422,7 +424,12 @@ function CanvasFlow({ projectId, cards, marks, readingId, deductionIds }: Canvas
           <Background variant={BackgroundVariant.Dots} gap={24} size={1} />
           {/* 左上竖向工具条：筛选按钮在上、缩放组在下（内层 Panel 的外距 / 绝对定位在 canvas-theme.css 归零） */}
           <Panel position="top-left" className="canvas-toolbar flex flex-col items-start gap-2">
-            <CanvasFilterControl filter={filter} tagOptions={tagOptions} onChange={setFilter} />
+            <CanvasFilterControl
+              filter={filter}
+              volumeOptions={volumeOptions}
+              tagOptions={tagOptions}
+              onChange={setFilter}
+            />
             <Controls showInteractive={false} />
           </Panel>
           {/* 尺寸走 style：v12 的 MiniMap 用 `style.width/height` 决定 SVG 尺寸（props 已废弃） */}

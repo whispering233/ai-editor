@@ -94,6 +94,8 @@ export interface CanvasSavedState {
 export interface CanvasChapterCard {
   id: string;
   title: string;
+  /** 所属卷 id；**存量直挂 root 的章** = 空串（画布按卷筛选按它命中） */
+  volumeId: string;
   /** 卷号文案（`第N卷`）；**存量直挂 root 的章** = 空串（title 里省略该段） */
   volumeLabel: string;
   /** 章号数值（1-based，与 `chapterLabel` 同源）：far 档左上角角标只显示它 */
@@ -129,6 +131,7 @@ export function canvasChapterCards(tree: OutlineTree | null): CanvasChapterCard[
     return {
       id: chapter.chapterId,
       title: chapter.chapterTitle,
+      volumeId: chapter.volumeId,
       volumeLabel: chapter.volumeLabel,
       chapterNumber: chapter.chapterNumber,
       chapterLabel: chapter.chapterLabel,
