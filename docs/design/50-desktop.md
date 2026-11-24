@@ -39,7 +39,7 @@
 | `<userData>/desktop.json`（应用级） | `projectRoot`（书库位置，绝对路径） | 桌面版专属，见 `config.md` |
 | `<userData>/logs/ai-editor.log` | 主进程 console 输出（含 server 启动日志） | 桌面版专属；GUI 用户没有终端，日志是唯一排障线索 |
 | `<创作根>/.ai-editor/config.json` | `debug` / `lastProject` | 服务端，语义不变 |
-| `~/.pi/agent/` | 凭据 / 模型 / settings | pi 家目录，**与 CLI 形态共享**——桌面版不发明第二份凭据真相源 |
+| pi 配置目录（缺省 `~/.ai-editor/pi-agent/`） | 凭据 / 模型 / settings | 本机级，**桌面版与 CLI/浏览器形态共用同一份**——桌面版不发明第二份凭据真相源；与用户自己的 pi CLI 目录（`~/.pi/agent`）隔离，见 `config.md` §1 |
 
 **userData 的平台含义**（Electron `app.getPath('userData')` = `appData` + 应用名）：Windows `%APPDATA%\AI Editor\`、macOS `~/Library/Application Support/AI Editor/`、Linux `~/.config/AI Editor/`。
 
@@ -184,8 +184,8 @@ macOS 无卸载器（拖废纸篓即卸）→ 本机制只对 Windows 生效；�
 
 | 形态 | 启动 | 创作根来源 | 凭据 | 分发 |
 | :--- | :--- | :--- | :--- | :--- |
-| 桌面版 | 双击安装包 | `desktop.json`（首次启动选择） | `~/.pi/agent/` | GitHub Releases 安装包 |
-| CLI/npm 版 | `npx ai-editor [目录]` | 启动参数（缺省 `cwd`） | `~/.pi/agent/` | npm（`publish.yml`） |
+| 桌面版 | 双击安装包 | `desktop.json`（首次启动选择） | 本机 pi 配置目录（两种形态同一份） | GitHub Releases 安装包 |
+| CLI/npm 版 | `npx ai-editor [目录]` | 启动参数（缺省 `cwd`） | 本机 pi 配置目录（两种形态同一份） | npm（`publish.yml`） |
 
 - 两者**共用** server 全部逻辑与数据语义；差异只在「创作根从哪来」「凭据之外的偏好存哪」。
 - 桌面版不引入任何自建后端；云端存档仍是用户自己的 WebDAV 副本（`40-cloud-sync.md`）。

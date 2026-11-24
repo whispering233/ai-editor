@@ -280,7 +280,7 @@
 
 **语义**：
 - 导出**当前打开项目**（无项目 → 409 `NO_PROJECT_OPEN`，与 `/config` 一致）。
-- zip 天然不含 DeepSeek key（key 存 pi agent dir 的 `~/.pi/agent/auth.json`，不入项目文件；旧的 `~/.ai-editor/config.json` 已废弃、代码忽略）。
+- zip 天然不含 DeepSeek key（key 存 pi 配置目录的 `auth.json`，不入项目文件；目录口径见 `../design/config.md`）。
 - 三文件缺失任一 → 500 `INTERNAL_ERROR`（打开的项目三文件必然齐全，缺失即损坏，不导出半成品包）。
 - 包内条目 = 三文件 + **可选** `AGENTS.md`（存在才含；旧包无此条目照常可导入）。
 - **`sessions/` 目录不在包内**（2026-09）：会话是纯本地目录，不进导出 zip（也不进备份/云端）——导出包只剩三文件（+ 可选规则）；正文与参考资料随 `data.db` 走，无额外目录。
