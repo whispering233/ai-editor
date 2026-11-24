@@ -14,11 +14,34 @@
 //
 // 绝不写入项目文件（项目目录内的 `.pi/` 同样不参与：settings 实例 projectTrusted=false）。
 
+import { existsSync, mkdirSync, readFileSync } from "node:fs";
+import { dirname, isAbsolute } from "node:path";
 import { Hono } from "hono";
 import type { AuthInteraction } from "@earendil-works/pi-ai";
 import { CredentialSynchronizationError, type ModelRuntime } from "@earendil-works/pi-coding-agent";
-import { settingsLlmGetResSchema, settingsLlmPutReqSchema } from "@whispering233/ai-editor-shared/schemas";
+import {
+  configFileGetResSchema,
+  configFilePutReqSchema,
+  configFilePutResSchema,
+  settingsLlmGetResSchema,
+  settingsLlmPutReqSchema,
+  settingsPiDirPutReqSchema,
+  settingsPiDirResSchema,
+} from "@whispering233/ai-editor-shared/schemas";
+import { writeTextAtomic } from "@whispering233/ai-editor-db";
+import type { ConfigFileName } from "@whispering233/ai-editor-shared/schemas";
+import { hasActiveChat } from "../chat-runtime.js";
+import { getCurrentProject } from "../middleware/project.js";
 import { HttpError, ok } from "../middleware/error.js";
+import {
+  DEFAULT_PI_AGENT_DIR,
+  applyPiConfigChange,
+  checkConfigFileText,
+  configFilePath,
+  isConfigFileName,
+  resolvePiAgentDir,
+  writeConfiguredAgentDir,
+} from "../pi-agent-dir.js";
 import {
   PI_DEFAULT_THINKING_LEVEL,
   getModelRuntime,
@@ -227,4 +250,79 @@ settingsRoutes.put("/llm", async (c) => {
   if (thinking_level !== undefined) settings.setDefaultThinkingLevel(thinking_level);
 
   return c.json(ok({ saved: true })); // settingsLlmPutResSchema 形状
+});
+
+// =============================================================================
+// 本机配置文件（`docs/api/90-api-settings.md`「本机配置文件」）
+//
+// 两个资源、职责不重叠：
+// - `GET/PUT /pi/dir`：pi 配置目录（`~/.ai-editor/pi.json` 的 `agentDir`；改完**立即生效**）
+// - `GET/PUT /config-file/:name`：4 份配置文件的整份文本（含明文凭据——只在本机回环端点回传）
+//
+// `name` 一律走 shared `CONFIG_FILE_NAMES` 白名单 → 绝对路径映射表：**永不拼接客户端传入值**。
+// =============================================================================
+
+/** 生效目录 + 缺省目录（`GET` 与 `PUT` 同形） */
+function piDirPayload(): { dir: string; defaultDir: string } {
+  return { dir: resolvePiAgentDir(), defaultDir: DEFAULT_PI_AGENT_DIR };
+}
+
+settingsRoutes.get("/pi/dir", (c) => c.json(ok(settingsPiDirResSchema.parse(piDirPayload()))));
+
+// PUT /api/v1/settings/pi/dir —— 写 pi.json 并立即生效（在途对话拒绝：换目录会重建会话运行时）
+settingsRoutes.put("/pi/dir", async (c) => {
+  const raw = await c.req.json().catch(() => null); // 空 body / 非法 JSON → 校验失败
+  const parsed = settingsPiDirPutReqSchema.safeParse(raw);
+  if (!parsed.success) throw parsed.error; // → app.onError → 400 VALIDATION_ERROR
+  const dir = parsed.data.dir.trim();
+  if (dir === "" || !isAbsolute(dir)) {
+    // 相对路径会让 pi 把凭据写到 cwd（备份包/共享目录里）——必须在写盘前拒绝
+    throw new HttpError(400, "VALIDATION_ERROR", "pi 配置目录必须是绝对路径");
+  }
+  const project = getCurrentProject();
+  if (project !== null && hasActiveChat(project.root)) {
+    throw new HttpError(409, "CHAT_BUSY", "当前项目有进行中的对话，等它结束后再改配置目录");
+  }
+  writeConfiguredAgentDir(dir);
+  applyPiConfigChange(dir);
+  return c.json(ok(settingsPiDirResSchema.parse(piDirPayload())));
+});
+
+/** `:name` 白名单校验（不在 shared 枚举内 → 400，绝不进入路径拼接） */
+function requireConfigFileName(raw: string): ConfigFileName {
+  if (!isConfigFileName(raw)) throw new HttpError(400, "VALIDATION_ERROR", `不支持的文件名：${raw}`);
+  return raw;
+}
+
+// GET /api/v1/settings/config-file/:name —— 整份文本（不存在 → exists:false + 空文本）
+settingsRoutes.get("/config-file/:name", (c) => {
+  const name = requireConfigFileName(c.req.param("name"));
+  const path = configFilePath(name);
+  const exists = existsSync(path);
+  return c.json(
+    ok(
+      configFileGetResSchema.parse({
+        name,
+        exists,
+        content: exists ? readFileSync(path, "utf8") : "",
+      }),
+    ),
+  );
+});
+
+// PUT /api/v1/settings/config-file/:name —— 先按 pi 的读口径校验，再原子写（失败不落盘）
+settingsRoutes.put("/config-file/:name", async (c) => {
+  const name = requireConfigFileName(c.req.param("name"));
+  const raw = await c.req.json().catch(() => null);
+  const parsed = configFilePutReqSchema.safeParse(raw);
+  if (!parsed.success) throw parsed.error;
+  const content = parsed.data.content;
+  const invalid = checkConfigFileText(name, content);
+  if (invalid !== null) throw new HttpError(400, "VALIDATION_ERROR", invalid);
+
+  const path = configFilePath(name);
+  mkdirSync(dirname(path), { recursive: true });
+  writeTextAtomic(path, content); // 保用户缩进与注释（models.json 允许注释）
+  applyPiConfigChange(); // 目录未变，但 pi 必须重新读文件（凭据 / 模型 / 参数）
+  return c.json(ok(configFilePutResSchema.parse({ saved: true })));
 });

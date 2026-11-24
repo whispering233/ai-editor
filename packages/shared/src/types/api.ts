@@ -1231,6 +1231,46 @@ export const searchConfigFileSchema = z
   .strict();
 export type SearchConfigFile = z.infer<typeof searchConfigFileSchema>;
 
+// ============ 设置：本机配置文件（`GET/PUT /api/v1/settings/config-file/:name`） ============
+
+/**
+ * 设置页「高级」可编辑的本机配置文件（**编译期枚举**）。服务端用它做 name → 绝对路径的白名单映射，
+ * 客户端传不进别的值（与「会话 id 不拼路径」同一条纪律）。
+ */
+export const CONFIG_FILE_NAMES = ["auth.json", "models.json", "settings.json", "search.json"] as const;
+export type ConfigFileName = (typeof CONFIG_FILE_NAMES)[number];
+
+/** `GET /settings/pi/dir` 与 `PUT` 的响应（同形）：生效目录 + 缺省目录 */
+export const settingsPiDirResSchema = z.object({
+  dir: z.string(), // 生效目录（pi.json 的 agentDir 或缺省）
+  defaultDir: z.string(), // 缺省目录（前端「恢复默认」直接 PUT 它）
+});
+
+/** `PUT /settings/pi/dir` 请求体 */
+export const settingsPiDirPutReqSchema = z
+  .object({
+    dir: z.string(), // 绝对路径（非绝对 / 空串 → 服务端 400）
+  })
+  .strict();
+
+/** `GET /settings/config-file/:name` 响应（文件不存在 → exists=false + 空文本） */
+export const configFileGetResSchema = z.object({
+  name: z.enum(CONFIG_FILE_NAMES),
+  exists: z.boolean(),
+  content: z.string(), // 原文（含明文凭据；只在本机回环端点回传）
+});
+
+/** `PUT /settings/config-file/:name` 请求体 / 响应 */
+export const configFilePutReqSchema = z
+  .object({
+    content: z.string(), // 整份文件文本（原子写，保留用户缩进与注释）
+  })
+  .strict();
+
+export const configFilePutResSchema = z.object({
+  saved: z.literal(true),
+});
+
 // ============ names 端点（「POST /api/v1/names/resolve」，工具调用人类可读化） ============
 
 // 批量名称解析：把工具参数中的 id 解析为人类可读名称（label = 类型中文，name = 实体名/节点标题）

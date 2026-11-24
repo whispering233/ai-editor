@@ -13,9 +13,11 @@ import { mkdirSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, isAbsolute, join } from "node:path";
 import { writeJsonAtomic } from "@whispering233/ai-editor-db";
+import { CONFIG_FILE_NAMES, searchConfigFileSchema, type ConfigFileName } from "@whispering233/ai-editor-shared/schemas";
 import { disposeProjectRuntime } from "./chat-runtime.js";
 import { applyHttpProxySettings, configureHttpDispatcher } from "./http-dispatcher.js";
 import { getSettingsManager, resetModelRuntime } from "./model-runtime.js";
+import { SEARCH_CONFIG_PATH } from "./search-config.js";
 
 /**
  * pi agent dir 的环境变量名（pi `dist/config.js` 的 `ENV_AGENT_DIR`）。
@@ -87,4 +89,64 @@ export function applyPiConfigChange(override?: string): void {
   const settings = getSettingsManager();
   applyHttpProxySettings(settings.getGlobalSettings().httpProxy);
   configureHttpDispatcher(settings.getHttpIdleTimeoutMs());
+}
+
+// =============================================================================
+// 本机配置文件文本（设置页「高级」的编辑器端点用，`docs/api/90-api-settings.md`）
+// =============================================================================
+
+/** `name` 是否在白名单内（shared 枚举是唯一来源；客户端传入的任意字符串到此为止） */
+export function isConfigFileName(value: string): value is ConfigFileName {
+  return (CONFIG_FILE_NAMES as readonly string[]).includes(value);
+}
+
+/**
+ * 本机配置文件的绝对路径（**唯一**取路径处）。
+ * `search.json` 固定落本机配置目录（它是本应用的配置，不跟 pi 目录走），其余三份在 pi 配置目录内。
+ */
+export function configFilePath(name: ConfigFileName): string {
+  return name === "search.json" ? SEARCH_CONFIG_PATH : join(resolvePiAgentDir(), name);
+}
+
+/**
+ * pi `models.json` 的宽松 JSON 口径（pi `dist/utils/json.js` 的 `stripJsonComments`：去 `//` 注释与尾逗号，
+ * 字符串字面量不动）。pi 不从包根导出该函数，这里按同一语义实现——**升级 pi 时复查**。
+ */
+function stripJsonComments(input: string): string {
+  return input
+    .replace(/"(?:\\.|[^"\\])*"|\/\/[^\n]*/g, (m) => (m[0] === '"' ? m : ""))
+    .replace(/"(?:\\.|[^"\\])*"|,(\s*[}\]])/g, (m, tail: string | undefined) =>
+      tail === undefined ? (m[0] === '"' ? m : "") : tail,
+    );
+}
+
+/**
+ * 配置文件文本校验：通过 → `null`；否则返回可直接呈现给用户的文案（不写盘）。
+ *
+ * 口径与 pi 的**读**一致（否则会拒绝 pi 自己读得懂的文件）：
+ * - `auth.json` / `settings.json`：严格 `JSON.parse`（只去 BOM）
+ * - `models.json`：去 `//` 注释与尾逗号后再 parse
+ * - `search.json`：shared `searchConfigFileSchema`（strict，未知键拒绝）
+ * 空文本允许（= 未配置，pi 读侧按缺失处理）；顶层必须是对象（数组 / 字面量会让 pi 抛或静默忽略）。
+ */
+export function checkConfigFileText(name: ConfigFileName, text: string): string | null {
+  const body = text.replace(/^\uFEFF/, "");
+  if (body.trim() === "") return null;
+  let parsed: unknown;
+  try {
+    const normalized = name === "models.json" ? stripJsonComments(body) : body;
+    parsed = JSON.parse(normalized);
+  } catch (err) {
+    return `${name} 不是合法 JSON：${err instanceof Error ? err.message : String(err)}`;
+  }
+  if (name === "search.json") {
+    const result = searchConfigFileSchema.safeParse(parsed);
+    return result.success
+      ? null
+      : `search.json 只接受 { "apiKey": "..." }（未知键会被拒绝）：${result.error.issues.map((i) => i.path.join(".") || "顶层").join("、")}`;
+  }
+  if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed)) {
+    return `${name} 的顶层必须是 JSON 对象`;
+  }
+  return null;
 }
