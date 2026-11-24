@@ -766,4 +766,18 @@ describe("大纲详情表单 dirty 判定", () => {
       expect(isOutlineDetailDirty(tagged, node.title, "", { tags: ["验收线", "支线"] })).toBe(true);
     });
   });
+
+  // C4：实际摘要 textarea 空值 = 不写该键 ⇒ 打开表单本身就是脏
+  describe("result_summary 归一", () => {
+    it("空串 / 空白不算 dirty（基线无该键）", () => {
+      expect(isOutlineDetailDirty(node, node.title, "", { result_summary: "" })).toBe(false);
+      expect(isOutlineDetailDirty(node, node.title, "", { result_summary: "  " })).toBe(false);
+    });
+
+    it("有值 / 与基线不同 → dirty；同值（含空格式）→ 不脏", () => {
+      expect(isOutlineDetailDirty(node, node.title, "", { result_summary: "主角拿到断剑" })).toBe(true);
+      const filled = { ...node, data: { result_summary: "主角拿到断剑" } };
+      expect(isOutlineDetailDirty(filled, node.title, "", { result_summary: " 主角拿到断剑 " })).toBe(false);
+    });
+  });
 });

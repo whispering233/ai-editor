@@ -148,17 +148,28 @@ export function sceneNodeOptions(
 }
 
 /**
- * data 表单归一（保存提交与 dirty 判定共用）：`tags` 为数组时逐项 trim、丢弃空串——TagsEditor
- * 为续输故意保留末行空串（回车 / `+ 添加`），原样提交会被 `nodeTagsSchema`（trim 后 min(1)）判 400。
- * 其它 key 原样；无 tags 键或非数组时返回入参同一对象（不白造新对象）。
+ * data 表单归一（保存提交与 dirty 判定共用）：
+ * - `tags` 为数组时逐项 trim、丢弃空串——TagsEditor 为续输故意保留末行空串（回车 / `+ 添加`），
+ *   原样提交会被 `nodeTagsSchema`（trim 后 min(1)）判 400。
+ * - `result_summary`（章实际摘要，textarea）trim 后为空 = **不写该键**——空表单值不是一次提交，
+ *   否则「打开表单没填」也要进 patches / 判 dirty。
+ * 其它 key 原样；两键都无需归一（类型不符 / 都无变化）时返回入参同一对象（不白造新对象）。
  */
 export function normalizeOutlineDataForm(data: Record<string, unknown>): Record<string, unknown> {
-  if (!Array.isArray(data.tags)) return data;
-  const tags = data.tags
-    .filter((tag): tag is string => typeof tag === "string")
-    .map((tag) => tag.trim())
-    .filter((tag) => tag !== "");
-  return { ...data, tags };
+  let form = data;
+  if (Array.isArray(data.tags)) {
+    const tags = data.tags
+      .filter((tag): tag is string => typeof tag === "string")
+      .map((tag) => tag.trim())
+      .filter((tag) => tag !== "");
+    form = { ...form, tags };
+  }
+  if (typeof form.result_summary === "string") {
+    const { result_summary: raw, ...rest } = form;
+    const resultSummary = raw.trim();
+    form = resultSummary === "" ? rest : { ...rest, result_summary: resultSummary };
+  }
+  return form;
 }
 
 /**

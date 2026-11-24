@@ -197,4 +197,35 @@ describe("normalizeOutlineDataForm（tags 归一：末行空串 / 前后空格�
     expect(diffData({}, normalizeOutlineDataForm(form))).toEqual({ tags: ["验收线"] });
     expect(diffData({ tags: ["验收线"] }, normalizeOutlineDataForm(form))).toBeNull();
   });
+
+  // C4 章实际摘要：空串 = 不写该键（空表单不是一次提交），有值 = trim 后进 patches
+  it("result_summary：空串 / 纯空白 → 不写该键", () => {
+    expect(normalizeOutlineDataForm({ result_summary: "", status: "draft" })).toEqual({
+      status: "draft",
+    });
+    expect(normalizeOutlineDataForm({ result_summary: "   " })).toEqual({});
+    expect(normalizeOutlineDataForm({ result_summary: "" })).not.toHaveProperty("result_summary");
+    // 与 tags 归一叠加时两键都不丢口径：空 result_summary 删键、tags 仍去空串
+    expect(normalizeOutlineDataForm({ tags: ["主线", ""], result_summary: "  " })).toEqual({
+      tags: ["主线"],
+    });
+  });
+
+  it("result_summary：有值 → trim 后进 patches；与基线同值不提交", () => {
+    const form = { result_summary: " 主角拿到断剑 " };
+    expect(normalizeOutlineDataForm(form)).toEqual({ result_summary: "主角拿到断剑" });
+    expect(diffData({}, normalizeOutlineDataForm(form))).toEqual({ result_summary: "主角拿到断剑" });
+    expect(diffData({ result_summary: "主角拿到断剑" }, normalizeOutlineDataForm(form))).toBeNull();
+  });
+
+  it("result_summary：缺省 / 空默认值不判 dirty（diffData 无变化）", () => {
+    expect(diffData({}, normalizeOutlineDataForm({}))).toBeNull();
+    expect(diffData({}, normalizeOutlineDataForm({ result_summary: "" }))).toBeNull();
+    expect(diffData({ status: "draft" }, normalizeOutlineDataForm({ status: "draft", result_summary: "" }))).toBeNull();
+  });
+
+  it("result_summary：非字符串脏值原样返回（不白造新对象、不改写）", () => {
+    const dirty = { result_summary: 42 };
+    expect(normalizeOutlineDataForm(dirty)).toBe(dirty);
+  });
 });

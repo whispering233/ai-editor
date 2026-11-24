@@ -23,6 +23,7 @@ import {
   buildDeductionMarks,
   formatMonthDay,
   formatTimestamp,
+  MAX_CHAPTER_RESULT_SUMMARY_CHARS,
   type OutlineNode,
 } from "@whispering233/ai-editor-shared";
 import {
@@ -427,7 +428,7 @@ export default function OutlineDetail({
         {/* 表单区：信息区（基础信息/结构化信息/变更记录/伏笔标记）在上，关联区（相关实体）在下 */}
         <div className="flex flex-col gap-4">
           <div className="flex min-w-0 flex-col gap-4">
-            {/* 基础信息：标题/摘要 */}
+            {/* 基础信息：标题/摘要/实际摘要（仅章） */}
             <SectionCard title="基础信息">
               <div className="flex flex-col gap-3">
                 <div>
@@ -449,6 +450,22 @@ export default function OutlineDetail({
                     placeholder="一句话概括本节点内容（可选）"
                   />
                 </div>
+                {/* 实际摘要（章专有，`data.result_summary`）：作者手填 / AI 读正文后提案回填；
+                    只在本表单出现（大纲树行不展示），空值由 normalizeOutlineDataForm 吞掉不提交 */}
+                {node.type === "chapter" && (
+                  <div>
+                    <p className="mb-1 text-sm font-medium text-foreground">实际摘要</p>
+                    <Input.TextArea
+                      value={
+                        typeof dataForm.result_summary === "string" ? dataForm.result_summary : ""
+                      }
+                      onChange={(e) => setDataField("result_summary", e.target.value)}
+                      maxLength={MAX_CHAPTER_RESULT_SUMMARY_CHARS}
+                      rows={3}
+                      placeholder="写完后本章实际发生了什么（可选）"
+                    />
+                  </div>
+                )}
               </div>
             </SectionCard>
 
