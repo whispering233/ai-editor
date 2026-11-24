@@ -2,12 +2,15 @@
 // 覆盖：首写/读取（空文档语义）、覆盖写版本戳推进、非章 400、不存在/软删 404、坏 content 400、
 // 409 DOCUMENT_STALE、省略 base 即覆盖、空块数组合法（charCount 0）、
 // charCount 与派生投影一致（直查 SQLite）、保存无 Delta 副作用、purge 级联删正文行；
-// 以及 stats-1 的码字日统计副作用（正差累加 / 缩短不扣 / best-effort 失败仍 200）。
+// 以及 stats-1 的码字日统计副作用（正差累加 / 缩短不扣 / best-effort 失败仍 200）；
+// 章级历史（快照写入钩子 / 读端点 / 恢复端点 / purge 级联）：节流、去重、每章裁剪、
+// 全局预算、恢复可逆、同秒排序、恢复后版本戳与码字统计。
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { Hono } from "hono";
+import { MAX_SNAPSHOTS_PER_DOCUMENT, SNAPSHOT_BUDGET_MULTIPLIER } from "@whispering233/ai-editor-shared";
 import { readProjectFile } from "@whispering233/ai-editor-db";
 import { errorHandler } from "../middleware/error.js";
 import {
@@ -458,5 +461,341 @@ describe("purge 级联删正文行", () => {
     await app.request(`/api/v1/outline/${vol}`, { method: "DELETE", headers: HOST_HEADERS });
     expect((await app.request(`/api/v1/trash/outline/${vol}`, { method: "DELETE", headers: HOST_HEADERS })).status).toBe(200);
     expect((getCurrentProject()!.db.prepare("SELECT COUNT(*) AS c FROM document_records").get() as { c: number }).c).toBe(0);
+  });
+});
+// ============ 章级历史（快照写入钩子 + 恢复/读端点） ============
+
+/** 把该章的快照 created_at 全部推到过去：节流窗口之外（同秒排序用例也因此拿到相同时间） */
+function ageSnapshots(ch: string): void {
+  getCurrentProject()!
+    .db.prepare("UPDATE document_snapshots SET created_at = ? WHERE owner_kind = 'chapter' AND owner_id = ?")
+    .run("2020-01-01T00:00:00Z", ch);
+}
+
+/** 直查该章快照（升序 = 最旧→最新；绕过端点自说自话） */
+function snapshotRows(ch: string): Array<{ seq: number; content: string; char_count: number; created_at: string }> {
+  return getCurrentProject()!
+    .db.prepare(
+      "SELECT seq, content, char_count, created_at FROM document_snapshots WHERE owner_kind = 'chapter' AND owner_id = ? ORDER BY seq",
+    )
+    .all(ch) as Array<{ seq: number; content: string; char_count: number; created_at: string }>;
+}
+
+/** 快照列表端点（seq 降序 = 新→旧） */
+async function listSnapshotsApi(
+  app: Hono,
+  ch: string,
+): Promise<Array<{ seq: number; createdAt: string; charCount: number }>> {
+  return (await (await app.request(`/api/v1/manuscript/${ch}/snapshots`, { headers: HOST_HEADERS })).json()).data
+    .snapshots;
+}
+
+/** 单份快照端点 */
+function getSnapshotApi(app: Hono, ch: string, seq: number): Promise<Response> {
+  return app.request(`/api/v1/manuscript/${ch}/snapshots/${seq}`, { headers: HOST_HEADERS });
+}
+
+/** 恢复端点 */
+function restoreApi(app: Hono, ch: string, body: Record<string, unknown>): Promise<Response> {
+  return app.request(`/api/v1/manuscript/${ch}/restore`, {
+    method: "POST",
+    headers: JSON_HEADERS,
+    body: JSON.stringify(body),
+  });
+}
+
+/** 当前正文（GET 端点） */
+async function currentContent(app: Hono, ch: string): Promise<{ content: string; updatedAt: string | null }> {
+  return (await (await app.request(`/api/v1/manuscript/${ch}`, { headers: HOST_HEADERS })).json()).data;
+}
+
+/** 反复保存同一章（每轮前把快照时间推旧 = 模拟「过了节流窗口」），产出份份不同的历史 */
+async function saveMany(app: Hono, ch: string, times: number, text = "正文"): Promise<void> {
+  for (let i = 0; i < times; i++) {
+    ageSnapshots(ch);
+    await putBody(app, ch, { content: textBlocks(`${text}${i}`) });
+  }
+}
+
+describe("章级历史：快照写入钩子（节流 / 去重）", () => {
+  it("首写不压快照；内容有变时压「被覆盖的旧内容」", async () => {
+    const app = buildApp();
+    openProject();
+    const { ch } = await seedChapter(app);
+
+    await putBody(app, ch, { content: textBlocks("第一版") });
+    expect(snapshotRows(ch)).toEqual([]); // 首写没有旧内容可压
+
+    await putBody(app, ch, { content: textBlocks("第二版") });
+    const rows = snapshotRows(ch);
+    expect(rows).toHaveLength(1);
+    expect(rows[0]!.content).toBe(textBlocks("第一版")); // 压的是旧内容，当前内容不进历史
+    expect(rows[0]!.char_count).toBe("第一版".length);
+  });
+
+  it("① 节流：距该章最后一份不足 CHAPTER_SNAPSHOT_MIN_INTERVAL_MS 的保存不产第二份快照", async () => {
+    const app = buildApp();
+    openProject();
+    const { ch } = await seedChapter(app);
+
+    await putBody(app, ch, { content: textBlocks("一") });
+    await putBody(app, ch, { content: textBlocks("二") }); // 压「一」
+    await putBody(app, ch, { content: textBlocks("三") }); // 节流窗口内 → 不压
+    expect(snapshotRows(ch)).toHaveLength(1);
+
+    ageSnapshots(ch); // 时间推过节流窗口
+    await putBody(app, ch, { content: textBlocks("四") });
+    const rows = snapshotRows(ch);
+    expect(rows).toHaveLength(2);
+    expect(rows[1]!.content).toBe(textBlocks("三")); // 过窗口后压的是最近一次被覆盖的内容
+    expect(rows[1]!.char_count).toBe("三".length);
+  });
+
+  it("② 去重：内容未变不产快照（同一内容反复保存、跨节流窗口也一样）", async () => {
+    const app = buildApp();
+    openProject();
+    const { ch } = await seedChapter(app);
+
+    await putBody(app, ch, { content: textBlocks("定稿") });
+    expect(snapshotRows(ch)).toHaveLength(0);
+
+    // 同内容重复保存（超过节流窗口也一样）：旧内容 == 新内容 → 没有「被覆盖的旧内容」
+    ageSnapshots(ch);
+    await putBody(app, ch, { content: textBlocks("定稿") });
+    expect(snapshotRows(ch)).toHaveLength(0);
+
+    // 改一版再改回来：只在真正变化的那一刻压一份，不会把同一份历史堆两遍
+    await putBody(app, ch, { content: textBlocks("修订") }); // 压「定稿」
+    ageSnapshots(ch);
+    await putBody(app, ch, { content: textBlocks("定稿") }); // 压「修订」
+    ageSnapshots(ch);
+    await putBody(app, ch, { content: textBlocks("定稿") }); // 内容未变 → 不压
+    expect(snapshotRows(ch).map((r) => r.content)).toEqual([textBlocks("定稿"), textBlocks("修订")]);
+  });
+
+  it("③ 每章裁剪：超过 MAX_SNAPSHOTS_PER_DOCUMENT 份时从最旧删", async () => {
+    const app = buildApp();
+    openProject();
+    const { vol, ch } = await seedChapter(app);
+    // 全书正文总量放大（10 章 × 8 字）：本用例只让「每章份数」先触发，全局预算不参与
+    for (let i = 1; i <= 10; i++) {
+      const created = await app.request("/api/v1/outline", {
+        method: "POST",
+        headers: JSON_HEADERS,
+        body: JSON.stringify({ type: "chapter", title: `补${i}`, parent_id: vol }),
+      });
+      await putBody(app, (await created.json()).data.id, { content: textBlocks("占位正文八个字") });
+    }
+
+    await saveMany(app, ch, MAX_SNAPSHOTS_PER_DOCUMENT + 5);
+
+    const rows = snapshotRows(ch);
+    expect(rows).toHaveLength(MAX_SNAPSHOTS_PER_DOCUMENT);
+    // 删掉的是最旧的 5 份：留下的第一份是第 5 次保存前的内容
+    expect(rows[0]!.content).toBe(textBlocks("正文4"));
+    expect(rows[rows.length - 1]!.content).toBe(textBlocks(`正文${MAX_SNAPSHOTS_PER_DOCUMENT + 3}`));
+  });
+
+  it("④ 全局预算：全书快照字数超 SNAPSHOT_BUDGET_MULTIPLIER × 正文总量时从最旧删", async () => {
+    const app = buildApp();
+    const dir = openProject();
+    const { ch } = await seedChapter(app);
+    const text = "十个字的正"; // 单章 = 全书正文总量
+    const pad = (i: number): string => String(i).padStart(2, "0"); // 固定宽度：每份快照字数恒定
+    const charsPerSnapshot = text.length + pad(0).length;
+    // 预算 = 正文总量 × 倍数 字，每份快照也正好这么多字 → 装得下的份数 = 倍数
+    const fitsInBudget = SNAPSHOT_BUDGET_MULTIPLIER;
+
+    for (let i = 0; i < fitsInBudget + 5; i++) {
+      ageSnapshots(ch);
+      await putBody(app, ch, { content: textBlocks(`${text}${pad(i)}`) });
+    }
+
+    const rows = snapshotRows(ch);
+    expect(rows).toHaveLength(fitsInBudget);
+    expect(rows.reduce((sum, r) => sum + r.char_count, 0)).toBeLessThanOrEqual(
+      charsPerSnapshot * SNAPSHOT_BUDGET_MULTIPLIER,
+    );
+    expect(rows[0]!.content).toBe(textBlocks(`${text}${pad(4)}`)); // 最旧的 4 份被删（首写没有旧内容可压）
+    expect(readProjectFile(dir)!.current_position).toBeNull(); // 裁剪不动正文状态
+  });
+});
+
+describe("章级历史：读端点", () => {
+  it("列表返回 seq / createdAt / charCount（seq 降序），单份返回 content；空历史返回空数组", async () => {
+    const app = buildApp();
+    openProject();
+    const { ch } = await seedChapter(app);
+    expect(await listSnapshotsApi(app, ch)).toEqual([]); // 从未保存过 = 空历史
+
+    await putBody(app, ch, { content: textBlocks("旧一") });
+    await putBody(app, ch, { content: textBlocks("旧二") });
+    ageSnapshots(ch);
+    await putBody(app, ch, { content: textBlocks("新三") });
+
+    const list = await listSnapshotsApi(app, ch);
+    expect(list).toHaveLength(2);
+    expect(list[0]!.seq).toBeGreaterThan(list[1]!.seq); // 降序（新→旧）
+    expect(list[0]!.charCount).toBe("旧二".length); // 最新一份 = 最后一次被覆盖的「旧二」
+    expect(list[1]!.createdAt).toBe("2020-01-01T00:00:00Z"); // 时间已被推旧（节流窗口外）
+
+    const single = (await (await getSnapshotApi(app, ch, list[1]!.seq)).json()).data;
+    expect(single).toMatchObject({ seq: list[1]!.seq, charCount: "旧一".length, content: textBlocks("旧一") });
+  });
+
+  it("非章 → 400；快照不存在 / 属于别的章 → 404 SNAPSHOT_NOT_FOUND；seq 非正整数 → 400", async () => {
+    const app = buildApp();
+    openProject();
+    const { vol, ch } = await seedChapter(app);
+    await putBody(app, ch, { content: textBlocks("一") });
+    await putBody(app, ch, { content: textBlocks("二") });
+    const [snapshot] = snapshotRows(ch);
+
+    // 非章：列表 / 单份 / 恢复同宽
+    expect((await app.request(`/api/v1/manuscript/${vol}/snapshots`, { headers: HOST_HEADERS })).status).toBe(400);
+    expect((await getSnapshotApi(app, vol, snapshot!.seq)).status).toBe(400);
+    expect((await restoreApi(app, vol, { snapshot_id: snapshot!.seq })).status).toBe(400);
+
+    // 未命中
+    const missing = await getSnapshotApi(app, ch, snapshot!.seq + 999);
+    expect(missing.status).toBe(404);
+    expect((await missing.json()).error.code).toBe("SNAPSHOT_NOT_FOUND");
+    const missingRestore = await restoreApi(app, ch, { snapshot_id: snapshot!.seq + 999 });
+    expect(missingRestore.status).toBe(404);
+    expect((await missingRestore.json()).error.code).toBe("SNAPSHOT_NOT_FOUND");
+
+    // 别的章的 seq 读不到（seq 全局自增，必须同时命中 owner）
+    const other = await seedChapter(app, "另一章");
+    expect((await getSnapshotApi(app, other.ch, snapshot!.seq)).status).toBe(404);
+
+    // body / seq 校验
+    expect((await restoreApi(app, ch, {})).status).toBe(400);
+    expect((await restoreApi(app, ch, { snapshot_id: "1" })).status).toBe(400);
+    expect((await restoreApi(app, ch, { snapshot_id: 1, extra: true })).status).toBe(400);
+    expect((await app.request(`/api/v1/manuscript/${ch}/snapshots/abc`, { headers: HOST_HEADERS })).status).toBe(400);
+  });
+});
+
+describe("章级历史：恢复端点", () => {
+  it("⑤ 恢复可逆：恢复前的正文被强制压成快照（绕过节流），恢复后还能退回恢复前那一版", async () => {
+    const app = buildApp();
+    openProject();
+    const { ch } = await seedChapter(app);
+
+    await putBody(app, ch, { content: textBlocks("第一版") });
+    ageSnapshots(ch);
+    await putBody(app, ch, { content: textBlocks("第二版") });
+    ageSnapshots(ch);
+    await putBody(app, ch, { content: textBlocks("第三版") });
+    // 历史 = [第一版, 第二版]，当前 = 第三版
+    const before = snapshotRows(ch);
+    expect(before.map((r) => r.content)).toEqual([textBlocks("第一版"), textBlocks("第二版")]);
+
+    // 恢复到「第一版」：节流窗口内（刚压过）也必须先把当前（第三版）压进历史
+    const restored = await restoreApi(app, ch, { snapshot_id: before[0]!.seq });
+    expect(restored.status).toBe(200);
+    expect((await currentContent(app, ch)).content).toBe(textBlocks("第一版"));
+
+    const afterRestore = snapshotRows(ch);
+    expect(afterRestore).toHaveLength(3);
+    expect(afterRestore[2]!.content).toBe(textBlocks("第三版")); // 恢复前的版本已进历史（强压，绕过节流）
+
+    // 退回恢复前那一版：恢复完的内容再次被压进历史，正文回到第三版
+    const back = await restoreApi(app, ch, { snapshot_id: afterRestore[2]!.seq });
+    expect(back.status).toBe(200);
+    expect((await currentContent(app, ch)).content).toBe(textBlocks("第三版"));
+    expect(snapshotRows(ch).map((r) => r.content)).toEqual([
+      textBlocks("第一版"),
+      textBlocks("第二版"),
+      textBlocks("第三版"),
+      textBlocks("第一版"), // 第二次恢复前的当前内容
+    ]);
+  });
+
+  it("当前内容已是目标版本 → 幂等返回（不写库、不产无意义快照、updated_at 不动）", async () => {
+    const app = buildApp();
+    openProject();
+    const { ch } = await seedChapter(app);
+    await putBody(app, ch, { content: textBlocks("一") });
+    await putBody(app, ch, { content: textBlocks("二") });
+    const [snap] = snapshotRows(ch);
+
+    // 先回到「一」，再对同一份快照恢复第二次：正文已是目标版本
+    await restoreApi(app, ch, { snapshot_id: snap!.seq });
+    const afterFirst = await currentContent(app, ch);
+    const snapshotsAfterFirst = snapshotRows(ch);
+
+    const again = await restoreApi(app, ch, { snapshot_id: snap!.seq });
+    expect(again.status).toBe(200);
+    const body = (await again.json()).data;
+    expect(body.updatedAt).toBe(afterFirst.updatedAt); // 幂等：版本戳不推进
+    expect(body.charCount).toBe("一".length);
+    expect(snapshotRows(ch)).toEqual(snapshotsAfterFirst); // 无新快照
+  });
+
+  it("⑥ 同秒多次保存：排序与读取都按 seq（created_at 完全相同也不乱）", async () => {
+    const app = buildApp();
+    openProject();
+    const { ch } = await seedChapter(app);
+    await saveMany(app, ch, 5); // 每轮 created_at 都被推到同一个过去时刻（N 次保存压 N-1 份）
+    ageSnapshots(ch); // 最后一轮压入的那份也是同一时刻
+    const rows = snapshotRows(ch);
+    expect(rows).toHaveLength(4);
+    expect(new Set(rows.map((r) => r.created_at)).size).toBe(1); // 前置：时间戳全部相同
+
+    const list = await listSnapshotsApi(app, ch);
+    expect(list.map((s) => s.seq)).toEqual([...list.map((s) => s.seq)].sort((a, b) => b - a));
+    // 新→旧与保存顺序严格对应（只可能由 seq 决定）
+    expect(list.map((s) => s.seq)).toEqual(rows.map((r) => r.seq).reverse());
+    for (const [i, item] of list.entries()) {
+      const single = (await (await getSnapshotApi(app, ch, item.seq)).json()).data;
+      expect(single.content).toBe(rows[rows.length - 1 - i]!.content);
+    }
+  });
+
+  it("⑦ 恢复后 updated_at 推进、码字统计照既有口径（只累加正差、缩短不扣）", async () => {
+    const app = buildApp();
+    openProject();
+    const { ch } = await seedChapter(app);
+
+    await putBody(app, ch, { content: textBlocks("短") }); // 统计 +1
+    ageSnapshots(ch);
+    await putBody(app, ch, { content: textBlocks("加长后的正文字数") }); // 统计 +7（共 8）
+    const longVersion = (await currentContent(app, ch)).updatedAt;
+    await new Promise((r) => setTimeout(r, 5));
+    const [shortSnapshot] = snapshotRows(ch); // 恢复到「短」那一版
+
+    const res = await restoreApi(app, ch, { snapshot_id: shortSnapshot!.seq });
+    const body = (await res.json()).data;
+    expect(body.charCount).toBe("短".length);
+    expect(Date.parse(body.updatedAt)).toBeGreaterThan(Date.parse(longVersion!)); // 版本戳推进
+    expect((await currentContent(app, ch)).updatedAt).toBe(body.updatedAt); // 落库与响应一致
+    expect(statsRows()).toEqual([{ date: localDateKey(), chars: 8 }]); // 缩短不扣：仍是 1+7
+
+    // 再从历史恢复回长版本：正差照旧计入（+7）
+    ageSnapshots(ch);
+    const beforeRestoreBack = (await currentContent(app, ch)).updatedAt;
+    await new Promise((r) => setTimeout(r, 5));
+    const back = (await (await restoreApi(app, ch, { snapshot_id: snapshotRows(ch).at(-1)!.seq })).json()).data;
+    expect(back.charCount).toBe("加长后的正文字数".length);
+    expect(Date.parse(back.updatedAt)).toBeGreaterThan(Date.parse(beforeRestoreBack!));
+    expect(statsRows()).toEqual([{ date: localDateKey(), chars: 15 }]); // 8 + 7
+  });
+});
+
+describe("章级历史：purge 级联", () => {
+  it("章 purge → 该章快照一并物理删（软删期间保留）", async () => {
+    const app = buildApp();
+    openProject();
+    const { ch } = await seedChapter(app);
+    await putBody(app, ch, { content: textBlocks("一") });
+    await putBody(app, ch, { content: textBlocks("二") });
+    expect(snapshotRows(ch)).toHaveLength(1);
+
+    await app.request(`/api/v1/outline/${ch}`, { method: "DELETE", headers: HOST_HEADERS });
+    expect(snapshotRows(ch)).toHaveLength(1); // 软删期间保留（还原后原样回来）
+
+    expect((await app.request(`/api/v1/trash/outline/${ch}`, { method: "DELETE", headers: HOST_HEADERS })).status).toBe(200);
+    expect(snapshotRows(ch)).toEqual([]);
   });
 });

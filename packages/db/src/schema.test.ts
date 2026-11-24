@@ -8,7 +8,7 @@ import { getTableConfig, type SQLiteTable } from "drizzle-orm/sqlite-core";
 
 import { openDatabase, closeDatabase, type Db } from "./connection.js";
 import { createTables, getUserVersion, SCHEMA_VERSION, setUserVersion } from "./schema.js";
-import { CREATE_TABLES_SQL, deltaRecords, documentRecords, entities, practiceFreePieces, practiceSamples, practiceStylePacks, relationRecords, writingStatsDaily } from "./tables.js";
+import { CREATE_TABLES_SQL, deltaRecords, documentRecords, documentSnapshots, entities, practiceFreePieces, practiceSamples, practiceStylePacks, relationRecords, writingStatsDaily } from "./tables.js";
 
 let dir: string;
 let dbPath: string;
@@ -60,6 +60,7 @@ describe("tables.ts 双份声明对齐", () => {
     practice_free_pieces: practiceFreePieces,
     practice_style_packs: practiceStylePacks,
     writing_stats_daily: writingStatsDaily,
+    document_snapshots: documentSnapshots,
   };
 
   it("DDL 常量与 sqliteTable 定义列级对齐（列名/类型/notNull/主键）", () => {
@@ -128,11 +129,12 @@ function parseDdlColumns(
 }
 
 describe("schema.ts 建表", () => {
-  it("打开后自动创建 8 张业务表（对话历史已出库为 sessions/*.jsonl；练习三表为 2026-10 改版；码字日统计 2026-11）", () => {
+  it("打开后自动创建 9 张业务表（对话历史已出库为 sessions/*.jsonl；练习三表为 2026-10 改版；码字日统计与章正文历史快照 2026-11）", () => {
     expect(listTables(db).sort()).toEqual(
       [
         "delta_records",
         "document_records",
+        "document_snapshots",
         "entities",
         "practice_free_pieces",
         "practice_samples",
@@ -155,7 +157,7 @@ describe("schema.ts 建表", () => {
 
   it("createTables 幂等：重复执行不报错、不重复建表", () => {
     expect(() => createTables(db)).not.toThrow();
-    expect(listTables(db)).toHaveLength(8);
+    expect(listTables(db)).toHaveLength(9);
   });
 
   it("entities.type CHECK 约束生效：非法 type 插入报错，合法 type 可插入（含 event、timepoint G2）", () => {
@@ -173,12 +175,12 @@ describe("schema.ts 建表", () => {
     }
   });
 
-  it("user_version 读写往返（SCHEMA_VERSION = 14，v1→v14 走增量迁移 002→…→014）", () => {
+  it("user_version 读写往返（SCHEMA_VERSION = 15，v1→v15 走增量迁移 002→…→015）", () => {
  // 新库默认 0
     expect(getUserVersion(db)).toBe(0);
     setUserVersion(db, SCHEMA_VERSION);
     expect(getUserVersion(db)).toBe(SCHEMA_VERSION);
-    expect(SCHEMA_VERSION).toBe(14);
+    expect(SCHEMA_VERSION).toBe(15);
   });
 
   it("entities 有 sort_order 列（时间轴事件全局线性序，仅 event 使用，其余类型 NULL）", () => {

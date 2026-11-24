@@ -101,3 +101,72 @@ chapterNodeId: string;
 - **best-effort**：统计写失败不回滚正文、不改变本端点的 200；最坏少记当天一次（正文主数据优先）；
 - **无独立写 / 删端点**：不允许人工改统计，也不做历史重算；
 - 统计行随 `data.db` 进入备份 / 导出 / 云端 / 恢复 / 导入；恢复旧包会把统计一并回退。
+### 章级历史（快照 + 恢复）
+
+保存正文时**服务端自动**把「被覆盖的旧内容」压一份快照（用于误操作找回），客户端保存后无需任何额外调用；历史随 `data.db` 进备份 / 云端 / 导入导出。表与不变式见 [`../db/schema.md`](../db/schema.md)「document_snapshots」。
+
+- **三个数值的单一定义** = shared `constants/snapshot.ts`：`CHAPTER_SNAPSHOT_MIN_INTERVAL_MS`（同一章两份快照的最小间隔）/ `MAX_SNAPSHOTS_PER_DOCUMENT`（单章份数上限）/ `SNAPSHOT_BUDGET_MULTIPLIER`（全书预算 = 该书正文总量 × 该倍数）。节流、去重与裁剪**全在服务端**（同一份 `data.db` 跨标签页天然一致）。
+- **节流**：距该章最新一份快照不足最小间隔 → 本次保存不压快照。
+- **去重**：内容与旧值相同（没有「被覆盖的旧内容」）不压；最新一份快照内容与待压内容相同也不压。
+- **裁剪**：两份上限都**从最旧删**（唯一排序键 = 自增 `seq`，与 `created_at` 无关——同秒多次保存也不会打乱顺序）。
+- **不做自动 `VACUUM`**：上限管的是活跃数据量，不是库文件大小。
+
+#### GET /api/v1/manuscript/:chapterNodeId/snapshots
+
+该章历史列表（**`seq` 降序 = 新→旧**，不带正文）。
+
+```typescript
+// Res: 200
+{
+  snapshots: Array<{
+    seq: number;        // 快照 id（自增序号，恢复与单份读取都用它）
+    createdAt: string;  // 该快照写入时刻（ISO 8601）
+    charCount: number;  // 该快照的正文字数（与当前正文的 charCount 之差 = 「多/少 N 字」）
+  }>;
+}
+
+// Res: 400（节点类型不是章）；Res: 404（节点不存在 / 已软删）
+```
+
+#### GET /api/v1/manuscript/:chapterNodeId/snapshots/:seq
+
+单份快照正文（只读预览；恢复前用它与当前正文比对）。
+
+```typescript
+// Res: 200
+{
+  seq: number;
+  createdAt: string;
+  charCount: number;
+  content: string;   // 块数组 JSON 字符串（与 GET 正文同形，可直喂块编辑器只读渲染）
+}
+
+// Res: 400（节点不是章 / seq 非正整数）
+// Res: 404（该章没有这个 seq）
+{ error: { code: "SNAPSHOT_NOT_FOUND" } }
+```
+
+#### POST /api/v1/manuscript/:chapterNodeId/restore
+
+恢复到某份历史快照。**复用保存核心**（与 `PUT` 同一条写入路径），因此 `updated_at` 推进、码字统计按正差累加（同 PUT 口径）。
+
+```typescript
+// Req（.strict）
+{ snapshot_id: number }   // 目标快照的 seq（列表端点返回的自增值）
+
+// Res: 200（与 PUT 同形）
+{ updated: true; updatedAt: string; charCount: number }
+
+// Res: 400（snapshot_id 缺失/非正整数/含未知字段；节点不是章）
+// Res: 404（节点不存在 / 已软删；快照不属于该章）
+{ error: { code: "SNAPSHOT_NOT_FOUND" } }
+```
+
+**语义**：
+
+| 项 | 口径 |
+| :--- | :--- |
+| 恢复前先压当前内容 | **强制**压一份（绕过节流，去重照旧）——因此恢复完还能退回「恢复前那一版」；恢复链可反复 |
+| 幂等 | 当前内容与目标快照相同 → 直接返回当前状态：不写库、不产生无意义快照、`updated_at` 不动 |
+| 恢复不带版本戳 | 服务端主动动作，不做 `base_updated_at` 冲突判定（客户端恢复前若需防覆盖，先 `GET` 正文自行确认） |
+| 快照存什么 | 只存块 JSON + 字数；`content_text` 恢复时由服务端用 shared `blocksToPlainMd` 重算（不做第二份投影） |

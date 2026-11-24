@@ -96,6 +96,7 @@ function tableNames(d: Db): string[] {
 function createV13Db(path: string): Db {
   const d = openDatabase(path);
   d.exec("DROP TABLE IF EXISTS writing_stats_daily");
+  d.exec("DROP TABLE IF EXISTS document_snapshots"); // 015 才建（本用例造的是 v13 库，015 随之一起跑）
   d.prepare("INSERT INTO entities (id, type, name, created_at, updated_at) VALUES (?, ?, ?, ?, ?)").run(
     "char-1",
     "character",
@@ -131,7 +132,7 @@ describe("迁移 014（v13 → v14：码字日统计表）", () => {
       expect(tableNames(db)).not.toContain("writing_stats_daily"); // 前置：v13 结构无该表
 
       const { applied } = runMigrations(db, { dbPath: migratedPath });
-      expect(applied.map((m) => m.version)).toEqual([14]);
+      expect(applied.map((m) => m.version)).toEqual([14, 15]); // v13 库补跑 014 码字日统计表 + 015 章正文历史快照表
       expect(getUserVersion(db)).toBe(SCHEMA_VERSION);
 
       expect(tableStructure(db, "writing_stats_daily")).toEqual(tableStructure(fresh, "writing_stats_daily"));
@@ -197,7 +198,7 @@ describe("迁移 014（v13 → v14：码字日统计表）", () => {
     expect(result.backups).toEqual([]);
     expect(active).toBe(db); // 连接原样（未重建）
     expect(getUserVersion(active)).toBe(SCHEMA_VERSION);
-    expect(SCHEMA_VERSION).toBe(14);
+    expect(SCHEMA_VERSION).toBe(15);
     expect(readOutlineFile(dir)).toEqual(outlineBefore); // 大纲未被重置
     expect(readdirSync(dir).filter((f) => f.endsWith(".bak"))).toEqual([]);
  // 表已由建库路径就位（无需迁移参与）

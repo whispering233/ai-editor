@@ -38,8 +38,11 @@ import { CREATE_TABLES_SQL } from "./tables.js";
  * 纯 DDL 无数据搬移，migrations/013_author_practice.ts）。
  * v13 → v14（码字日统计，2026-11）：新增 `writing_stats_daily` 表（按作品、按天累计正文
  * 新增正字数；纯 DDL 无数据搬移——旧项目没有历史统计，migrations/014_writing_stats.ts）。
+ * v14 → v15（章正文历史快照，2026-11）：新增 `document_snapshots` 表 + owner 索引
+ * （保存时压「被覆盖的旧内容」供误操作找回；纯 DDL 无数据搬移——旧项目没有历史快照，
+ * migrations/015_document_snapshots.ts）。
  */
-export const SCHEMA_VERSION = 14; // +码字日统计表（014，纯 DDL）
+export const SCHEMA_VERSION = 15; // +章正文历史快照表（015，纯 DDL）
 
 /**
  * 建表：执行全部 DDL（CREATE TABLE/INDEX IF NOT EXISTS，定义于 tables.ts），幂等，可重复调用。

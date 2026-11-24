@@ -18,6 +18,7 @@
 │           ├── relation_records  # 通用关系表
 │           ├── delta_records    # 属性变更记录
 │           ├── document_records # 块文档（章正文 / 参考资料正文，2026-09）
+│           ├── document_snapshots # 章正文历史快照（2026-11）
 │           └── writing_stats_daily # 码字日统计（小说工作区，2026-11）
 │       # 注：项目目录下**不再有** references/ 目录（2026-09 废弃：参考资料正文进 document_records，
 │       #     外部编辑能力改为单文件导入导出；历史遗留的同名目录不被读取、不被打包）
@@ -43,8 +44,8 @@
   - `user_version > SCHEMA_VERSION`（未来版本）→ **拒绝打开** 409 `PROJECT_VERSION_NEWER`（数据原封不动，提示升级程序）；
   - `user_version < SCHEMA_VERSION`（旧版本）→ **有迁移路径**（`packages/db/src/migrations/` 存在从当前版本到目标版本的连续迁移链）→ `runMigrations` 前向迁移；**无迁移路径** → 删库重建兜底（备份 `data.db.v{n}.bak` + `outline.json.v{n}.bak`）。
 - **迁移机制**：`migrations/` 目录每个文件导出一个 `Migration = { version, up }`（`001_xxx.ts` → version 1），`index.ts` 按 version 升序聚合导出 `MIGRATIONS`（tsc 编译进 dist 随包分发，无运行时目录读取）。`runMigrations` 对缺失版本逐个执行：**每个迁移一个事务（`up(db)` + `setUserVersion(version)` 原子提交——成功 ⇒ 版本已写入；失败 ⇒ 版本未变）**；**整批迁移前自动快照** data.db → `data.db.v{n}.{YYYYMMDDHHmmssSSSZ}.bak`（checkpoint 后复制主文件，时间戳命名，失败重试现场保留）。迁移失败 → 该迁移回滚 + 版本停在前一迁移后，下次 open 重试。（**粒度注**：迁移侧快照为毫秒时间戳且**无去重循环**——同一毫秒的两次批量迁移会后者覆盖前者；真实升级路径不可达，与备份侧 backup 的 +1ms 去重口径不同但已接受。）
-- 当前 `SCHEMA_VERSION = 14`；迁移链：`002_event_timeline.ts`（version 2：entities 表 CHECK 扩入 `'event'` + 新增 `sort_order` 列）、`003_timepoint.ts`（version 3，G2 修订：entities 表 CHECK 扩入 `'timepoint'` + `event.data.time_label` 迁移为 timepoint 实体 + occurs_at 关系，同名 time_label 合并为同一 timepoint）、`004_setting_tags.ts`（version 4，K2 修订：**无 DDL**——setting 旧 `data.rules` 分类值复制到 `data.tags` 并移除 rules，仅 data JSON 数据迁移）、`005_reference.ts`（version 5：entities 表 CHECK 扩入 `'reference'`，无数据搬移仅 DDL）、`006_sessions_jsonl.ts`（version 6：**对话历史出库**——`chat_messages` 全量导出为旧格式 `sessions/<session_id>.jsonl` 后 `DROP TABLE`；产物为旧 v1 格式，现已被 pi session 格式取代、不再被读取（数据保留在磁盘）；**id 不合法的旧会话以 `sess_legacy_<sha256 前 16 位>` 文件名导出**）、`007_character_ability_panel.ts`（version 7，2026-09：**无 DDL**——`character.data.abilities[]` 迁为 `ability_panel` 叶子并移除旧字段，幂等且不覆盖已有 `ability_panel`，仅 data JSON 数据迁移，同 004 先例）、`008_document_records.ts`（version 8，2026-09：新增 `document_records` 表（块文档），纯 DDL 无数据搬移——开发阶段，旧 `references/` 目录与旧参考资料行不作兼容读取）、`009_decompose.ts`（version 9：新增 `decompose_jobs` / `decompose_batches` 两表，纯 DDL 无数据搬移——旧项目没有 job 行，无需回填）、`010_decompose_concurrency.ts`（version 10：`decompose_jobs` 新增 `concurrency` 列，纯 DDL 无数据搬移——存量行回填 `DEFAULT 1`）、`011_drop_decompose.ts`（version 11：`DROP TABLE` 上述两表，纯 DDL——「拆解小说」功能已整功能移除（见 CHANGELOG），009/010 保留只为旧库升级链连续）、`012_practice.ts`（version 12，2026-10：新增 `practice_targets` / `practice_samples` 两张练习表，纯 DDL 无数据搬移——旧项目没有练习行，无需回填；**2026-10 修订**：不再创建 `idx_practice_samples_target`——该索引只服务旧模型，且会让「回退 `user_version` 后重跑整条链」的历史迁移用例在 v13 库上报 `no such column: target_id`；真实 v12 库持有的旧索引由 013 的 `DROP INDEX IF EXISTS` 清除）、`013_author_practice.ts`（version 13，2026-10：**练习数据模型重建**——`DROP INDEX IF EXISTS idx_practice_samples_target` + drop `practice_targets` 与旧形状 `practice_samples`，建 `practice_samples`（新形状：`work_id` 可空 + `excerpt_label`）/ `practice_free_pieces` / `practice_style_packs` 三表（**均不建索引**），纯 DDL 无数据搬移——旧「文风目标」是自由文本，无法映射到预置作家与作品，且练习功能当时尚未发布、无正式用户数据）、`014_writing_stats.ts`（version 14，2026-11：新增 `writing_stats_daily` 码字日统计表，纯 DDL 无数据搬移——旧项目没有历史统计，首次保存正文后才开始累计）。**SQLite 无法直接修改 CHECK 约束**，迁移走「建新表（新 CHECK）→ 拷贝数据 → drop 旧表 → rename」四步（`relation_records`/`delta_records` 无外键指向 entities，迁移只动 entities 表）；v1 → v14 迁移链存在 ⇒ 旧库 open 时自动前向迁移，不再走删库重建兜底。
-- **import 侧联动**：导入备份时 `user_version < SCHEMA_VERSION` 且**有迁移路径** → 接受（搬入后 open 自动迁移，v5 及更早备份经增量迁移升到 **v14**，含对话历史出库、能力面板迁移、块文档表创建、码字日统计表创建与已下线功能的表清理）；无路径 → 409 `SCHEMA_VERSION_MISMATCH`；`>` 当前 → 409（未来版本语义）。
+- 当前 `SCHEMA_VERSION = 15`；迁移链：`002_event_timeline.ts`（version 2：entities 表 CHECK 扩入 `'event'` + 新增 `sort_order` 列）、`003_timepoint.ts`（version 3，G2 修订：entities 表 CHECK 扩入 `'timepoint'` + `event.data.time_label` 迁移为 timepoint 实体 + occurs_at 关系，同名 time_label 合并为同一 timepoint）、`004_setting_tags.ts`（version 4，K2 修订：**无 DDL**——setting 旧 `data.rules` 分类值复制到 `data.tags` 并移除 rules，仅 data JSON 数据迁移）、`005_reference.ts`（version 5：entities 表 CHECK 扩入 `'reference'`，无数据搬移仅 DDL）、`006_sessions_jsonl.ts`（version 6：**对话历史出库**——`chat_messages` 全量导出为旧格式 `sessions/<session_id>.jsonl` 后 `DROP TABLE`；产物为旧 v1 格式，现已被 pi session 格式取代、不再被读取（数据保留在磁盘）；**id 不合法的旧会话以 `sess_legacy_<sha256 前 16 位>` 文件名导出**）、`007_character_ability_panel.ts`（version 7，2026-09：**无 DDL**——`character.data.abilities[]` 迁为 `ability_panel` 叶子并移除旧字段，幂等且不覆盖已有 `ability_panel`，仅 data JSON 数据迁移，同 004 先例）、`008_document_records.ts`（version 8，2026-09：新增 `document_records` 表（块文档），纯 DDL 无数据搬移——开发阶段，旧 `references/` 目录与旧参考资料行不作兼容读取）、`009_decompose.ts`（version 9：新增 `decompose_jobs` / `decompose_batches` 两表，纯 DDL 无数据搬移——旧项目没有 job 行，无需回填）、`010_decompose_concurrency.ts`（version 10：`decompose_jobs` 新增 `concurrency` 列，纯 DDL 无数据搬移——存量行回填 `DEFAULT 1`）、`011_drop_decompose.ts`（version 11：`DROP TABLE` 上述两表，纯 DDL——「拆解小说」功能已整功能移除（见 CHANGELOG），009/010 保留只为旧库升级链连续）、`012_practice.ts`（version 12，2026-10：新增 `practice_targets` / `practice_samples` 两张练习表，纯 DDL 无数据搬移——旧项目没有练习行，无需回填；**2026-10 修订**：不再创建 `idx_practice_samples_target`——该索引只服务旧模型，且会让「回退 `user_version` 后重跑整条链」的历史迁移用例在 v13 库上报 `no such column: target_id`；真实 v12 库持有的旧索引由 013 的 `DROP INDEX IF EXISTS` 清除）、`013_author_practice.ts`（version 13，2026-10：**练习数据模型重建**——`DROP INDEX IF EXISTS idx_practice_samples_target` + drop `practice_targets` 与旧形状 `practice_samples`，建 `practice_samples`（新形状：`work_id` 可空 + `excerpt_label`）/ `practice_free_pieces` / `practice_style_packs` 三表（**均不建索引**），纯 DDL 无数据搬移——旧「文风目标」是自由文本，无法映射到预置作家与作品，且练习功能当时尚未发布、无正式用户数据）、`014_writing_stats.ts`（version 14，2026-11：新增 `writing_stats_daily` 码字日统计表，纯 DDL 无数据搬移——旧项目没有历史统计，首次保存正文后才开始累计）、`015_document_snapshots.ts`（version 15，2026-11：新增 `document_snapshots` 章正文历史快照表 + `idx_document_snapshots_owner` 索引，纯 DDL 无数据搬移——旧项目没有历史快照，首次保存正文后才开始积累）。**SQLite 无法直接修改 CHECK 约束**，迁移走「建新表（新 CHECK）→ 拷贝数据 → drop 旧表 → rename」四步（`relation_records`/`delta_records` 无外键指向 entities，迁移只动 entities 表）；v1 → v15 迁移链存在 ⇒ 旧库 open 时自动前向迁移，不再走删库重建兜底。
+- **import 侧联动**：导入备份时 `user_version < SCHEMA_VERSION` 且**有迁移路径** → 接受（搬入后 open 自动迁移，v5 及更早备份经增量迁移升到 **v15**，含对话历史出库、能力面板迁移、块文档表创建、码字日统计与章正文历史快照表创建、已下线功能的表清理）；无路径 → 409 `SCHEMA_VERSION_MISMATCH`；`>` 当前 → 409（未来版本语义）。
 - **全新空库短路（2026-09）**：`user_version = 0` 且**表结构与当前 DDL 一致**且**业务表无行** → 直接写入 `SCHEMA_VERSION`（**不重建、不备份、不碰 `outline.json`**）——覆盖“书目录有 project.json/outline.json 但缺 data.db”的场景（否则会走无路径重建兼重置大纲）。**反向守住**：结构陈旧（旧 CHECK / 残留表）或有数据的 v0 库仍走既有重建兑底。**已知不对称（已登记）**：备份包内的 v0 空库仍在导入侧被 409 拒绝（`validateBackupPackage` 复用 `hasMigrationPath`），而盘上同内容文件现在会被接受——偏差方向只宽松、无数据风险。
 
 ## entities — 实体表
@@ -238,6 +239,34 @@ CREATE TABLE document_records (
 | **不进 outline.json** | 章正文若写进大纲树，会让整树接口（大纲页、`get_outline` 工具）被动拖入长文本——因此单独成表 |
 
 **读取投影的两个消费面**：① AI 工具（单章只读拉取 / 参考资料全文）——只拿 `content_text`，绝不拿块 JSON；② 列表与摘要（参考资料列表的 `content` 摘要定长截断（长度单一定义 = db `toSummary`）、`GET /outline?with_metadata=true` 的章 `charCount`）——用 `length(content_text)` 与切片，不解析块体。
+
+## document_snapshots — 章正文历史快照表（2026-11）
+
+章级历史（误操作找回）的存放点：每次保存把**被覆盖的旧内容**压一份，供写作页「历史」抽屉恢复。当前内容不进历史。
+
+```sql
+CREATE TABLE IF NOT EXISTS document_snapshots (
+  seq        INTEGER PRIMARY KEY AUTOINCREMENT,  -- 自增排序键（同秒多次保存不会打乱顺序）
+  owner_kind TEXT NOT NULL,    -- 'chapter'（本期只压章正文）
+  owner_id   TEXT NOT NULL,    -- 章节点 id
+  content    TEXT NOT NULL,    -- 被覆盖的旧块数组 JSON 字符串
+  char_count INTEGER NOT NULL, -- 该快照正文字数（恢复时投影由服务端重算）
+  created_at TEXT NOT NULL     -- ISO 8601，应用层写入
+);
+
+CREATE INDEX idx_document_snapshots_owner ON document_snapshots (owner_kind, owner_id, seq);
+```
+
+| 不变式 | 口径 |
+| :--- | :--- |
+| **排序键 = `seq`** | 自增主键是唯一排序键（列表、裁剪、恢复都按它）——`created_at` 是毫秒 ISO 串，同秒多次保存无法定序 |
+| **只存内容 + 字数** | `content` = 被覆盖的旧块 JSON；`char_count` = 当时 `content_text` 的长度。**不存 `content_text`**（恢复时由服务端用 shared `blocksToPlainMd` 重算，避免两份投影漂移） |
+| **节流 + 去重（服务端）** | 写入唯一入口 = db `insertSnapshotIfDue`：距该章最新一份不足 `CHAPTER_SNAPSHOT_MIN_INTERVAL_MS` 跳过；最新一份内容与待压内容相同也跳过。客户端不参与判定 |
+| **两个上限，均删最旧** | 单章 `MAX_SNAPSHOTS_PER_DOCUMENT` 份；全书快照字数 ≤ `SNAPSHOT_BUDGET_MULTIPLIER` × 该书正文总量（`document_records` 投影字数之和）。裁剪唯一入口 = db `trimSnapshots` |
+| **随 owner 走** | 无软删：章软删期间行保留（端点 404），章 purge 时与 `document_records` 行一并物理删（`deleteSnapshotsByOwner`）。**不做自动 `VACUUM`**——上限管的是活跃数据量，不是文件大小 |
+| **参与备份 / 云端 / 导入** | 零额外代码：随 `data.db` 一起进备份包 / 云端存档 / 导入导出（数 MB 量级，近重复快照压缩率更高） |
+
+**恢复口径**：`POST /api/v1/manuscript/:chapterNodeId/restore` 先强压当前内容（绕过节流、去重照旧）再走与 `PUT` 相同的保存核心——因此恢复后的正文会推进 `updated_at`、码字统计仍按正差累加（缩短不扣），且恢复前那一版也留在历史里（可再退回）。
 
 ## writing_stats_daily — 码字日统计表（2026-11）
 

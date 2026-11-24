@@ -156,6 +156,25 @@ export const writingStatsDaily = sqliteTable(
 );
 
 /**
+ * document_snapshots：章正文历史快照（2026-11）——保存时把**被覆盖的旧内容**压一份，用于误操作找回。
+ * 语义与不变式见 `docs/db/schema.md`「document_snapshots」：只存 content + char_count
+ * （不存 content_text，恢复时由服务端用 shared 派生重算）；`seq` 自增主键是唯一排序键
+ * （同秒多次保存也稳定）；无软删——裁剪与章 purge 都是物理删。
+ */
+export const documentSnapshots = sqliteTable(
+  "document_snapshots",
+  {
+    seq: integer("seq").primaryKey({ autoIncrement: true }), // 自增排序键（同秒 / 跨秒都单调）
+    owner_kind: text("owner_kind").notNull(), // 'chapter'（本期只压章正文）
+    owner_id: text("owner_id").notNull(), // 章节点 id
+    content: text("content").notNull(), // 被覆盖的旧块数组 JSON 字符串
+    char_count: integer("char_count").notNull(), // 该快照正文字数（content_text 长度；恢复时投影重算）
+    created_at: text("created_at").notNull(), // ISO 8601，应用层写入
+  },
+  (t) => [index("idx_document_snapshots_owner").on(t.owner_kind, t.owner_id, t.seq)],
+);
+
+/**
  * 全部业务表 + 索引的建表 SQL（幂等：CREATE TABLE/INDEX IF NOT EXISTS）——建表执行的事实来源。
  * 与上方 sqliteTable 定义必须同步（schema.test.ts 对齐断言覆盖）。
  */
@@ -255,5 +274,17 @@ CREATE TABLE IF NOT EXISTS writing_stats_daily (
   chars      INTEGER NOT NULL CHECK (chars > 0),  -- 当日累计新增正文字数（只加正增量）
   updated_at TEXT NOT NULL       -- 最后一次累计写入时刻（ISO 8601）
 );
+
+-- document_snapshots：章正文历史快照（2026-11）
+CREATE TABLE IF NOT EXISTS document_snapshots (
+  seq        INTEGER PRIMARY KEY AUTOINCREMENT,  -- 自增排序键（同秒多次保存不会打乱顺序）
+  owner_kind TEXT NOT NULL,    -- 'chapter'（本期只压章正文）
+  owner_id   TEXT NOT NULL,    -- 章节点 id
+  content    TEXT NOT NULL,    -- 被覆盖的旧块数组 JSON 字符串
+  char_count INTEGER NOT NULL, -- 该快照正文字数（恢复时投影由服务端重算）
+  created_at TEXT NOT NULL     -- ISO 8601，应用层写入
+);
+
+CREATE INDEX IF NOT EXISTS idx_document_snapshots_owner ON document_snapshots (owner_kind, owner_id, seq);
 
 `;

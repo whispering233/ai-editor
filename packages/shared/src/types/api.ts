@@ -66,6 +66,7 @@ export const ERROR_CODES = [
   "CHAT_BUSY", // 409 当前项目已有在途 chat 流（单项目单流约束，docs/api/80-api-chat.md）
   "THINKING_NOT_FOUND", // 404 思维链全文端点：blockIndex 越界或该块非 thinking
   "DOCUMENT_STALE", // 409 保存章正文时版本戳不一致（另一标签页/窗口已写入；参考资料正文无版本戳、不在本码覆盖范围）；**仅当请求携带 base_updated_at 时校验**，省略 = 覆盖保存（拒绝隐式丢失他人写入）
+  "SNAPSHOT_NOT_FOUND", // 404 章级历史快照不存在（restore 指定的 snapshot_id / 单份读取的 seq 未命中该章的快照）
  // ---- 废弃（保留兼容）----
   "DELTA_CONFLICT", // 已废弃（2026-08 修订：computeState 以 conflicts 字段替代 409）
  // ---- 命名（调试日志用）----
@@ -997,6 +998,14 @@ export const manuscriptPutResSchema = z.object({
 export type ManuscriptGetRes = z.infer<typeof manuscriptGetResSchema>;
 export type ManuscriptPutReq = z.infer<typeof manuscriptPutReqSchema>;
 export type ManuscriptPutRes = z.infer<typeof manuscriptPutResSchema>;
+
+// POST /api/v1/manuscript/:chapterNodeId/restore（恢复到某份历史快照；响应与 PUT 同形）
+export const manuscriptRestoreReqSchema = z
+  .object({
+    snapshot_id: z.number().int().positive(), // 目标快照的 `seq`（列表端点返回的自增序号）
+  })
+  .strict();
+export type ManuscriptRestoreReq = z.infer<typeof manuscriptRestoreReqSchema>;
 
 // ============ writing-stats 端点（「码字统计（按天）」，docs/api/130-api-writing-stats.md） ============
 //
