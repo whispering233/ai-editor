@@ -3,9 +3,11 @@
 // 路由不动）；在这里问一句——取消 → 再 push 一条哨兵复位，确认 → 真正 `history.back()`。
 // 实测次序（Chromium 实测，见任务卡汇报）：pushState(同 URL) 不触发任何事件；退到同 URL 条目只有
 // popstate（**无 hashchange** ⇒ `useHashRoute` 不会被误判）；退到不同 hash 时 popstate 先于 hashchange。
-// 状态只有两个：
+// 状态：
 // - armed = 哨兵是不是还挂在当前位置（是 ⇒ 下一次 popstate 就是我们拦的那次后退）
 // - suppressed = 自己那次 `back()` 的回声 popstate 还没到（到了就吞掉，不重复问 / 不重复退）
+// - pending = 确认框在途
+// - stale = 确认在途期间又来了 popstate（浏览器已经真退了一条，落地后不得再 back()）
 // 纯逻辑 + 注入历史操作 ⇒ 真值表可单测（`back-guard.test.ts`）；接线见 hooks/use-back-guard。
 
 /** 守卫需要的历史操作（`window.history` 的窄化，测试注入假实现） */
@@ -33,6 +35,8 @@ export function createBackGuard(
 ): BackGuard {
   let armed = false;
   let suppressed = false;
+  let pending = false;
+  let stale = false;
   let disposed = false;
 
   /** 挂哨兵；重新挂时清抑制标志（上一条哨兵没等到回声时它会残留） */
@@ -67,14 +71,24 @@ export function createBackGuard(
         suppressed = false;
         return;
       }
+      if (pending) {
+        // 浏览器已经真退了一条（hash 与路由都跟着走了）：记下，不再弹第二个框
+        stale = true;
+        return;
+      }
       if (!armed) return; // 没有哨兵：不是我们拦的那次后退（前进 / 守卫未覆盖的历史操作）
-      armed = false; // 哨兵被这次后退消费掉了；在途期间的第二次 popstate 因 armed=false 被忽略
+      armed = false; // 哨兵被这次后退消费掉了
+      pending = true;
       void confirmDiscard().then((ok) => {
+        pending = false;
         if (disposed) return;
+        const wasStale = stale;
+        stale = false;
         if (!ok) {
-          arm(); // 取消：重新 push 哨兵复位（URL 全程未变）
+          arm(); // 取消：重新 push 哨兵复位（URL 全程未变；取消路径不受 stale 影响）
           return;
         }
+        if (wasStale) return; // 不能再 back()：用户只决定了一次，再退就是退两页
         suppressed = true; // 自己那次 back() 不得再弹框
         history.back();
       });

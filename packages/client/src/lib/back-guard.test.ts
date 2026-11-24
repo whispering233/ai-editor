@@ -90,17 +90,35 @@ describe("popstate", () => {
     expect(calls).toEqual(["back"]); // 不再退一条
   });
 
-  it("在途期间再按后退：不叠第二个确认框", async () => {
-    const { history } = fakeHistory();
+  it("在途期间再按后退：不叠第二个确认框，确认落地后也不再 back（浏览器已退一格）", async () => {
+    const { calls, history } = fakeHistory();
     const { confirm, answer } = pendingConfirm();
     const guard = createBackGuard(history, confirm);
     guard.setDirty(true);
+    calls.length = 0;
+
+    guard.handlePopState();
+    guard.handlePopState(); // 在途期间又退一格
+    expect(confirm).toHaveBeenCalledTimes(1);
+
+    answer(true);
+    await settle();
+    expect(calls).toEqual([]); // 再 back() 就是一次决定退两页
+  });
+
+  it("在途期间再按后退 + 取消：仍复位哨兵（取消路径不受 stale 影响）", async () => {
+    const { calls, history } = fakeHistory();
+    const { confirm, answer } = pendingConfirm();
+    const guard = createBackGuard(history, confirm);
+    guard.setDirty(true);
+    calls.length = 0;
 
     guard.handlePopState();
     guard.handlePopState();
-    expect(confirm).toHaveBeenCalledTimes(1);
     answer(false);
     await settle();
+
+    expect(calls).toEqual(["push"]); // 用户留在原地，哨兵必须重新挂上
   });
 });
 
@@ -161,6 +179,18 @@ describe("卸载", () => {
 
     expect(confirm).toHaveBeenCalledTimes(1);
     expect(calls).toEqual(["push"]); // 没有 back
+  });
+
+  it("reset 之后 setDirty(true) 不会重挂哨兵（disposed 语义）", () => {
+    const { calls, history } = fakeHistory();
+    const guard = createBackGuard(history, vi.fn(async () => true));
+    guard.setDirty(true);
+    guard.reset();
+    calls.length = 0;
+
+    guard.setDirty(true);
+    guard.setDirty(false);
+    expect(calls).toEqual([]);
   });
 
   it("reset 时仍站在哨兵上：退一条撤掉（事件监听已移除，URL 不变）", () => {
