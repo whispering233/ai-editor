@@ -4,6 +4,7 @@ import { describe, expect, it } from "vitest";
 import type { OutlineNode } from "@whispering233/ai-editor-shared";
 import {
   CONFLICT_LEVEL_LABEL,
+  buildOutlineDetailPatch,
   chapterTagPool,
   detailFieldsForNodeType,
   normalizeOutlineDataForm,
@@ -196,5 +197,85 @@ describe("normalizeOutlineDataForm（tags 归一：末行空串 / 前后空格�
     const form = { tags: ["验收线", ""] };
     expect(diffData({}, normalizeOutlineDataForm(form))).toEqual({ tags: ["验收线"] });
     expect(diffData({ tags: ["验收线"] }, normalizeOutlineDataForm(form))).toBeNull();
+  });
+
+  // C4 章实际摘要：空串 = 不写该键（空表单不是一次提交），有值 = trim 后进 patches
+  it("result_summary：空串 / 纯空白 → 不写该键", () => {
+    expect(normalizeOutlineDataForm({ result_summary: "", status: "draft" })).toEqual({
+      status: "draft",
+    });
+    expect(normalizeOutlineDataForm({ result_summary: "   " })).toEqual({});
+    expect(normalizeOutlineDataForm({ result_summary: "" })).not.toHaveProperty("result_summary");
+    // 与 tags 归一叠加时两键都不丢口径：空 result_summary 删键、tags 仍去空串
+    expect(normalizeOutlineDataForm({ tags: ["主线", ""], result_summary: "  " })).toEqual({
+      tags: ["主线"],
+    });
+  });
+
+  it("result_summary：有值 → trim 后进 patches；与基线同值不提交", () => {
+    const form = { result_summary: " 主角拿到断剑 " };
+    expect(normalizeOutlineDataForm(form)).toEqual({ result_summary: "主角拿到断剑" });
+    expect(diffData({}, normalizeOutlineDataForm(form))).toEqual({ result_summary: "主角拿到断剑" });
+    expect(diffData({ result_summary: "主角拿到断剑" }, normalizeOutlineDataForm(form))).toBeNull();
+  });
+
+  // 清空已有摘要 = 一次提交（空串 = 清空，与工具侧同口径；删键会被 diffData 当「不提交」）
+  it("result_summary：基线有值 + 表单清空 → 写空串（清空进 patches）", () => {
+    const baseline = { result_summary: "旧摘要" };
+    expect(normalizeOutlineDataForm({ result_summary: "" }, baseline)).toEqual({ result_summary: "" });
+    expect(normalizeOutlineDataForm({ result_summary: "   " }, baseline)).toEqual({ result_summary: "" });
+    expect(diffData(baseline, normalizeOutlineDataForm({ result_summary: "" }, baseline))).toEqual({
+      result_summary: "",
+    });
+    // 基线该键为纯空白 = 本来就没摘要 ⇒ 不写该键
+    expect(normalizeOutlineDataForm({ result_summary: "" }, { result_summary: "  " })).not.toHaveProperty(
+      "result_summary",
+    );
+  });
+
+  it("result_summary：基线有值 + 表单有值 → trim 后进 patches，与基线同值不提交", () => {
+    const baseline = { result_summary: "旧摘要" };
+    expect(normalizeOutlineDataForm({ result_summary: " 新摘要 " }, baseline)).toEqual({
+      result_summary: "新摘要",
+    });
+    const same = { result_summary: "新摘要" };
+    expect(diffData(same, normalizeOutlineDataForm({ result_summary: " 新摘要 " }, same))).toBeNull();
+  });
+
+  it("result_summary：缺省 / 空默认值不判 dirty（diffData 无变化）", () => {
+    expect(diffData({}, normalizeOutlineDataForm({}))).toBeNull();
+    expect(diffData({}, normalizeOutlineDataForm({ result_summary: "" }))).toBeNull();
+    expect(diffData({ status: "draft" }, normalizeOutlineDataForm({ status: "draft", result_summary: "" }))).toBeNull();
+  });
+
+  it("result_summary：非字符串脏值原样返回（不白造新对象、不改写）", () => {
+    const dirty = { result_summary: 42 };
+    expect(normalizeOutlineDataForm(dirty)).toBe(dirty);
+  });
+});
+
+// 回归钉：保存路径（handleSave）用的是这个函数——基线丢了就会把「清空实际摘要」再弄丢
+describe("buildOutlineDetailPatch（保存路径：归一再 diff，基线参与）", () => {
+  it("基线有值 + 表单清空 → patch 写空串（不是 {} / null）", () => {
+    const { normalizedData, dataPatch } = buildOutlineDetailPatch(
+      { result_summary: "旧" },
+      { result_summary: "" },
+    );
+    expect(normalizedData).toEqual({ result_summary: "" });
+    expect(dataPatch).toEqual({ result_summary: "" });
+  });
+
+  it("基线没摘要 + 表单纯空白 → 产物不含该键", () => {
+    const { normalizedData, dataPatch } = buildOutlineDetailPatch({}, { result_summary: "  " });
+    expect(normalizedData).not.toHaveProperty("result_summary");
+    expect(dataPatch).toBeNull();
+  });
+
+  it("其它字段：只提交变更，tags 末行空串不进 patch", () => {
+    expect(buildOutlineDetailPatch({ status: "draft" }, { status: "done", tags: ["主线", ""] })).toEqual({
+      normalizedData: { status: "done", tags: ["主线"] },
+      dataPatch: { status: "done", tags: ["主线"] },
+    });
+    expect(buildOutlineDetailPatch({ status: "done" }, { status: "done" }).dataPatch).toBeNull();
   });
 });
