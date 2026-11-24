@@ -356,13 +356,10 @@
   - **rail 行优先级徽标 / 摘要字段 / `search_entities` 过滤 / `byPriority` 分布**：现口径 = 优先级只影响排序，`get_entity`（详情）已能让 AI 读到；rail 行不显示（与 `role` 文本视觉重复且 240px 拥挤）。触发条件：出现「左栏看不出谁是主角」的真实反馈。
   - **优先级驱动 AI 上下文注入权重**（主角优先灌入）：属 `20-context.md` 的设计面，未排期。
 
-- **大纲 / 设定详情未保存守卫未覆盖浏览器后退（2026-11 登记）**
-  - 现状：详情表单 dirty 时，rail 切换、空白区清选中、窄屏「大纲树 / 设定树」返回条、收起右侧详情、详情页头「写正文」外链都会 `confirm`；**浏览器后退（hashchange）直接离开，未保存修改丢弃**（大纲页 `#/outline`、设定页 `#/setting` 同此口径）。
-  - 触发条件：真实用户反馈「后退丢了我刚改的摘要」；或要做全站脏表单守卫。
-  - 最小修法：浏览器后退需在壳里挂 `hashchange` 拦截（先 push 一个占位历史）或只用 `beforeunload`（仅关页，不覆盖 SPA 后退）——两者都要先定「取消后 URL 如何回滚」。
-
-## 会话状态栏的延期项（状态栏设计定稿时登记，未排期）
-
+- **后退守卫的两个历史栈残差（2026-11 复核登记，报告级）**
+  - ① **离开哨兵后残留一条同 URL 死条目**：dirty 时点另一行并确认放弃 ⇒ `navigate()` 在哨兵之上压新条目、dirty 复位，哨兵留在栈里；之后那次后退落到它、`armed` 已失效 ⇒ 视觉「按了没反应」。根治要改 `navigate` 时机（先撤哨兵并等回声），收益不抵复杂度。
+  - ② **哨兵恰是首条历史条目时**（深链直开就编辑）`back()` 无回声 ⇒ `suppressed` 残留，吞掉下一次真实后退一次。同样只是一次死按键，无数据风险。
+  - 触发条件：真实用户反馈「后退按了没反应」；届时先把「离开哨兵」这条补上，②随同一次改。
 - **历史端点新增了进程级 `ModelRuntime` 依赖**（端到端验收 oracle 登记，低危）
   - 现状：`GET /chat/sessions/:id/messages` 为算 `subscription` 而 `await getModelRuntime()`；该方法创建失败（凭据/模型目录损坏）时这个**只读**端点会 500（此前它只依赖会话文件）。
   - 触发条件：出现「聊天记录打不开但其它页面正常」的反馈。
@@ -435,7 +432,6 @@
 - **手动检查在慢网下会先弹一个「正在后台下载…」框（两个框的观感）**（2026-09-16 真机）— 现状：v0.0.45+ 已修「已下完还说正在下载」的假话（下载秒回时只弹安装框），但下载确实耗时（>1.2s 判定窗口）时仍会先弹「正在后台下载…」、用户关闭后再弹「已下载」——两句都是真话但观感啰嗦。触发条件：用户反馈这一点。最小修法：去掉中间框（代价：慢网下点菜单后长时间无任何回应）；或做非模态进度（要 client UI，见「设置页内嵌更新面板」条）。
 
 - **设置页内嵌更新面板**（显示版本 / 手动检查 / 下载进度）— 现状：v0.0.44 起更新走主进程原生对话框 + 菜单「帮助 → 检查更新…」，client 侧零改动（`50-desktop.md` §5.2）。触发条件：用户反馈找不到检查入口、或要看下载进度。最小修法：扩 `DesktopBridge`（invoke + 状态推送）+ 设置页「通用」一行，更新逻辑不动。
-- **非打包态（win32 开发机）点「检查更新…」会显示「已是最新版本」**（`50-desktop.md` §5.2 的守卫只管 win32，dev 态 electron-updater 直接不检查）— 现状：有回应但信息是假的（oracle 复核登记）。触发条件：dev 态被这条误导过。最小修法：`isUpdateSupported()` 里补 `&& app.isPackaged`（一处改动同时让菜单项消失，符合 main.ts「onCheckUpdates 为 null = 没有更新能力」原则）；**不要**只在 `checkForUpdatesManually` 里加分支（那会留下一个点了就撒谎的菜单项）。
 - **`await closeServer()` 之后 `quitAndInstall` 失败的窗口期**（应用活着但后端已关）— 现状：同步失败只可能在 `installerPath == null`（与 `update-downloaded` 事件矛盾，几乎不可达）；真实失败是 spawn 的**异步**错误（EACCES/ENOENT，杀软拦截同列），那时应用照常退出、只是没装上，兜底也拦不到。触发条件：真机日志出现 `Cannot run installer: error code: …`。最小修法：`quitAndInstall` 前 `autoUpdater.once("error", …)` 弹一次错误框（3 行）；当前不做（YAGNI）。
 - **更新灰度 / 预发布通道** — 现状：所有安装态都从 `/releases/latest` 拿最新正式版。触发条件：需要先给部分人验版本。**口径（必须遵守）**：将来若发 `vX.Y.Z-beta.1` 这类 tag，Release **必须勾 prerelease**——否则 `/releases/latest` 会把 beta 推给所有正式用户（`50-desktop.md` §5.2）。
 - **macOS / Linux 自动更新** — 现状：更新器有 win32 守卫，只对 Windows 安装态生效。触发条件：相应平台恢复出包（macOS 另需签名/公证——那是 electron-updater 的硬前置）。
@@ -454,7 +450,7 @@
 
 - **GitHub Actions 的 Node 20 弃用告警（v0.0.44 首现）** — 现状：Desktop workflow 报 `actions/upload-artifact@v4` 与 `softprops/action-gh-release@v2` 被强制跑在 Node 24（`Node.js 20 is deprecated`），**仅告警、任务成功**。触发条件：上游改成硬报错，或两个 action 各抬一个 major（`upload-artifact@v5` / `action-gh-release@v3`）时。最小修法：两个 action 各抬一个 major，其余 `actions/*` 一并核对（三个 workflow 共用）。
 
-- **CI 侧打包态启动冒烟（缺失的护栏）** — 现状：卡 A1/A2 验收里的「打包后起一次」只在本地人工做过（v0.0.44 的 `electron-updater` ESM 具名导入就是这样被捉到的：typecheck/lint/单测全绿，打包态直接启动失败），CI 只验证「包能构建、三资产齐全」，**不验证「包能起来」**。触发条件：下一次主进程依赖/import 变动导致同类回归（很便宜就能重现）。最小修法：`desktop.yml` 在 electron-builder 后加一步：解压/使用 `release/win-unpacked/ai-editor.exe --user-data-dir=<tmp>`，等几秒后断言日志里有「菜单已就绪」且无 `SyntaxError`/`Uncaught Exception`（Windows runner 需要处理无交互会话下的窗口创建，可能要 `--no-sandbox` 或改为断言「主进程跑到了 server 启动行」）。
+- **打包态冒烟的「退路判据」可能长期生效**（2026-11 随脚本落地登记，报告级）— 现状：`packages/desktop/scripts/smoke.mjs` 主判据 = 日志含「菜单已就绪」（真建出窗口 + 装好菜单），退路 = 只含 server 启动行；命中退路只打 `::warning::` 并以 0 退出。触发条件：首次 `workflow_dispatch` 后核对 run 日志里有没有那条 warning——若长期走退路，「冒烟绿」会被误读成「窗口验证过」。最小修法：确认 runner 能建窗后删掉退路，只在本地自查时用。
 
 - **Windows 自动更新的真机闭环** — ✅ **已完成（2026-09-16/17，连续五跳：0.0.44→0.45→0.46→0.47→0.48）**；明细与「代码新旧指纹」见 `50-desktop.md` §5.2 与 `CHANGELOG.md`。**残留两个未专门观测的小项**：升级时是否弹 UAC（预期不弹，per-user）、安装对话框的 Esc/Enter 是否都走「稍后」——真机顺手验。
 - **macOS / Linux 安装包的恢复** — 现状：matrix 里两项已注释（无真实用户需求 + 无 mac 环境可验）。触发条件：出现相应平台的真实用户。（Linux 包本机可随时出；macOS 需 mac runner。）
@@ -476,7 +472,7 @@
 - **写作工具条的 a11y 名字（卡 13.5 登记，已试过一遍）** — 现状：工具条根元素只有 `role="toolbar"`、无 `aria-label`（库自带浮动条同样）。**不可用「多传一个属性」解决**：`Components.FormattingToolbar.Root` 只收 `className/children/onMouseEnter/onMouseLeave/variant`，其余键会被 core 的 `assertEmpty` 抛错（fixer 用探针实证：typecheck 绿、运行时崩）。触发条件：真需要屏幕阅读器识别该区域时。升级路径：自绘 Root（拿走 ariakit `Toolbar` 的那层包装）或给库提 PR；**别再走传属性那条路**。
 - **参考资料详情页没有专注模式（有意）** — 现状：专注模式只给写作页的章正文（`Q7 决策`：参考资料页一半是元数据表单，「专注」语义不成立）。触发条件：用户明确要求写长笔记时也能纯净界面。最小修法：给 `ReferenceDetail` 也传 `focus`/`status` + 沿用同一 AppShell 分支（但得先定「表单去哪」）。
 - **写作面文案的手抄同源（卡 13.5 登记）** — 现状：帮助弹窗里「撤销 / 重做 / 写作设置 / 六档位名」是手写字面量，与 `editor-toolbar.tsx` / `writing-settings.tsx` 同名同值（库字典里没有这些名字）；快捷键与工具条按钮名已经字典同源。触发条件：改名时发现两处不同步。最小修法：把这几个名字提到一处导出常量（与 `shared/src/constants/delta.ts` 同思路），帮助弹窗与按钮共引用。
-- **页面关闭 / 退出桌面版时的「最后 1.5s」可能丢（2026-09 登记，已确认口径）** — 现状：正文只靠空闲自动保存 + **React 卸载**时 flush；全仓 `beforeunload` / `pagehide` / `visibilitychange` / `keepalive` / `sendBeacon` **零命中** ⇒ 关标签页或点桌面版窗口 X（走主进程 `closeServer()`，进程内服务随之退出）时，最后 1.5s 内的输入可能没落盘。已加**手动「保存」按钮**（工具条右端，批 14）作为用户侧保底，但**不是自动兜底**。触发条件：出现真实的「关窗口丢一段字」报告。升级路径（两者都要定口径）：① 渲染侧 `pagehide`（或 `beforeunload`）+ `keepalive: true` 的 fetch（请求体 ≤64KB 限制，超限需另想办法或提示）；② 桌面侧主进程 `before-quit` 拦一次 —— 等渲染进程 flush 完成（或直接等一下在途 `PUT`）再 `closeServer()`。
+- **浏览器形态关标签页 / 崩溃断电仍会丢最后一段输入**（2026-11，桌面侧 flush 通道落地后登记）— 现状：flush 通道只属 Electron 外壳（`win.on("close")` 拦截），web 形态（`pnpm start` + 浏览器）关标签页、以及任何形态下的崩溃 / 断电 / 强杀都不经过它。触发条件：出现「关标签页或崩溃丢一段字」的真实反馈。升级路径：渲染侧 `pagehide` + `keepalive: true`（请求体 ≤64KB，长章会超）或 localStorage 草稿 + 启动恢复提示——后者覆盖面最广，但要先定「草稿与服务端哪份更新」的判定，等于引入第二份真相。
 - **写作工具条窄幅折行的顺序摩擦（卡 13.1 实测登记，低危）** — 现状：中栏窄于按钮总宽时工具条折行（已不裁切），但 `flex-1` 撑开块的右端组可能被挤到第二行靠左。触发条件：真实用户在小屏/三栏并行时抱怨按钮位置跳。最小修法：给右端组 `margin-left: auto` 或把状态区移到独立行。
 - **桌面版导出直写目录（含「另存为」原生对话框）** — 现状：导入导出走标准 `<input type=file>` / `<a download>`（桌面版会落在默认下载目录，小说文档的卷/章目录树只在 zip 内）。触发条件：用户抱怨找不到导出文件，或要求「把目录树直接落进我的稿子文件夹」。最小修法（两条路径都要，别只做一半）：`preload` 加目录选择能力（或复用已有 `pickDirectory`）+ 服务端新增「按给定目录直写小说文档目录树」端点；浏览器形态保持 `desktopBridge()` 能力检测不变。
 - **正文级搜索/全文统计（UI 侧）** — 现状：只有大纲树与写作页卷章导航栏的 `metadata.textLength`、以及参考资料列表摘要。触发条件：全书搜索需求落地时（与 `search_manuscript` 同批考虑，复用 `content_text`）。
@@ -521,7 +517,8 @@
 - **REST 校验范围在 api 文档与 zod schema 两处出现（有意保留的契约镜像）** — 现状：`docs/api/*.md` 的请求体注释写明「1-100 字符」这类范围，单一来源 = shared `types/api.ts` 的 zod schema，文档是契约说明视图。触发条件：改任一校验范围时（schema 与文档同改）。**不**做「文档插值常量」——api 文档是给人读的契约，插值会降低可读性。
 - **代码注释里的历史阶段编号（`卡 N` / `S1.2` / `G2` / `F9`）** — 现状：约 300 处，作为 provenance 记号保留（不指向可变契约）；**合同文档的编号引用已在 v0.0.51 清掉**（`docs/api`、`docs/db`、`docs/ui`、`docs/design` 正文），`backlog.md` 保留（登记来源）。触发条件：若将来要求注释零历史编号，再做一次机械替换（无技术风险，纯 churn）。
 - **`packages/server/src/middleware/project.ts` 有两个无人引用的导出**（knip 审计发现，非某次改动引入）— `getProject`（导出但全仓无 import；路由实际经 `requireCurrentProject` / `getCurrentProject` 读取）与 `DATA_DB_FILE_NAME`（本文件内部使用，外部已改从 `@whispering233/ai-editor-db` 取）。**不删除的理由**：与任何行为无关，纯 churn；触发条件：下次改该文件时顺手收掉（`getProject` 若确实无调用点，直接删函数）。
-- **`dist/` 永不清理 ⇒ 已删模块的编译产物会随 tarball 发布** — 现状：`pnpm -r build` 只覆写不删除（`tsc -p tsconfig.json` 无 `--build`/clean），删除源文件后旧 `dist/**` 成了孤儿；实例：`packages/server/src/decompose` 已随拆除管线删除，但 `packages/server/dist/decompose/**` 仍在，而 `server` 的 `files: ["dist", "client-dist"]` ⇒ **陈旧且不可达的代码会进入 npm 包**（oracle 审计发现，非某次改动引入）。触发条件：下次动构建/发布链路时；最小修法 = 各包 build script 前置 `rm -rf dist`（本地 `rm -rf packages/server/dist/decompose` 只能治一次，不防复发）。
+- **`packages/server` 的测试在 Windows 本机全红**（2026-11 上台基线时登记）— 现状：`afterEach` 的 `rmSync(tmpdir)` 删不掉仍被 SQLite 句柄握着的临时库 ⇒ Windows `EPERM`（Linux 上 unlink 打开的文件无问题）；本仓开发环境是 WSL，故长期没被发现。影响：Windows 上「全量测试绿」这条护栏对 server 不可用（`client` 那批源码扫描红已随 `.gitattributes` + `fileURLToPath` 修正）。触发条件：需要在 Windows 上跑 server 测试判回归时；最小修法 = 各用例 `afterEach` 先关库再删目录，或在 `rmSync` 外包一层容忍 EPERM——**不要**去改生产代码的关闭时机。
+- **flush 回执没有关联序号 / 页面未挂载时关窗固定等 3s**（2026-11 C1 复核登记，低危两项）— ① `desktop:flush-done` 只带 `ok` 布尔、主进程只按 `event.sender` 过滤 ⇒ 超时后迟到的 `ok=true` 会被下一次关窗的等待认领（两次都是「保存一次」的语义，无数据风险）；② 渲染侧没有 `onFlushRequest` 监听者时 `send` 静默丢弃，只能靠 `FLUSH_TIMEOUT_MS` 兜底 ⇒ 启动瞬间 / 页面加载失败时关窗要等满 3 秒才出确认框。
 
 ## 作家文风练习（2026-10，改版后的升级路径）
 

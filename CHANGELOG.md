@@ -9,11 +9,23 @@
 
 ## [Unreleased]
 
+### Added
+
+- **关窗 / 退出前落盘未保存正文（桌面版）**：主进程 `win.on("close")` 拦一次 → 通知渲染进程跑「栈顶保存动作」→ 收到回执才真正关闭（服务端活到落盘之后）；失败或超时（`FLUSH_TIMEOUT_MS`）弹一次原生确认框，默认「留在这里」（选它会取消整个退出，应用继续可用）。同时修掉菜单「退出」下 `before-quit` 抢在关窗之前关服务端的次序问题（判定单源 = `quit-sequence.ts` 的两个纯函数），并让「更新安装 / 切换书库」这两条已主动关服务端的路径跳过阻断。
+- **浏览器后退守卫**：大纲页 / 设定页详情表单 dirty 时按后退先确认，不再静默丢弃（哨兵历史条目实现，取消 = 什么都没发生；判定单源 = `lib/back-guard.ts` 的纯状态机）。覆盖面只到已有未保存守卫的这两页。
+- **打包态启动冒烟进发布链路**：`desktop.yml` 在打包后起一次产物，断言日志出现「菜单已就绪」且无启动异常，失败即让 job 红（坏包不再发出去）；书库与日志都钉在临时目录，不碰真实书库。
+
 ### Changed
 
+- **各包 `build` 先清 `dist`**：`shared` / `tools` / `server` / `agent` / `db` / `desktop` 的 build 前置删产物目录，避免已删模块的编译产物随包发布（`client` 由 vite `emptyOutDir` 负责，不动）。
 - **`@ant-design/x` 与 `@ant-design/x-markdown` 升到 2.10.0**（`^2.9.0` → `2.10.0`，peerDependencies 未变，无破坏性变更）。两者改为**精确版本**（与 `@blocknote/*` / `@xyflow/react` 同一档）：我们依赖 x 的内部结构（`ThoughtChain` 标题字重、`footer` 槽位、`div onClick` 折叠头），patch 漂移会静默改掉这些前提。
 - **助手正文的流式 markdown 渲染**：chat 正文改用 x-markdown 的 `streaming` 配置（`hasNextChunk` 跟随尾条流式状态 + 未闭合语法按已写完显示），流结束才一次性定稿；不启用 `typewriter` / `incremental` / `tail`（与 delta 到达双动画、散文无标题切分点、不新增视觉语言）。
 - **工具调用行改用 `@ant-design/x` `ThoughtChain`**：一条 assistant 消息的全部调用成一条链（左侧状态轴只标记进行中 / 失败，成功回落序号），折叠头保留我们自己的 `<button aria-expanded>`（不用 x 的 `collapsible`，它无键盘语义）；联网来源卡片改挂在恒显的 `footer` 槽位。
+
+### Fixed
+
+- **dev 态不再谎报「已是最新版本」**：`isUpdateSupported()` 加 `app.isPackaged`，非打包态菜单不再出现「检查更新…」（与「`onCheckUpdates` 为 null = 没有更新能力」的既有原则一致）。
+- **Windows 上的测试基线**：新增 `.gitattributes`（`* text=auto eol=lf`）统一换行，两个源码扫描守卫改 `fileURLToPath` 取路径，桌面版 7 处路径断言改为跨平台归一——此前 CRLF 工作树会让「读源码比对字符串」的测试整批失效（`client` 的改色与接线守卫长期未真正执行）。
 
 ## [v0.0.65] - 2026-11-22
 

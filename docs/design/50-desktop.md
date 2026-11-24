@@ -15,7 +15,7 @@
 
 **不变式**：桌面版启动路径**不得**依赖 `process.cwd()` 或命令行参数——macOS 下 cwd 是 `/`，双击启动没有可控参数。
 
-### 1.1 退出前的未保存内容（flush 通道，2026-09）
+### 1.1 退出前的未保存内容（flush 通道，2026-11）
 
 正文只在页面自己的保存动作里落盘，而空闲自动保存（`AUTOSAVE_DELAY_MS`）窗口内的改动还没落盘 ⇒ 关窗是「最后一次落盘机会」，必须经一条通道，**不得在 `before-quit` 里抢跑 `closeServer()`**（落盘要打 HTTP，服务端得活到那时）：
 
@@ -27,6 +27,8 @@
    - X 按钮：`window.close` → flush → 真关 → `window-all-closed` → `app.quit()` → `before-quit`（此时已无窗口）→ `closeServer()`。
    - 菜单「退出」：`app.quit()` → `before-quit`（**有窗口 ⇒ 跳过 `closeServer()`**）→ 窗口 `close` → flush → `window-all-closed` → `app.quit()` → `before-quit`（无窗口）→ `closeServer()`。判定单源 = `quit-sequence.ts` 的 `shouldCloseServerOnBeforeQuit`（次序看不见，只能靠纯函数 + 单测钉住）。
    - flush 失败时用户在确认框选「留在这里」会**取消整个 quit**（Electron 语义：取消窗口 close 即取消 quit），**此时服务端仍活着**，应用可继续使用——这是上述次序的主要收益，不是权宜之计。
+
+6. **服务端已被主动关掉时不再拦**：更新安装（`closeServer()` → `quitAndInstall`）与切换书库（`closeServer()` → `app.relaunch()` + `app.quit()`）都是「先关服务端再 quit」——此时 flush 的 HTTP 必然失败，拦下去只会弹假警报，还可能让「留在这里」取消掉正在进行的安装。判定单源 = `quit-sequence.ts` 的 `shouldSkipFlushOnClose`（复用 `closing` 标志）。
 
 **不做**（有意）：浏览器形态的 `pagehide` 兜底（flush 通道只属桌面版）、崩溃 / 断电恢复（另一个问题域）——两者触发条件见 `backlog.md`。
 
