@@ -16,7 +16,8 @@
 // 壳：`#/outline` / `#/outline/:nodeId` 都渲染同一个壳，nodeId 只决定右列（详情 / 空态）；宽度 / 收起
 // 见 hooks/use-outline-rail。**选中唯一来源 = URL**：不另存组件选中态，行单击 = 导航 `#/outline/:id`
 // （同 id 幂等），选中行 = `bg-accent` + `aria-current="page"`；双击不再进详情；未保存守卫 = 详情
-// 上报 dirty，rail 切换 / 空白区清选中 / 窄屏返回条 / 新建导航前先 `confirm`。
+// 上报 dirty，rail 切换 / 空白区清选中 / 窄屏返回条 / 新建导航 / **浏览器后退**（哨兵历史条目）
+// 先 `confirm`。
 // 路由：#/outline（2026-11 起只有树视图，写作入口独立成 #/writing）；数据：GET /api/v1/outline?with_metadata=true
 // （整树，按页开启见 hooks/use-outline-loader）+ GET /api/v1/relation（伏笔标记，S9.2）；操作：POST/PUT/DELETE /outline、PUT /project/config（设阅读进度）
 // 2026-09：卷/章行的类型徽标改为**编号徽标**（`第N卷` / `第N章`，展示口径——只计可见节点、删后重排，
@@ -102,6 +103,7 @@ import { tagTintClass } from "../lib/tag-tint";
 import { outlineTagsFromData, previewOutlineTags } from "../lib/outline-tags";
 import { focusNewItem } from "../lib/new-item-focus";
 import { useSaveShortcut } from "../lib/save-shortcut";
+import { useBackGuard } from "../hooks/use-back-guard";
 import { navigate } from "../hooks/use-route";
 import { useOutlineLoader } from "../hooks/use-outline-loader";
 import { useDataRefresh } from "../hooks/use-data-refresh";
@@ -223,6 +225,8 @@ export default function Outline({ nodeId }: { nodeId?: string }) {
       description: "当前节点的修改尚未保存，切换后将丢失",
     });
   }
+  // 浏览器后退也走同一句确认（哨兵历史条目，见 hooks/use-back-guard）
+  useBackGuard(detailDirty, confirmDiscard);
 
   /** 切换右侧详情收起态：收起前过未保存守卫（dirty 才弹，取消不收起）；展开无守卫 */
   function toggleDetailWithGuard() {

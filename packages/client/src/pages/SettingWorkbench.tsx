@@ -6,8 +6,8 @@
 // `#/setting/:id` 只渲染详情全宽 + 顶部 32px「设定树」返回条（滚动区之外）。
 // 数据：rail 自拉 `GET /entities` + `GET /relations`（settings 树）；详情仍走 `EntityDetail` 自己的 GET。
 // 本壳只持两个 tick：`reloadKey`（详情保存 onSaved / 数据变更信号 → rail 重拉）与 `useDataRefresh`。
-// 未保存守卫：详情上报 dirty，切行 / 清选中 / 窄屏返回条 / 收起右侧详情先 `confirm`
-// （浏览器后退仍不拦，见 backlog.md）。
+// 未保存守卫：详情上报 dirty，切行 / 清选中 / 窄屏返回条 / 收起右侧详情 / **浏览器后退**
+// （哨兵历史条目，见 hooks/use-back-guard）先 `confirm`。
 // 两档收起（DESIGN.md `setting-page`「宽度与两档收起」，均存于 hooks/use-setting-rail）：
 // 左栏收起 = 不渲染 rail（按钮在详情页头 `leading`）；右侧详情收起 = 详情列整列不渲染、rail 吸收全宽
 // （按钮在 rail header 右端组；不改存宽度、不改 URL、点行不自动展开），两栏不会同时收起。
@@ -27,6 +27,7 @@ import {
 } from "../hooks/use-setting-rail";
 import { useDataRefresh } from "../hooks/use-data-refresh";
 import { navigate } from "../hooks/use-route";
+import { useBackGuard } from "../hooks/use-back-guard";
 import { cn } from "../lib/utils";
 import EntityDetail from "./EntityDetail";
 import { useUiStore } from "../stores/ui";
@@ -72,6 +73,8 @@ export default function SettingWorkbench({ id }: { id?: string }) {
       description: "当前设定的修改尚未保存，切换后将丢失",
     });
   }
+  // 浏览器后退也走同一句确认（哨兵历史条目，见 hooks/use-back-guard）
+  useBackGuard(detailDirty, confirmDiscard);
 
   /** 选中切换（rail `onSelect`）：同 id 幂等；dirty 先确认。null = 清选中回 `#/setting` */
   function selectNode(next: string | null) {
