@@ -28,5 +28,5 @@ hookRoutes.get("/expected", (c) => {
 // GET /api/v1/hook/written-unresolved —— 伏笔页「已写未回收」（无参：全书命中量小）
 hookRoutes.get("/written-unresolved", (c) => {
   const project = requireCurrentProject();
-  return c.json(ok({ hooks: listHooksWrittenUnresolved(project.db, project.root) }));
+  return c.json(ok({ items: listHooksWrittenUnresolved(project.db, project.root) }));
 });

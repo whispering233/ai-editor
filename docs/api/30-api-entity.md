@@ -410,7 +410,7 @@ id: string;                    // 事件 id（ev- 前缀）
 
 // Res: 200（无分页：单书命中量小）
 {
-  hooks: Array<{
+  items: Array<{
     id: string;                          // hook- 前缀
     name: string;
     status: "planted" | "progressing";   // 已归一到「未回收」两态（缺失 status → planted）

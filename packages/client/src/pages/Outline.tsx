@@ -1112,7 +1112,8 @@ function OutlineRail({
   function renderNodes(nodes: OutlineNode[], depth: number): ReactNode {
     return nodes.map((node) => {
       const hasChildren = node.type !== "scene" && (node.children?.length ?? 0) > 0;
-      const isCollapsed = collapsed.has(node.id);
+      // 筛选生效时一律按展开渲染：命中章可能藏在收起的卷里（不展开就等于没筛）
+      const isCollapsed = !filterActive && collapsed.has(node.id);
       const isCurrent = config?.currentPosition === node.id;
       const editingTitle = editing?.nodeId === node.id && editing.field === "title";
       const editingSummary = editing?.nodeId === node.id && editing.field === "summary";
@@ -1166,7 +1167,10 @@ function OutlineRail({
           <div className="flex items-center gap-2">
             {/* 折叠箭头：与设定树同款（antd text 图标按钮 + chevron 旋转）——原先用 ▸/▾ 字形 +
                 自绘 button，两页两套观感（arrow 占位 28px = size=small 图标按钮宽度，第二行同步占位） */}
-            {hasChildren ? (
+            {hasChildren && filterActive ? (
+              /* 筛选态：整树强制展开，折叠箭头无从生效 ⇒ 换回同几何占位（不给暗示） */
+              <span className="-ml-2 w-6 shrink-0" />
+            ) : hasChildren ? (
               <Button
                 color="default"
                 variant="text"

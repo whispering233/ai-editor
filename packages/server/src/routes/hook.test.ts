@@ -211,7 +211,7 @@ describe("GET /api/v1/hook/written-unresolved", () => {
     const res = await app.request("/api/v1/hook/written-unresolved", { headers: HOST_HEADERS });
     expect(res.status).toBe(200);
     expect((await res.json()).data).toEqual({
-      hooks: [
+      items: [
         {
           id: hit.id,
           name: "断剑来历",
@@ -224,12 +224,12 @@ describe("GET /api/v1/hook/written-unresolved", () => {
     });
   });
 
-  it("空命中 → hooks: []", async () => {
+  it("空命中 → items: []", async () => {
     const app = buildApp();
     openProject();
     seedOutline();
     const res = await app.request("/api/v1/hook/written-unresolved", { headers: HOST_HEADERS });
     expect(res.status).toBe(200);
-    expect((await res.json()).data).toEqual({ hooks: [] });
+    expect((await res.json()).data).toEqual({ items: [] });
   });
 });

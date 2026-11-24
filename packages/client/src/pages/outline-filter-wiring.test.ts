@@ -67,3 +67,13 @@ describe("大纲树筛选接线（源码扫描）", () => {
     }
   });
 });
+describe("筛选态强制展开（命中章不能藏在收起卷里）", () => {
+  it("渲染用的折叠判定必须与 filterActive 相与（否则收起卷里的命中章不显示）", () => {
+    // 表现为「筛选后什么都不剩」：卷是收起态时，命中章不渲染 ⇒ 用户以为没命中
+    expect(page).toContain("const isCollapsed = !filterActive && collapsed.has(node.id);");
+  });
+
+  it("筛选态不渲染折叠箭头（整树强制展开，箭头点了没反应 ⇒ 换同几何占位）", () => {
+    expect(page).toContain("hasChildren && filterActive");
+  });
+});

@@ -109,7 +109,7 @@ export default function Writing({ chapterId }: { chapterId?: string }) {
     );
     getWrittenUnresolvedHooks().then(
       (res) => {
-        if (railHooksSeq.current === seq) setWrittenUnresolvedData({ chapterId, items: res.hooks });
+        if (railHooksSeq.current === seq) setWrittenUnresolvedData({ chapterId, items: res.items });
       },
       () => {
         if (railHooksSeq.current === seq) setWrittenUnresolvedData(null);

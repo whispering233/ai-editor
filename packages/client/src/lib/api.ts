@@ -353,7 +353,7 @@ export interface WrittenUnresolvedHookItem {
 
 /** GET /api/v1/hook/written-unresolved 响应（无分页；空命中 = `hooks: []`） */
 export interface WrittenUnresolvedHooksRes {
-  hooks: WrittenUnresolvedHookItem[];
+  items: WrittenUnresolvedHookItem[];
 }
 
 /** 全书「已写未回收」伏笔（不按章过滤；两处消费：写作页 rail 的计数 + 伏笔页的行标记 / 筛选） */

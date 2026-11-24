@@ -1643,12 +1643,12 @@ describe("云端远程书架端点（docs/api/100-api-cloud.md）", () => {
 
 /** 伏笔专属只读端点（docs/api/30-api-entity.md）：`written-unresolved` 无查询参数、无分页 */
 describe("hook 端点（已写未回收）", () => {
-  it("getWrittenUnresolvedHooks：GET /api/v1/hook/written-unresolved，解析 hooks 字段", async () => {
+  it("getWrittenUnresolvedHooks：GET /api/v1/hook/written-unresolved，解析 items 字段", async () => {
     const calls = mockFetchOnce({
       body: {
         success: true,
         data: {
-          hooks: [
+          items: [
             {
               id: "hook-1",
               name: "断剑来历",
@@ -1666,7 +1666,7 @@ describe("hook 端点（已写未回收）", () => {
 
     expect(calls[0].url).toBe("/api/v1/hook/written-unresolved");
     expect(calls[0].init?.method).toBe("GET");
-    expect(res.hooks).toEqual([
+    expect(res.items).toEqual([
       {
         id: "hook-1",
         name: "断剑来历",
@@ -1679,7 +1679,7 @@ describe("hook 端点（已写未回收）", () => {
   });
 
   it("getWrittenUnresolvedHooks：无命中 = 空数组（不抛错）", async () => {
-    mockFetchOnce({ body: { success: true, data: { hooks: [] } } });
-    await expect(getWrittenUnresolvedHooks()).resolves.toEqual({ hooks: [] });
+    mockFetchOnce({ body: { success: true, data: { items: [] } } });
+    await expect(getWrittenUnresolvedHooks()).resolves.toEqual({ items: [] });
   });
 });

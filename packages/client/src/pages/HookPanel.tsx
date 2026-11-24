@@ -197,7 +197,7 @@ export default function HookPanel() {
     // 「已写未回收」（行标记 + 筛选）：失败静默降级为无命中，不拦列表
     void getWrittenUnresolvedHooks()
       .then((res) => {
-        if (!cancelled) setWrittenUnresolved(res.hooks);
+        if (!cancelled) setWrittenUnresolved(res.items);
       })
       .catch(() => {
         if (!cancelled) setWrittenUnresolved([]);
