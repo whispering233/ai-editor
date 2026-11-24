@@ -27,6 +27,7 @@ import { initDebugConfig, isCategoryEnabled } from "./debug.js";
 import { applyHttpProxySettings, configureHttpDispatcher } from "./http-dispatcher.js";
 import { requireKind } from "./middleware/kind.js";
 import { getSettingsManager } from "./model-runtime.js";
+import { initPiAgentDir } from "./pi-agent-dir.js";
 import { chatRoutes } from "./routes/chat.js";
 import { deltaRoutes } from "./routes/delta.js";
 import { entityRoutes } from "./routes/entity.js";
@@ -173,6 +174,11 @@ export async function startServer(projectRoot: string, options: StartServerOptio
  // process.cwd resolve 为绝对路径（对绝对输入幂等），detectProject/setProjectRoot
  // 及其下游消费方全部使用归一化值；create/open 请求体 path 仍要求绝对（安全校验不变）。
   const root = resolve(projectRoot);
+
+ // pi 配置目录（本机级，docs/design/config.md §1）：必须在任何 pi 实例之前落地——
+ // 下面的 getSettingsManager() 与路由里的 ModelRuntime 都从 PI_CODING_AGENT_DIR 派生路径。
+ // 缺省 ~/.ai-editor/pi-agent，用户可在设置页改成任意目录（与 pi CLI 的 ~/.pi/agent 隔离）。
+  initPiAgentDir();
 
  // 调试配置初始化（**启动读一次**：<创作根>/.ai-editor/config.json——唯一来源，细粒度
  // 四类别 chat/request/usage/http；文件不存在/非法 JSON/结构不符 → 全关；
