@@ -12,7 +12,7 @@
 // ⑦ 素材包三态（预置 → 覆盖 → 幂等恢复预置）⑧ 列表投影不含正文/稿件/卡体 + updatedAt 倒序、
 // 同值按 id 升序 ⑨ 点评卡内层 snake_case 原样透传（含 `{}`）。
 import { mkdtempSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type {
@@ -125,6 +125,7 @@ const tmpDirs: string[] = [];
 const handles: ServerHandle[] = [];
 let homeDir: string;
 let originalHome: string | undefined;
+let originalUserProfile: string | undefined;
 
 function makeTmpDir(prefix: string): string {
   return mkdtempSync(join(tmpdir(), prefix));
@@ -219,8 +220,11 @@ async function createPiece(
 
 beforeEach(() => {
   originalHome = process.env.HOME;
+  originalUserProfile = process.env.USERPROFILE;
   homeDir = makeTmpDir("ai-editor-practice-home-");
   process.env.HOME = homeDir;
+  process.env.USERPROFILE = homeDir; // Windows：os.homedir() 只读 USERPROFILE（HOME 改了没用）
+  expect(homedir()).toBe(homeDir); // 沙箱守卫：失效就这里红，而不是静默读写真实家目录
   resetModelRuntime(); // pi 运行时单例持有 agent dir 路径：HOME 变了必须重建
 });
 
@@ -232,6 +236,8 @@ afterEach(async () => {
   resetModelRuntime();
   if (originalHome !== undefined) process.env.HOME = originalHome;
   else delete process.env.HOME;
+  if (originalUserProfile !== undefined) process.env.USERPROFILE = originalUserProfile;
+  else delete process.env.USERPROFILE;
   rmSync(homeDir, { recursive: true, force: true });
   for (const dir of tmpDirs.splice(0)) {
     rmSync(dir, { recursive: true, force: true });

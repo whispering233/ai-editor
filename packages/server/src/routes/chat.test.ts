@@ -17,7 +17,7 @@
 //   样本 / 篇不存在或工作区未关联作家 → 静默省略、提交工具（三个）的 details 随帧下发 + 落库一致、帧集零新增
 // - 会话用量：turn_end / agent_end 的 usage、assistant message_end 的 speed、历史响应 usage 同源同值
 import { mkdirSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { Hono } from "hono";
@@ -342,6 +342,7 @@ function seedProposal(project: ProjectContext, proposalId = "prop_seed"): Propos
 // ============ 环境隔离 ============
 
 let originalHome: string | undefined;
+let originalUserProfile: string | undefined;
 let originalDeepseekKey: string | undefined;
 let originalOpencodeKey: string | undefined;
 
@@ -350,7 +351,10 @@ beforeEach(() => {
   setCurrentProject(null);
   defaultProposalStore.clear();
   originalHome = process.env.HOME;
+  originalUserProfile = process.env.USERPROFILE;
   process.env.HOME = tmpRoot; // pi agent dir 隔离（getAgentDir → $HOME/.pi/agent）
+  process.env.USERPROFILE = tmpRoot; // Windows：os.homedir() 只读 USERPROFILE（HOME 改了没用）
+  expect(homedir()).toBe(tmpRoot); // 沙箱守卫：失效就这里红，而不是静默读写真实家目录
   // 凭据隔离：本机可能已设 provider env key——“未配置凭据”用例需要确定性的“无凭据”状态
   originalDeepseekKey = process.env.DEEPSEEK_API_KEY;
   originalOpencodeKey = process.env.OPENCODE_API_KEY;
@@ -370,6 +374,8 @@ afterEach(() => {
   initDebugConfig(undefined);
   if (originalHome !== undefined) process.env.HOME = originalHome;
   else delete process.env.HOME;
+  if (originalUserProfile !== undefined) process.env.USERPROFILE = originalUserProfile;
+  else delete process.env.USERPROFILE;
   if (originalDeepseekKey !== undefined) process.env.DEEPSEEK_API_KEY = originalDeepseekKey;
   else delete process.env.DEEPSEEK_API_KEY;
   if (originalOpencodeKey !== undefined) process.env.OPENCODE_API_KEY = originalOpencodeKey;

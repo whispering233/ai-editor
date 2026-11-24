@@ -8,7 +8,7 @@
 // 隔离：临时 HOME（pi agent dir 不出沙箱，同 settings.test.ts）+ 每个用例独立的 tmp 工作区目录；
 // 工作区 = 真正落盘的三文件（project.json 显式写 `kind`）。
 import { mkdtempSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { Hono } from "hono";
@@ -40,6 +40,7 @@ const tmpDirs: string[] = [];
 const handles: ServerHandle[] = [];
 let homeDir: string;
 let originalHome: string | undefined;
+let originalUserProfile: string | undefined;
 
 function makeTmpDir(prefix: string): string {
   return mkdtempSync(join(tmpdir(), prefix));
@@ -140,8 +141,11 @@ const NOVEL_GROUP_PROBES: { group: string; method: string; path: string; body?: 
 
 beforeEach(() => {
   originalHome = process.env.HOME;
+  originalUserProfile = process.env.USERPROFILE;
   homeDir = makeTmpDir("ai-editor-kind-home-");
   process.env.HOME = homeDir;
+  process.env.USERPROFILE = homeDir; // Windows：os.homedir() 只读 USERPROFILE（HOME 改了没用）
+  expect(homedir()).toBe(homeDir); // 沙箱守卫：失效就这里红，而不是静默读写真实家目录
   resetModelRuntime(); // pi 运行时单例持有 agent dir 路径：HOME 变了必须重建
 });
 
@@ -154,6 +158,8 @@ afterEach(async () => {
   resetModelRuntime();
   if (originalHome !== undefined) process.env.HOME = originalHome;
   else delete process.env.HOME;
+  if (originalUserProfile !== undefined) process.env.USERPROFILE = originalUserProfile;
+  else delete process.env.USERPROFILE;
   rmSync(homeDir, { recursive: true, force: true });
   for (const dir of tmpDirs.splice(0)) {
     rmSync(dir, { recursive: true, force: true });

@@ -6,7 +6,7 @@
 // - provider 环境变量在每个用例前后清理（本机可能已设 DEEPSEEK_API_KEY，会让「无凭据」用例非确定）
 // - pi 运行时单例每个用例后重置（HOME 变化必须重建：authPath/modelsPath/settings 都在创建期解析）
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { Hono } from "hono";
@@ -27,6 +27,7 @@ function buildApp(): Hono {
 
 let homeDir: string;
 let originalHome: string | undefined;
+let originalUserProfile: string | undefined;
 const ORIGINAL_ENVS: Record<string, string | undefined> = {};
 
 /** 本机环境可能已设的 provider 凭据（清掉才能断言「无凭据」状态） */
@@ -34,9 +35,12 @@ const ENVS = ["DEEPSEEK_API_KEY", "OPENCODE_API_KEY"] as const;
 
 beforeEach(() => {
   originalHome = process.env.HOME;
+  originalUserProfile = process.env.USERPROFILE;
   for (const e of ENVS) ORIGINAL_ENVS[e] = process.env[e];
   homeDir = mkdtempSync(join(tmpdir(), "ai-editor-settings-home-"));
   process.env.HOME = homeDir;
+  process.env.USERPROFILE = homeDir; // Windows：os.homedir() 只读 USERPROFILE（HOME 改了没用）
+  expect(homedir()).toBe(homeDir); // 沙箱守卫：失效就这里红，而不是静默读写真实家目录
   for (const e of ENVS) delete process.env[e];
   resetModelRuntime();
 });
@@ -50,6 +54,8 @@ afterEach(() => {
   }
   if (originalHome !== undefined) process.env.HOME = originalHome;
   else delete process.env.HOME;
+  if (originalUserProfile !== undefined) process.env.USERPROFILE = originalUserProfile;
+  else delete process.env.USERPROFILE;
   rmSync(homeDir, { recursive: true, force: true });
 });
 

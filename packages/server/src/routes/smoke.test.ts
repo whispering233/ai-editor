@@ -15,7 +15,7 @@
 // 编号注释保证）；响应包裹{success:true,data}/{success:false,error:{code,message}}；
 // 请求体 snake_case、响应 camelCase；软删/还原级联计数只断言 >= 1（非本卡目标，不死抠数字）。
 import { mkdtempSync, rmSync, existsSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { Hono } from "hono";
@@ -187,6 +187,7 @@ async function readSseFrames(res: Response, timeoutMs = 5000): Promise<SseFrame[
 // ============ 环境隔离（参照 chat.test.ts：项目单例 / 提案仓 / HOME / key / 调试配置） ============
 
 let originalHome: string | undefined;
+let originalUserProfile: string | undefined;
 let originalKey: string | undefined;
 
 beforeEach(() => {
@@ -195,8 +196,11 @@ beforeEach(() => {
   setProjectRoot(tmpRoot); // 创作根（书架模式语义；冒烟链路不用 list，仅为装配完整性）
   defaultProposalStore.clear(); // 提案仓为模块级单例，测试间隔离（get_outline 不产提案，防御性清空）
   originalHome = process.env.HOME;
+  originalUserProfile = process.env.USERPROFILE;
   originalKey = process.env.DEEPSEEK_API_KEY;
   process.env.HOME = tmpRoot; // 用户级配置隔离（key 来源；mock produce 注入时不读 key，防御性）
+  process.env.USERPROFILE = tmpRoot; // Windows：os.homedir() 只读 USERPROFILE（HOME 改了没用）
+  expect(homedir()).toBe(tmpRoot); // 沙箱守卫：失效就这里红，而不是静默读写真实家目录
   delete process.env.DEEPSEEK_API_KEY;
   initDebugConfig(undefined); // 调试默认全关（无配置文件）
 });
@@ -212,6 +216,8 @@ afterEach(() => {
   initDebugConfig(undefined);
   if (originalHome !== undefined) process.env.HOME = originalHome;
   else delete process.env.HOME;
+  if (originalUserProfile !== undefined) process.env.USERPROFILE = originalUserProfile;
+  else delete process.env.USERPROFILE;
   if (originalKey !== undefined) process.env.DEEPSEEK_API_KEY = originalKey;
   else delete process.env.DEEPSEEK_API_KEY;
   for (const dir of tmpDirs.splice(0)) {

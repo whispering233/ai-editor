@@ -541,7 +541,7 @@
 ## 开发环境（Windows，2026-11 实测登记）
 
 - **Windows 上 `pnpm dev` 直接失败** — 现状：`packages/server` 的 dev script 是 POSIX 前缀 `NODE_ENV=development tsx watch src/index.ts`，Windows 下报 `'NODE_ENV' 不是内部或外部命令`，且 `pnpm -r --parallel` 会把其它包的 dev 一并带崩。触发条件：需要在 Windows 一键起 dev（当前得手动分两处起 server / client）。最小修法：改用 `cross-env`（新增一个 devDependency）或 `node --env-file`；不新增依赖的做法是给 server 加一个 dev 入口脚本。
-- **Windows 上 server 测试有既有红，且会写真实家目录** — 现状：`*.test.ts` 用 `process.env.HOME` 做沙箱，但 `os.homedir()` 在 Windows 读 `USERPROFILE` ⇒ 沙箱失效，用例读到真实 `~/.pi/agent`（`11 文件 / 97 用例`失败，2026-11 基线实测），并会往真实 `~/.ai-editor/pi-agent/` 写空 `auth.json` / `models-store.json`（实测 mtime 与测试进程一致）。触发条件：需要在 Windows 上跑 server 测试并相信其结果时（CI 是 Linux，不受影响）。最小修法：测试 harness 同时设 `USERPROFILE`（或统一用 `vi.stubEnv` 并让路径走可注入的 `pi-agent-dir.ts` override），再把「落盘路径」类断言改成注入路径。
+- **Windows 上 server 测试仍有红（HOME 沙箱部分已修，2026-11）** — 已修：6 个用 `process.env.HOME` 做沙箱的测试文件现在**同时**设 `USERPROFILE` 并加了一条 `expect(homedir()).toBe(tmp)` 守卫（`os.homedir()` 在 Windows 只读 `USERPROFILE`，只改 `HOME` 等于没改 ⇒ 用例会静默读写真实 `~/.pi/agent` 与 `~/.ai-editor/pi-agent`）。效果：`routes/settings.test.ts` 11 → 0、`routes/chat.test.ts` 2 → 1，全量 97 → 86。**剩余红与沙箱无关**，分四类：①`EPERM` 删临时目录（sqlite 句柄未释放：`entity` 49 / `names` 9 / `project` 5 / `project-delete` 1 / `backup` 1 / `chat` 1）；②`0600` 权限断言（`cloud/state` 1）；③本地 WebDAV 测试服务 403（`webdav.integration` 12）；④端口被占用（`index.test` 1，本机跑着 `start:test-project` 时 3500/3501 拿不到）。CI 是 Linux，不受 ①~④ 影响。
 
 ## 发布前审计登记（2026-09，v0.0.52）
 
