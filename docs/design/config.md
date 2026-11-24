@@ -44,7 +44,7 @@
 ## 4. 读写边界
 
 - pi 配置目录内的一切由 pi 负责落盘格式；本仓经 pi 的 `ModelRuntime` / `SettingsManager` 读写，**不维护第二份配置**、不直读 `auth.json` / `settings.json`。唯一例外是下方的配置文件编辑器（见 `../api/90-api-settings.md`）——它按文本读写 pi 目录下的文件，仍不解析语义。
-- `~/.ai-editor/pi.json` 只属服务端：`agentDir` 由设置页写、`seeded` 由服务端写；合并写（原子写 + 只改本次涉及的键）。
+- `~/.ai-editor/pi.json` 只属服务端：唯一键 `agentDir`（设置页写）；合并写（原子写 + 只改本键，未知键原样保留）。
 - 联网检索与抓取（`web_search` / `fetch_content`）的凭据唯一载体 = `~/.ai-editor/search.json` 的 `apiKey`：**不复用模型凭据、不读环境变量、无回退**——没配就在工具调用时抛可读错误（不静默失败）。当前仅接入 DeepSeek 的 search / fetch 两个端点（按次计费，不进会话 token 账目；查询词 / URL 会发往 DeepSeek）。
 - 项目目录内的 `.pi/`（项目级 settings/extensions/skills）**一律不参与配置**：资源加载显式关闭扩展/技能/提示词模板，且项目信任为 false——项目目录可能来自他人（备份包/共享目录），不接受其中携带的可执行资源或配置。
 - 项目文件（project.json/outline.json/AGENTS.md）走原子写；`sessions/` 由 pi `SessionManager` 追加写（整文件重写仅限迁移）。

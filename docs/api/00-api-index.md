@@ -160,3 +160,7 @@
 | :--- | :--- | :--- |
 | GET | `/api/v1/settings/llm` | 系统设置 |
 | PUT | `/api/v1/settings/llm` | 系统设置 |
+| GET | `/api/v1/settings/pi/dir` | 系统设置（pi 配置目录） |
+| PUT | `/api/v1/settings/pi/dir` | 系统设置（pi 配置目录） |
+| GET | `/api/v1/settings/config-file/:name` | 系统设置（本机配置文件文本） |
+| PUT | `/api/v1/settings/config-file/:name` | 系统设置（本机配置文件文本） |

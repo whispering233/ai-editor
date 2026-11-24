@@ -14,7 +14,7 @@ export const SESSIONS_DIR_NAME = "sessions";
 /** 项目规则文件名（唯一持久化上下文通道；读取只认项目根这一个文件。re-export shared 的单一事实源） */
 export { AGENTS_FILE_NAME };
 
-/** pi agent dir（`~/.pi/agent`；调用方可覆盖——测试隔离依赖） */
+/** pi agent dir（回退到 pi 自身的解析：`PI_CODING_AGENT_DIR` → `~/.pi/agent`；本仓在启动期把前者指向用户配置目录，调用方仍可覆盖） */
 export function resolveAgentDir(override?: string): string {
   return override === undefined ? getAgentDir() : resolve(override);
 }

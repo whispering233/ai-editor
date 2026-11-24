@@ -3,14 +3,15 @@
 // 契约 = docs/api/90-api-settings.md；配置载体与读写边界 = docs/design/config.md。
 //
 // **本模块不持有任何配置**：模型目录 / 凭据 / 运行参数全部来自 pi（`ModelRuntime` +
-// `~/.pi/agent` 的 auth.json / models.json / settings.json），本端点只做「读快照 + 写 pi」。
+// pi 配置目录的 auth.json / models.json / settings.json，缺省 `~/.ai-editor/pi-agent`），
+// 本端点只做「读快照 + 写 pi」。
 // 凭据解析顺序（`pi-ai` auth/resolve.js；**升级 pi 时必须复查**）——**auth.json 存量凭据优先**（一家一条，值可
 // 为字面 key / `$ENV_VAR` 引用 / `!命令`）→ 该家无条目时才回落到 provider 内置环境变量
 // （`DEEPSEEK_API_KEY` 等）——环境变量是兜底，不是与凭据并存的第二个来源。
 //
 // 写入语义（两个入口互不影响）：
-// - provider/model/thinking_level → pi settings（`~/.pi/agent/settings.json`）
-// - api_key（单家）→ pi credential store（`~/.pi/agent/auth.json`）；空串 = 清除该家存量的 API key 凭据
+// - provider/model/thinking_level → pi settings（pi 配置目录的 `settings.json`）
+// - api_key（单家）→ pi credential store（同目录的 `auth.json`）；空串 = 清除该家存量的 API key 凭据
 //
 // 绝不写入项目文件（项目目录内的 `.pi/` 同样不参与：settings 实例 projectTrusted=false）。
 

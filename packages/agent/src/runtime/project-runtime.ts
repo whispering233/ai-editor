@@ -45,7 +45,7 @@ export interface ProjectRuntimeInput {
   kind: WorkspaceKind;
   /** 工具执行上下文（db / outlineDir / projectId） */
   toolContext: ToolContext;
-  /** pi agent dir 覆盖（缺省 `~/.pi/agent`；测试隔离用） */
+  /** pi agent dir 覆盖（缺省走 pi 的 `PI_CODING_AGENT_DIR`，即本仓的 pi 配置目录；测试隔离用） */
   agentDir?: string;
   /** 注入既有 ModelRuntime（测试/复用）；缺省由 SDK 按 agentDir 自建 */
   modelRuntime?: ModelRuntime;
@@ -92,7 +92,7 @@ export async function resolveDefaultModel(runtime: ModelRuntime, settings: Setti
   const first = available[0];
   if (first !== undefined) return first;
   throw new NoModelConfiguredError(
-    "未配置可用模型：请先在设置页或 ~/.pi/agent/（auth.json / models.json）配置 provider 凭据",
+    "未配置可用模型：请先在 设置 → AI 模型 录入 API key，或在 设置 → 高级 的 auth.json / models.json 里配置 provider 凭据",
   );
 }
 

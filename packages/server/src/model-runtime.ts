@@ -1,7 +1,7 @@
 // server：pi 运行时的进程级单例（模型目录 + 凭据 + 全局 settings）
 //
-// 为什么单例：模型目录（内置目录 + `~/.pi/agent/models.json` 覆盖 + 远端 overlay 缓存）、
-// 凭据（`~/.pi/agent/auth.json`）、运行参数（`~/.pi/agent/settings.json`）都只有一份真相源，
+// 为什么单例：模型目录（内置目录 + pi 配置目录的 `models.json` 覆盖 + 远端 overlay 缓存）、
+// 凭据（同目录的 `auth.json`）、运行参数（同目录的 `settings.json`）都只有一份真相源，
 // 每请求/每项目各建一份会重复建目录、重复刷可用性，且设置端点与对话端点会读到不同快照。
 //
 // 配置所有权在 pi（docs/design/config.md）：本模块只做「懒创建 + 复用 + 测试重置」，
@@ -23,7 +23,8 @@ let runtimePromise: Promise<ModelRuntime> | undefined;
 let settingsManager: SettingsManager | undefined;
 
 /**
- * pi 模型/凭据运行时（懒创建；缺省读 `~/.pi/agent` 的 auth.json / models.json）。
+ * pi 模型/凭据运行时（懒创建；读 **pi 配置目录**——缺省 `~/.ai-editor/pi-agent`，
+ * 由启动期的 `initPiAgentDir()` 写进 `PI_CODING_AGENT_DIR`，见 `pi-agent-dir.ts`）。
  * 创建期不联网（`allowNetwork` 未开启）——远端目录刷新由 pi 的本地缓存语义承担。
  */
 export function getModelRuntime(): Promise<ModelRuntime> {
@@ -34,7 +35,7 @@ export function getModelRuntime(): Promise<ModelRuntime> {
 /**
  * 全局 settings（激活模型 / 思考强度 / 重试 / 压缩参数）。
  * `projectTrusted: false`：项目目录可能来自他人，其中的 `.pi/settings.json` 不参与配置；
- * 因此本实例只读写 `~/.pi/agent/settings.json`。
+ * 因此本实例只读写 pi 配置目录的 `settings.json`（缺省 `~/.ai-editor/pi-agent/`）。
  */
 export function getSettingsManager(): SettingsManager {
   settingsManager ??= SettingsManager.create(process.cwd(), resolveAgentDir(), { projectTrusted: false });

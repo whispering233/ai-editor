@@ -47,7 +47,8 @@ shared → db → tools → agent → server    （依赖方向；client 只依�
 |---|---|---|
 | Windows | `AI-Editor-<版本>-win-x64.exe`（NSIS） | 未签名 → 可能弹 SmartScreen，选「仍要运行」 |
 
-- 安装包挂在对应版本的 GitHub Release；首次启动**零交互**用 `<文档>/AI Editor` 作书库，可在 设置 → 通用 → 书库位置 更改（路径不可用时逐级回退 `<主目录>/AI Editor` → `<userData>/AI Editor`）；与 CLI 版**共用同一份数据与凭据**（`~/.pi/agent/`、项目目录格式一致），两边可打开同一个书库
+- 安装包挂在对应版本的 GitHub Release；首次启动**零交互**用 `<文档>/AI Editor` 作书库，可在 设置 → 通用 → 书库位置 更改（路径不可用时逐级回退 `<主目录>/AI Editor` → `<userData>/AI Editor`）；与 CLI 版**共用同一份数据与凭据**（同一份 pi 配置目录、项目目录格式一致），两边可打开同一个书库
+- **pi 配置目录默认 `~/.ai-editor/pi-agent/`**（与 pi CLI 的 `~/.pi/agent` 隔离，互不覆盖）：模型凭据 / 模型覆盖 / 运行参数都在这里，可在 设置 → 高级 改目录或直接改 JSON；升级到本版本后需重新配置一次 API key（或把目录指回 `~/.pi/agent`）
 - **自动更新（仅 Windows 安装态）**：启动后自动检查 GitHub Releases，下载完由你决定何时重启安装（菜单 → 帮助 → 检查更新…）；只替换程序文件、不动书库。⚠ **首个带更新能力的版本需手动下载安装一次**
 - 本地出包 `pnpm desktop:dist`（产物在 `packages/desktop/release/`；**Windows 包由 CI 出**）；与 npm 包共用同一个 tag
 

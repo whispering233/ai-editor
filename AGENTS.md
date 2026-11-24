@@ -131,6 +131,7 @@
   凡进入**断言**或**接口契约**（列表返回顺序）的排序一律用码元比较（`a < b ? -1 : a > b ? 1 : 0`）或 ASCII 键；
   中文名排序只允许出现在纯展示层，且不得被测试固定。已因此红过两次 CI（v0.0.66 前后各一次）。
 - 变异 / 探针验证只能用 `cp -r` 真副本或 `git worktree`，禁止硬链接副本 + 就地截断写（会写穿 inode 污染源仓库）；恢复后复跑全量回归。
+- **测试沙箱必须同时设 `HOME` 与 `USERPROFILE`**（Windows 的 `os.homedir()` 只读后者；只改 `HOME` 会让用例静默读写真实 `~/.pi/agent` / `~/.ai-editor/pi-agent`）。已内置 `expect(homedir()).toBe(tmp)` 守卫的 6 个文件：`routes/{chat,settings,kind-guard,practice,smoke}.test.ts`、`web-search.test.ts`；新建靠家目录隔离的用例照抄该三行。Windows 本机剩余的既有红（`EPERM` / `0600` / 本地 WebDAV 403 / 端口占用）见 `backlog.md`「开发环境」——**不能当基线**。
 
 ## 产品非目标与延期项
 
