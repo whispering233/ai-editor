@@ -286,3 +286,13 @@ describe("守卫规则自检（规则必须能识别违规样例，否则规则�
     expect(antdRootOverrides(`<div className="w-52 text-sm" />`)).toBe(false);
   });
 });
+
+describe("实体类型中文名的单一来源（2026-11 收敛后守卫）", () => {
+  // 历史上 client 里同时存在 5 份手抄的「类型 → 中文名」表（Delta 徽标 / 回收站 / 关系对话框 /
+  // 概览卡 / 实体列表），值一致但新增类型要记得同步 5 处，且改名会静默漂移。
+  // 现在唯一来源 = shared `ENTITY_TYPE_LABELS`；本守卫挡住「再抄一份」。
+  it("源码里不得出现手抄的类型→中文名表（只能派生 shared ENTITY_TYPE_LABELS）", () => {
+    const offenders = FILES.filter((file) => /character:\s*"人物"/.test(file.text)).map((file) => file.path);
+    expect(offenders).toEqual([]);
+  });
+});

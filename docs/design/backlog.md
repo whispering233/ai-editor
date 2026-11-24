@@ -316,11 +316,8 @@
   - 触发条件：下次触碰设定树数据派生时。
   - 最小修法：删 `SettingTreeNode.category` + 输入映射 + `setting-tree.test.ts` 对应断言。
 
-- **关联页端点类型徽标的中文名（卡 5 已修，残留见下）**（卡 10.5 发现 → 2026-09 卡 5 修复）
-  - 现状：**已修**——`components/entity/relations-view.tsx` 的 `ENDPOINT_TYPE_LABEL` 改为派生 shared `ENTITY_TYPE_LABELS` + `outline_node`（原先手抄的四类表让 `timepoint`/`event`/`reference` 直接漏英文），过滤下拉同源；单测守住「新增实体类型不再漏中文名」。
-  - 残留：「类型→中文名」仍是**三份表**（shared `ENTITY_TYPE_LABELS` / `pages/Trash.tsx` 的 `ENTITY_TYPE_LABEL` / `lib/entity-list.ts` 的列表标签）——三者值已一致，但新增实体类型时要记得同步。
-  - 触发条件：再次新增实体类型，或统一类型标签来源时。
-  - 升级路径：Trash 与 entity-list 的内联表改派生 shared（各一行 import）。
+- **关联页端点类型徽标的中文名（卡 5 已修）**
+  - 现状：**已全部收敛**（2026-11）——关系视图 / Delta 徽标 / 回收站 / 关系对话框 / 概览卡 / 实体列表一律派生 shared `ENTITY_TYPE_LABELS`（`outline_node` 这类非实体端点类型在各处单独映射）。守卫 = `design-discipline.test.ts` 的「源码里不得出现手抄的类型→中文名表」（扫 `character: "人物"`）。
 - **关联对话框其余下拉的浮层宽度**（卡 8.2 oracle 登记，既有）
   - 现状：`select-free-input`（关系类型）已加 `popupMatchSelectWidth={false}`；同弹窗另 4 个 `Select` 与通用关联页三个过滤 `Select` 仍跟触发器宽度（长实体名会截断）。
   - 触发条件：再次触碰这两个文件时。
