@@ -356,6 +356,8 @@
   - **rail 行优先级徽标 / 摘要字段 / `search_entities` 过滤 / `byPriority` 分布**：现口径 = 优先级只影响排序，`get_entity`（详情）已能让 AI 读到；rail 行不显示（与 `role` 文本视觉重复且 240px 拥挤）。触发条件：出现「左栏看不出谁是主角」的真实反馈。
   - **优先级驱动 AI 上下文注入权重**（主角优先灌入）：属 `20-context.md` 的设计面，未排期。
 
+- **到期伏笔只做字面相等，无「已过期未回收」派生视图**（2026-11 随写作页「本章待回收」落地登记）— 现状：`GET /hook/expected?node_id=` 只取 `data.expected_resolve_node_id === 当前章`（且排除 `resolved` / `abandoned`），预计回收章**早于**当前章但仍未回收的伏笔不会出现在写作页。触发条件：真实书稿里出现「伏笔拖过预定章了自己却没被提醒」的反馈。升级路径：需要「章序 → 章号」这条派生链（`deriveChapterOrder`）参与比较，属派生视图，先定「过期」的判据（章号小于当前章 / 落后 N 章）再决定是否落库缓存。
+
 - **后退守卫的两个历史栈残差（2026-11 复核登记，报告级）**
   - ① **离开哨兵后残留一条同 URL 死条目**：dirty 时点另一行并确认放弃 ⇒ `navigate()` 在哨兵之上压新条目、dirty 复位，哨兵留在栈里；之后那次后退落到它、`armed` 已失效 ⇒ 视觉「按了没反应」。根治要改 `navigate` 时机（先撤哨兵并等回声），收益不抵复杂度。
   - ② **哨兵恰是首条历史条目时**（深链直开就编辑）`back()` 无回声 ⇒ `suppressed` 残留，吞掉下一次真实后退一次。同样只是一次死按键，无数据风险。
@@ -395,12 +397,6 @@
     - **搜索 / 抓取费用计入会话账目**：需要把按次计费换算成金额并与 pi 的 token 账目并表，口径未定；当前只在文档里声明不进账。
     - **`count` 只是期望条数**：`runWebSearch` 不按请求条数硬切，上游若多返回就会全部进上下文，最终只剩工具结果 token 闸门兜底。触发条件：实测上游不遵守 `count`。最小修法：`hits.slice(0, count)`（保留上游顺序）。
     - **上限叠加时的 JSON 截断风险**：最大条数 × 单条异常上限加 JSON 信封会略超 `TOOL_RESULT_MAX_TOKENS`；硬切会破坏 JSON，来源卡片退化为普通工具行。默认条数安全。触发条件：真实出现“上限条数 + 极长摘要”。最小修法：下调单条异常上限或默认条数。
-
-- **工具面缺「修改既有大纲节点标题/摘要」的提案**（2026-09 推演设计时登记）
-  - 现状：提案类工具只有 `propose_outline_node`（新建）/ `propose_move_node` / `propose_delete_node`——AI 想建议「把第 5 章摘要改成…」「这章标题该换」时**无路径**（只能绕道写进参考资料，或让作者手改）。
-  - 影响：推演中「改结构措辞」类建议无法一键落地（推演结论多落在新建节点/关系/Delta，所以影响面有限）。
-  - 触发条件：真实出现「AI 反复建议改标题/摘要、用户只能手抄」的疼痛。
-  - 升级路径：加 `propose_update_outline_node(node_id, patches)`——执行侧复用既有 `update_entity` 同款适配器，快照校验用节点 `updated_at`（与既有提案同口径）。
 
 - **移动提案未跟踪被移动节点的当前位置**（2026-11 oracle 登记，既有语义）
   - 现状：`buildProposeMoveNode` 只采集被移动节点自身 `updated_at`；`moveOutlineNode` 移动时不推进该节点自身版本，旧父也不进引用。提案生成后用户把节点移到别处，确认仍按提案里的旧目标执行，可能静默覆盖用户操作。
@@ -517,7 +513,7 @@
 - **REST 校验范围在 api 文档与 zod schema 两处出现（有意保留的契约镜像）** — 现状：`docs/api/*.md` 的请求体注释写明「1-100 字符」这类范围，单一来源 = shared `types/api.ts` 的 zod schema，文档是契约说明视图。触发条件：改任一校验范围时（schema 与文档同改）。**不**做「文档插值常量」——api 文档是给人读的契约，插值会降低可读性。
 - **代码注释里的历史阶段编号（`卡 N` / `S1.2` / `G2` / `F9`）** — 现状：约 300 处，作为 provenance 记号保留（不指向可变契约）；**合同文档的编号引用已在 v0.0.51 清掉**（`docs/api`、`docs/db`、`docs/ui`、`docs/design` 正文），`backlog.md` 保留（登记来源）。触发条件：若将来要求注释零历史编号，再做一次机械替换（无技术风险，纯 churn）。
 - **`packages/server/src/middleware/project.ts` 有两个无人引用的导出**（knip 审计发现，非某次改动引入）— `getProject`（导出但全仓无 import；路由实际经 `requireCurrentProject` / `getCurrentProject` 读取）与 `DATA_DB_FILE_NAME`（本文件内部使用，外部已改从 `@whispering233/ai-editor-db` 取）。**不删除的理由**：与任何行为无关，纯 churn；触发条件：下次改该文件时顺手收掉（`getProject` 若确实无调用点，直接删函数）。
-- **`packages/server` 的测试在 Windows 本机全红**（2026-11 上台基线时登记）— 现状：`afterEach` 的 `rmSync(tmpdir)` 删不掉仍被 SQLite 句柄握着的临时库 ⇒ Windows `EPERM`（Linux 上 unlink 打开的文件无问题）；本仓开发环境是 WSL，故长期没被发现。影响：Windows 上「全量测试绿」这条护栏对 server 不可用（`client` 那批源码扫描红已随 `.gitattributes` + `fileURLToPath` 修正）。触发条件：需要在 Windows 上跑 server 测试判回归时；最小修法 = 各用例 `afterEach` 先关库再删目录，或在 `rmSync` 外包一层容忍 EPERM——**不要**去改生产代码的关闭时机。
+- **`packages/server` 的测试在 Windows 本机全红**（2026-11 上台基线时登记，2026-11-24 补齐两类归因）— 现状：**两类**平台问题混在一起，① `afterEach` 的 `rmSync(tmpdir)` 删不掉仍被 SQLite 句柄握着的临时库 ⇒ Windows `EPERM`（Linux 上 unlink 打开的文件无问题）② 历史端点用例靠隔离 `HOME` 制造「没有可用模型」，但 Windows 走 `USERPROFILE` ⇒ 隔离失效、`getAvailable()` 仍返回全量模型目录（Linux CI 绿、本机红，可据此判平台）。本仓开发环境是 WSL，故长期没被发现。影响：Windows 上「全量测试绿」这条护栏对 server 不可用（`client` 那批源码扫描红已随 `.gitattributes` + `fileURLToPath` 修正）。触发条件：需要在 Windows 上跑 server 测试判回归时；最小修法 = ① 各用例 `afterEach` 先关库再删目录，或在 `rmSync` 外包一层容忍 EPERM ② 隔离段同时设 `USERPROFILE`（或改用 `os.homedir()` 可注入的方式）——**不要**去改生产代码的关闭时机。
 - **flush 回执没有关联序号 / 页面未挂载时关窗固定等 3s**（2026-11 C1 复核登记，低危两项）— ① `desktop:flush-done` 只带 `ok` 布尔、主进程只按 `event.sender` 过滤 ⇒ 超时后迟到的 `ok=true` 会被下一次关窗的等待认领（两次都是「保存一次」的语义，无数据风险）；② 渲染侧没有 `onFlushRequest` 监听者时 `send` 静默丢弃，只能靠 `FLUSH_TIMEOUT_MS` 兜底 ⇒ 启动瞬间 / 页面加载失败时关窗要等满 3 秒才出确认框。
 
 ## 作家文风练习（2026-10，改版后的升级路径）
