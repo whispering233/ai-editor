@@ -19,6 +19,11 @@ function tempDir(): string {
   return mkdtempSync(join(tmpdir(), "ai-editor-desktop-"));
 }
 
+/** 路径断言归一：`join()` 在 Windows 出反斜杠，这些用例只关心逻辑路径 */
+function posix(p: string): string {
+  return p.replaceAll("\\", "/");
+}
+
 describe("parseDesktopConfig", () => {
   it("接受绝对路径的 projectRoot", () => {
     expect(parseDesktopConfig('{"projectRoot":"/home/me/AI Editor"}')).toEqual({
@@ -71,17 +76,17 @@ describe("readDesktopConfig / writeDesktopConfig", () => {
 
 describe("路径助手", () => {
   it("desktopConfigPath 落在 userData 下", () => {
-    expect(desktopConfigPath("/ud")).toBe("/ud/desktop.json");
+    expect(posix(desktopConfigPath("/ud"))).toBe("/ud/desktop.json");
   });
 
   it("建议书库位置 = 文档目录下的 AI Editor", () => {
-    expect(suggestedLibraryDir("/home/me/Documents")).toBe("/home/me/Documents/AI Editor");
+    expect(posix(suggestedLibraryDir("/home/me/Documents"))).toBe("/home/me/Documents/AI Editor");
   });
 });
 
 describe("libraryMarker（卸载器的删除依据）", () => {
   it("路径 = <书库>/.ai-editor/library.json", () => {
-    expect(libraryMarkerPath("/books/mine")).toBe("/books/mine/.ai-editor/library.json");
+    expect(posix(libraryMarkerPath("/books/mine"))).toBe("/books/mine/.ai-editor/library.json");
   });
 
   it("写入幂等：已存在则不改（保留首次 createdAt）", () => {
@@ -102,7 +107,7 @@ describe("libraryRootCandidates（3 级回退）", () => {
   const dirs = { documents: "/home/me/Documents", home: "/home/me", userData: "/cfg/app" };
 
   it("顺序 = 文档 → 主目录 → userData", () => {
-    expect(libraryRootCandidates(dirs)).toEqual([
+    expect(libraryRootCandidates(dirs).map(posix)).toEqual([
       "/home/me/Documents/AI Editor",
       "/home/me/AI Editor",
       "/cfg/app/AI Editor",
@@ -115,11 +120,11 @@ describe("libraryRootCandidates（3 级回退）", () => {
       home: "/home/me",
       userData: "/cfg/app",
     });
-    expect(c).toEqual(["/home/me/AI Editor", "/cfg/app/AI Editor"]);
+    expect(c.map(posix)).toEqual(["/home/me/AI Editor", "/cfg/app/AI Editor"]);
   });
 
   it("去重（home 与 documents 同值时不留重复项）", () => {
     const c = libraryRootCandidates({ documents: "/x", home: "/x", userData: "/x" });
-    expect(c).toEqual(["/x/AI Editor"]);
+    expect(c.map(posix)).toEqual(["/x/AI Editor"]);
   });
 });

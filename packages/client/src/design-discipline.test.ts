@@ -15,9 +15,12 @@
 // no-dynamic-class / button-variant-color / danger-color-variant。
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join, relative, sep } from "node:path";
+import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 
-const SRC = new URL(".", import.meta.url).pathname;
+// `URL.pathname` 在 Windows 上是 `/C:/…` 形态，fs 会把它当相对路径拼成 `C:\C:\…`；
+// 一律经 fileURLToPath 转成平台路径。
+const SRC = fileURLToPath(new URL(".", import.meta.url));
 
 interface Rule {
   id: string;

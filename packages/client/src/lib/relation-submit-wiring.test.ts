@@ -3,10 +3,11 @@
 // 漏接线的表现：对话框自己拼 guard 或只查语法，端点矩阵失效却不报错（纯函数测试仍全绿）。
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join, relative, sep } from "node:path";
+import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 
-/** client `src` 根（本文件在 src/lib 下） */
-const SRC = new URL("..", import.meta.url).pathname;
+/** client `src` 根（本文件在 src/lib 下）；`URL.pathname` 在 Windows 上是 `/C:/…`，必须转平台路径 */
+const SRC = fileURLToPath(new URL("..", import.meta.url));
 const DIALOG = "components/entity/create-relation-dialog.tsx";
 
 /** 采集 src 下所有非测试源码文件（相对 src 的 posix 风格路径） */

@@ -34,7 +34,8 @@ describe("formatLogArgs", () => {
   });
 
   it("logFilePath 落在 userData 的 logs 子目录", () => {
-    expect(logFilePath("/ud")).toBe("/ud/logs/ai-editor.log");
+    // `join()` 在 Windows 出反斜杠：断言只关心逻辑路径
+    expect(logFilePath("/ud").replaceAll("\\", "/")).toBe("/ud/logs/ai-editor.log");
   });
 });
 
