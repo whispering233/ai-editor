@@ -12,8 +12,7 @@
 // - purge：ConfirmDialog danger + 「确认彻底删除」文案（44-49 行 MVP 语义：单次确认 + 明确文案）
 // → 行移除 + toast「已彻底删除」；404 残留同还原（刷新 + toast）；其他错误冒泡 ConfirmDialog 内联显示
 import { useEffect, useState } from "react";
-import type { EntityType } from "@whispering233/ai-editor-shared";
-import { formatRelativeTime } from "@whispering233/ai-editor-shared";
+import { ENTITY_TYPE_LABELS, formatRelativeTime } from "@whispering233/ai-editor-shared";
 import { Alert, Button, Skeleton, Typography } from "antd";
 import { PageHeader } from "@/components/ui/page-header";
 import { TypeChip, type TypeChipProps } from "@/components/ui/tag-chip";
@@ -37,19 +36,6 @@ import { parseAncestorId, restoreEntityToast, restoreNodeToast } from "../lib/tr
 import { useDataRefresh } from "../hooks/use-data-refresh";
 import { useProjectStore } from "../stores/project";
 import { useUiStore } from "../stores/ui";
-
-const ENTITY_TYPE_LABEL: Record<EntityType, string> = {
-  character: "人物",
-  setting: "设定",
-  location: "地点",
-  hook: "伏笔",
-  // C1 类型补全（event 时间轴事件；时间轴专属 UI 由 C2 实现）
-  event: "事件",
-  // G2.3 类型补全（G2 时间标签点；软删/还原走 /trash/entity/:type/:id 泛型路径）
-  timepoint: "时间点",
-  // 参考资料 reference
-  reference: "参考资料",
-};
 
 const NODE_TYPE_LABEL: Record<OutlineNodeType, string> = {
   volume: "卷",
@@ -292,7 +278,7 @@ export default function Trash() {
               <ul className="divide-y divide-border/70">
                 {data.entities.map((item) => (
                   <li key={item.id} className="flex items-center gap-2 px-3 py-2">
-                    <TypeBadge label={ENTITY_TYPE_LABEL[item.type]} />
+                    <TypeBadge label={ENTITY_TYPE_LABELS[item.type]} />
                     <span className="min-w-0 flex-1 truncate text-sm" title={item.name}>
                       <Typography.Text ellipsis>{item.name}</Typography.Text>
                     </span>
@@ -389,7 +375,7 @@ export default function Trash() {
           title="彻底删除"
           description={
             purgeTarget.kind === "entity"
-              ? `将彻底删除《${purgeTarget.item.name}》（${ENTITY_TYPE_LABEL[purgeTarget.item.type]}）及其关联关系、变更记录，不可恢复。`
+              ? `将彻底删除《${purgeTarget.item.name}》（${ENTITY_TYPE_LABELS[purgeTarget.item.type]}）及其关联关系、变更记录，不可恢复。`
               : `将彻底删除《${purgeTarget.item.title}》及整棵子树、关联关系、变更记录，不可恢复。`
           }
           confirmLabel="确认彻底删除"

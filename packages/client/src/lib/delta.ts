@@ -2,6 +2,7 @@
 // 「Delta 变更追踪」——op 语义 set/update/add/remove，2026-08 修订）
 // 用途：大纲节点变更记录面板与实体详情状态预览共用；保持薄封装，UI 组件只做编排
 import type { DeltaChange, DeltaOp } from "@whispering233/ai-editor-shared";
+import { ENTITY_TYPE_LABELS } from "@whispering233/ai-editor-shared";
 
 /** op → 中文标签（changes 摘要 chip 前缀） */
 export const DELTA_OP_LABEL: Record<DeltaOp, string> = {
@@ -11,17 +12,13 @@ export const DELTA_OP_LABEL: Record<DeltaOp, string> = {
   remove: "移除",
 };
 
-/** Delta 目标类型 → 中文徽标（含大纲节点端点；未收录原样显示） */
-const TARGET_TYPE_LABEL: Record<string, string> = {
-  character: "人物",
-  setting: "设定",
-  location: "地点",
-  hook: "伏笔",
-  outline_node: "大纲节点",
-};
+/** Delta 目标类型 → 中文徽标（实体类型取 shared `ENTITY_TYPE_LABELS`，**不得另拄一份**；
+ *  大纲节点是 Delta 专属端点类型，不在实体表里，故单独映射；未收录原样显示） */
+const OUTLINE_NODE_LABEL = "大纲节点";
 
 export function targetTypeLabel(t: string): string {
-  return TARGET_TYPE_LABEL[t] ?? t;
+  if (t === "outline_node") return OUTLINE_NODE_LABEL;
+  return ENTITY_TYPE_LABELS[t as keyof typeof ENTITY_TYPE_LABELS] ?? t;
 }
 
 /** 值 → 展示串（null/undefined → 「空」；对象/数组 JSON 化——from/to/value 均为 JSON 类型） */
