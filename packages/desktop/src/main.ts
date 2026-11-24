@@ -26,6 +26,7 @@ import {
   writeLibraryMarker,
 } from "./config.js";
 import { logFilePath, redirectConsoleToFile } from "./log.js";
+import { shouldCloseServerOnBeforeQuit } from "./quit-sequence.js";
 import { checkForUpdatesManually, isUpdateSupported, setupAutoUpdate } from "./updater.js";
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -339,5 +340,8 @@ void app.whenReady().then(async () => {
 app.on("window-all-closed", () => app.quit());
 
 app.on("before-quit", () => {
+  // 菜单「退出」= `app.quit()` 先发 before-quit、窗口还没关 ⇒ 这时的 flush 还没跑，
+  // 服务端必须活到落盘之后（次序与两条退出路径见 `50-desktop.md` §1.1）
+  if (!shouldCloseServerOnBeforeQuit(BrowserWindow.getAllWindows().length)) return;
   void closeServer();
 });

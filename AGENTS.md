@@ -108,7 +108,7 @@
 
 - preload 必须 CJS（源文件 `preload.cts`，`sandbox: true` 是既定基线），主进程 ESM；服务走主进程 in-process `startServer()`（不开子进程），退出复用 `ServerHandle.close()`；窗口加载 `http://127.0.0.1:<实际端口>`，**端口分段单源 = shared `constants/ports.ts`**（server / `vite.config` / desktop 全部派生，禁止复述字面量）。
 - 应用级配置唯一载体 = `<userData>/desktop.json`；桌面包不得依赖 `process.cwd()` / 命令行参数；日志落 `<userData>/logs/ai-editor.log`；原生能力只经 preload 的 `pickDirectory()` / `onFlushRequest()`。
-- **退出必须经 flush 通道**：关窗先拦一次、请渲染侧落盘（`desktop:flush-request` / `desktop:flush-done`，成败判定单源 = `client/src/lib/desktop-flush.ts` 的 `flushSucceeded`），**不得在 `before-quit` 里抢跑 `closeServer()`**——落盘要打 HTTP，服务端得活到那时。
+- **退出必须经 flush 通道**：关窗先拦一次、请渲染侧落盘（`desktop:flush-request` / `desktop:flush-done`，成败判定单源 = `client/src/lib/desktop-flush.ts` 的 `flushSucceeded`），**不得在 `before-quit` 里抢跑 `closeServer()`**——落盘要打 HTTP，服务端得活到那时（菜单「退出」下 `before-quit` 先于窗口 close）；因此 `before-quit` **只在无窗口时**才关服务端，判定单源 = `quit-sequence.ts` 的 `shouldCloseServerOnBeforeQuit`。
 - 打包不可省：`pnpm deploy --prod` + `npmRebuild: false` + 显式 `linux.executableName`（scope 名里的 `@` 会被 AppImage 工具链拒收）；Electron 42+ 无 postinstall（懒下载，install 阶段不要依赖它存在）。
 - `electron-updater` 是 CJS ⇒ 必须默认导入 + 解构（具名导入在打包态直接崩、typecheck 不报）；只在 Windows 安装态、用户确认后先 `await closeServer()` 再 `quitAndInstall(true, true)`。
 - 升级路径守卫不可回退：`installer.nsh` 的 `customUnInstall` 开头保留 `${If} ${isUpdated}` / `${If} ${Silent}` 早退（漏掉会在升级时弹「清除使用数据」）。卸载清理删目录前**必须先验签名文件** `<书库>/.ai-editor/library.json`——书库目录名是通用名，按名 `RMDir /r` 会误删用户自建的同名目录；`<userData>` 存在性检查用 `desktop.json`。

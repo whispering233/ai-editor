@@ -23,7 +23,10 @@
 2. 渲染侧 flush = **栈顶保存动作**：`await triggerSaveShortcut()`（`save-shortcut.ts` 的注册栈）。`null` / `undefined` / `true` = 成功（`null` = 本页无保存动作）；`false` 或 reject = 失败。判定单源 = `client/src/lib/desktop-flush.ts` 的 `flushSucceeded`，接线在外壳层 `AppShell`（任意页面关窗都落盘）。
 3. 失败或超时 → **一次**原生确认框（`type: "warning"`，按钮 `["留在这里", "仍要退出"]`，`defaultId: 0` 且 `cancelId: 0`）：选「留在这里」不关窗并落日志；选「仍要退出」照关并落日志（用户选择留痕）。
 4. 成功 → 直接关。等待期间的第二次 close 只 `preventDefault()`、不再发请求（防重入标志），选「留在这里」后复位。
-5. 退出链不变：`window-all-closed → app.quit()`、`before-quit → closeServer()`——flush 已在关窗前收口。
+5. **两条退出路径的次序**（`app.quit()` 的 `before-quit` **先于**窗口 `close`，所以它不能抢在前头关服务端——落盘要打 HTTP）：
+   - X 按钮：`window.close` → flush → 真关 → `window-all-closed` → `app.quit()` → `before-quit`（此时已无窗口）→ `closeServer()`。
+   - 菜单「退出」：`app.quit()` → `before-quit`（**有窗口 ⇒ 跳过 `closeServer()`**）→ 窗口 `close` → flush → `window-all-closed` → `app.quit()` → `before-quit`（无窗口）→ `closeServer()`。判定单源 = `quit-sequence.ts` 的 `shouldCloseServerOnBeforeQuit`（次序看不见，只能靠纯函数 + 单测钉住）。
+   - flush 失败时用户在确认框选「留在这里」会**取消整个 quit**（Electron 语义：取消窗口 close 即取消 quit），**此时服务端仍活着**，应用可继续使用——这是上述次序的主要收益，不是权宜之计。
 
 **不做**（有意）：浏览器形态的 `pagehide` 兜底（flush 通道只属桌面版）、崩溃 / 断电恢复（另一个问题域）——两者触发条件见 `backlog.md`。
 
