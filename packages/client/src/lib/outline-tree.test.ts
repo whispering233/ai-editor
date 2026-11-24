@@ -8,6 +8,8 @@ import {
   chapterNodeOptions,
   dropInsertOrder,
   editFailureRecovery,
+  EMPTY_OUTLINE_FILTER,
+  filterOutlineNodes,
   findNode,
   findNodeChildren,
   findNodePath,
@@ -17,6 +19,7 @@ import {
   initialCollapsedNodes,
   isDescendant,
   isNoopDrop,
+  isOutlineFilterActive,
   numberOutline,
   OUTLINE_AUTO_COLLAPSE_NODE_LIMIT,
   parentOptionsForType,
@@ -26,6 +29,7 @@ import {
   sameDragTarget,
   shouldCommitSummary,
   shouldCommitTitle,
+  toggleFilterValue,
   type DropInsert,
 } from "./outline-tree";
 
@@ -796,5 +800,156 @@ describe("initialCollapsedNodes（千章书首屏只展开卷）", () => {
     expect(collapsed).toEqual(new Set(["vol-a", "vol-b"]));
     expect(collapsed.has("ch-a")).toBe(false);
     expect(collapsed.has("sc-a")).toBe(false);
+  });
+});
+
+// ============ 树筛选（状态 / 剧情线标签；隐藏不重排，编号恒按全树） ============
+
+/** 卷1（ch-1 草稿·主线（sc-1 主线 / sc-2 支线）、ch-2 定稿·支线、ch-del 软删·定稿·主线）+ 卷2（ch-3 定稿·主线） */
+const FILTER_TREE: OutlineTree = {
+  id: "root",
+  type: "root",
+  schemaVersion: 1,
+  children: [
+    {
+      id: "vol-1",
+      type: "volume",
+      title: "第一卷",
+      updatedAt: "t0",
+      children: [
+        {
+          id: "ch-1",
+          type: "chapter",
+          title: "第一章",
+          updatedAt: "t0",
+          data: { status: "draft", tags: ["主线"] },
+          children: [
+            { id: "sc-1", type: "scene", title: "场景一", updatedAt: "t0", data: { tags: ["主线"] } },
+            { id: "sc-2", type: "scene", title: "场景二", updatedAt: "t0", data: { tags: ["支线"] } },
+          ],
+        },
+        {
+          id: "ch-2",
+          type: "chapter",
+          title: "第二章",
+          updatedAt: "t0",
+          data: { status: "final", tags: ["支线"] },
+        },
+        {
+          id: "ch-del",
+          type: "chapter",
+          title: "软删章",
+          updatedAt: "t0",
+          deleted: true,
+          data: { status: "final", tags: ["主线"] },
+        },
+      ],
+    },
+    {
+      id: "vol-2",
+      type: "volume",
+      title: "第二卷",
+      updatedAt: "t0",
+      children: [
+        {
+          id: "ch-3",
+          type: "chapter",
+          title: "第三章",
+          updatedAt: "t0",
+          data: { status: "final", tags: ["主线"] },
+        },
+      ],
+    },
+  ],
+};
+
+/** 树序全 id（含软删；用于「哪些行还在」的断言） */
+function ids(nodes: readonly OutlineNode[]): string[] {
+  return nodes.flatMap((node) => [node.id, ...(node.type === "scene" ? [] : ids(node.children ?? []))]);
+}
+
+describe("filterOutlineNodes（树筛选：隐藏不重排）", () => {
+  it("命中节点连同祖先链保留：按状态筛「定稿」→ 卷留作容器、草稿章整枝丢弃", () => {
+    const kept = filterOutlineNodes(FILTER_TREE.children, { statuses: ["final"], tags: [] });
+    // vol-1 只留 ch-2（ch-1 草稿 → 连它的场景一并丢弃）；vol-2 留 ch-3
+    expect(ids(kept)).toEqual(["vol-1", "ch-2", "vol-2", "ch-3"]);
+  });
+
+  it("祖先链不是命中项：标签命中场景时，它的章与卷一并保留（否则场景无处挂）", () => {
+    const kept = filterOutlineNodes(FILTER_TREE.children, { statuses: [], tags: ["主线"] });
+    // 命中：ch-1、sc-1、ch-3；祖先：vol-1、vol-2；ch-2（支线）与 sc-2（支线）整枝丢弃
+    expect(ids(kept)).toEqual(["vol-1", "ch-1", "sc-1", "vol-2", "ch-3"]);
+    // 未命中章被删掉时，其子节点不会「升级」成卷的子节点（结构不变）
+    const vol1 = kept[0];
+    expect(vol1.type === "volume" && vol1.children?.map((c) => c.id)).toEqual(["ch-1"]);
+  });
+
+  it("无命中 → 空树（整枝都不留，连容器也不留）", () => {
+    expect(filterOutlineNodes(FILTER_TREE.children, { statuses: [], tags: ["不存在"] })).toEqual([]);
+    expect(filterOutlineNodes(FILTER_TREE.children, { statuses: ["revision"], tags: [] })).toEqual([]);
+    expect(filterOutlineNodes([], { statuses: ["draft"], tags: [] })).toEqual([]);
+  });
+
+  it("多条件交集：跨维度 AND（定稿 ∧ 主线 → 只剩 ch-3）", () => {
+    const kept = filterOutlineNodes(FILTER_TREE.children, { statuses: ["final"], tags: ["主线"] });
+    expect(ids(kept)).toEqual(["vol-2", "ch-3"]);
+  });
+
+  it("多条件交集：同维度 OR（草稿 ∨ 定稿 = 全部未删章；标签 主线 ∨ 支线 = 全部）", () => {
+    expect(ids(filterOutlineNodes(FILTER_TREE.children, { statuses: ["draft", "final"], tags: [] }))).toEqual([
+      "vol-1",
+      "ch-1",
+      "ch-2",
+      "vol-2",
+      "ch-3",
+    ]);
+    expect(ids(filterOutlineNodes(FILTER_TREE.children, { statuses: [], tags: ["主线", "支线"] }))).toEqual([
+      "vol-1",
+      "ch-1",
+      "sc-1",
+      "sc-2",
+      "ch-2",
+      "vol-2",
+      "ch-3",
+    ]);
+  });
+
+  it("没带该维度字段的节点不命中：按状态筛不会把卷 / 场景原样留下（否则整棵树都留着）", () => {
+    const kept = filterOutlineNodes(FILTER_TREE.children, { statuses: ["draft"], tags: [] });
+    expect(ids(kept)).toEqual(["vol-1", "ch-1"]);
+  });
+
+  it("软删节点不因筛选出现：命中条件（定稿·主线）也照样剔除，连其子树", () => {
+    for (const filter of [
+      { statuses: [], tags: ["主线"] },
+      { statuses: ["final"], tags: [] },
+      { statuses: ["final"], tags: ["主线"] },
+    ]) {
+      expect(ids(filterOutlineNodes(FILTER_TREE.children, filter))).not.toContain("ch-del");
+    }
+  });
+
+  it("无筛选条件 → 原样返回（不复制整树，行为与不筛选完全一致）", () => {
+    expect(filterOutlineNodes(FILTER_TREE.children, EMPTY_OUTLINE_FILTER)).toBe(FILTER_TREE.children);
+    expect(isOutlineFilterActive(EMPTY_OUTLINE_FILTER)).toBe(false);
+    expect(isOutlineFilterActive({ statuses: ["draft"], tags: [] })).toBe(true);
+  });
+
+  it("筛选不改编号：labels 恒按全树派生，筛掉的章不会让后面的章前移", () => {
+    const labels = numberOutline(FILTER_TREE).labels;
+    const kept = filterOutlineNodes(FILTER_TREE.children, { statuses: ["final"], tags: [] });
+    expect(labels.get("ch-3")).toBe("第3章");
+    // 反向守卫：对筛选结果重新编号会变成「第2章」（ch-2 成了第1章）⇒ 页面必须用全树 labels
+    // （接线由 pages/outline-filter-wiring.test.ts 守）
+    expect(numberOutline({ ...FILTER_TREE, children: kept }).labels.get("ch-3")).toBe("第2章");
+  });
+});
+
+describe("toggleFilterValue（筛选值切换）", () => {
+  it("勾选追加、取消移除，且不改原数组（按引用比较）", () => {
+    const selected: readonly string[] = ["a"];
+    expect(toggleFilterValue(selected, "b")).toEqual(["a", "b"]);
+    expect(toggleFilterValue(selected, "a")).toEqual([]);
+    expect(selected).toEqual(["a"]);
   });
 });

@@ -342,9 +342,10 @@ describe("删除当前 / 祖先节点 → URL 收敛判定", () => {
 // 写作入口迁到一级页（writing-4 收口）：大纲页只有树视图，页头不再有视图切换
 // （旧双视图与视图持久化 key 已删）——此处只钉「切换文案不出现 + 右端组按钮在」。
 describe("大纲页：rail header 图标组", () => {
-  it("无视图切换按钮；右端组 =「全部折叠」+「新建卷」（icon-button + title / aria-label）", () => {
+  it("无视图切换按钮；右端组 =「筛选」+「全部折叠」+「新建卷」（icon-button + title / aria-label）", () => {
     const html = render();
     expect(html).not.toContain("章视图");
+    expect(html).toContain('aria-label="筛选大纲"');
     expect(html).toContain('aria-label="全部折叠"');
     expect(html).toContain("anticon-minus-square"); // 初始态 = 全展开，折叠钮用方框减号
     expect(html).toContain('aria-label="新建卷"');
@@ -352,6 +353,16 @@ describe("大纲页：rail header 图标组", () => {
     expect(html).toContain("flex h-10 min-w-0 items-center gap-2");
     expect(html).toContain('aria-label="大纲树"');
     expect(html).not.toContain('aria-label="收起大纲树"></button>');
+  });
+});
+
+// 树筛选（C3）：控件 = rail 页头右端图标按钮；筛选**生效后**的交互无 jsdom 测不了 ⇒
+// 纯判定 / 隐藏口径在 lib/outline-tree.test.ts、接线（编号恒按全树 / 拖拽禁用 / 不持久化）在
+// pages/outline-filter-wiring.test.ts。此处只守初始态：无筛选条件时整树一行不少。
+describe("大纲树 · 筛选控件", () => {
+  it("初始态无筛选条件：整树照常渲染（筛选只隐藏不命中行，缺省全在）", () => {
+    const ids = [...render().matchAll(/data-node-id="([^"]+)"/g)].map((m) => m[1]);
+    expect(ids).toEqual(["vol-1", "ch-1", "sc-1", "ch-2", "vol-2", "ch-3"]);
   });
 });
 
