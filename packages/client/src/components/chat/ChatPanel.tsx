@@ -294,7 +294,7 @@ function ComposerConfigRow() {
  * 会话显示标题（列表项 / 标题按钮 / 删除确认框共用）：**会话名优先**（pi `session_info` 条目），
  * 其次末条摘要，最后「（空会话）」。
  */
-export function sessionTitle(session: ChatSessionSummary): string {
+function sessionTitle(session: ChatSessionSummary): string {
   const name = session.name?.trim() ?? "";
   return name !== "" ? name : session.lastMessage || "（空会话）";
 }
