@@ -141,8 +141,11 @@ export function buildFocusText(
   if (context?.focus_node_id !== undefined) {
     const node = findOutlineNode(readOutlineFile(project.root), context.focus_node_id);
     if (node !== undefined && node.deleted !== true) {
+      // 实际摘要（data.result_summary）：与计划摘要 summary 并列，空串等价于无摘要（同 propose_update_outline_node 口径）
+      const resultSummary = node.data?.result_summary;
+      const actualSummary = typeof resultSummary === "string" && resultSummary !== "" ? `\n实际摘要：${resultSummary}` : "";
       parts.push(
-        `大纲节点：${node.type}「${node.title}」（id=${node.id}）${node.summary ? `\n摘要：${node.summary}` : ""}` +
+        `大纲节点：${node.type}「${node.title}」（id=${node.id}）${node.summary ? `\n摘要：${node.summary}` : ""}${actualSummary}` +
           chapterExcerptOf(project, node.type, node.id),
       );
     }

@@ -937,6 +937,38 @@ describe("POST /chat SSE 事件集与过滤", () => {
     expect(empty).not.toContain("节选");
   });
 
+  it("聚焦章注入「实际摘要」（data.result_summary）：在计划摘要之后、正文节选之前", () => {
+    const project = openProject();
+    const tree = focusOutline();
+    const chapter = tree.children[0]!.children![0]!;
+    chapter.summary = "主角被逐出宗门";
+    chapter.data = { result_summary: "主角拿到断剑" };
+    writeOutlineFile(project.root, tree);
+    upsertDocument(project.db, {
+      ownerKind: "chapter",
+      ownerId: "ch-1",
+      content: "[]",
+      contentText: "正文开头",
+      now: "2026-08-01T10:00:00Z",
+    });
+
+    const focused = buildFocusText(project, { focus_node_id: "ch-1" })!;
+    expect(focused).toContain("摘要：主角被逐出宗门\n实际摘要：主角拿到断剑");
+    expect(focused.indexOf("实际摘要")).toBeLessThan(focused.indexOf("正文（节选"));
+  });
+
+  it("聚焦章无实际摘要（缺省 / 空串）→ 不注入该段", () => {
+    const project = openProject();
+    writeOutlineFile(project.root, focusOutline());
+    expect(buildFocusText(project, { focus_node_id: "ch-1" })!).not.toContain("实际摘要");
+
+ // 空串 = 无摘要（同 propose_update_outline_node 口径）
+    const tree = focusOutline();
+    tree.children[0]!.children![0]!.data = { result_summary: "" };
+    writeOutlineFile(project.root, tree);
+    expect(buildFocusText(project, { focus_node_id: "ch-1" })!).not.toContain("实际摘要");
+  });
+
   // ============ 推演节点集合注入（契约 docs/design/20-context.md §2） ============
 
   /** 推演注入测试用大纲树：卷一[血夜 ch-1, 晨曦 ch-2, 归途 ch-3] + 卷二[远行 ch-4, 尾声 ch-5] */
