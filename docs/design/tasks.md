@@ -4,24 +4,8 @@
 
 ## 批次：章摘要回填闭环（N1）+ 伏笔到期提示（N2）
 
-**依赖**：C1 是闸门（它定义 `data.result_summary` 与提案工具）；C2 / C3 / C4 依赖 C1；C5 独立。
+**依赖**：C1 已完成并并入 main（`b9294117` + `2460d6bf`：`propose_update_outline_node` 工具 + 章 `data.result_summary`）——C2 / C3 / C4 直接消费它定义的字段与工具，**不要再改它们**；C5 独立。
 `backlog.md` 与 `CHANGELOG.md` 由主会话在合并后统一改，**卡内不要碰这两个文件**。
-
----
-
-## C1 · `propose_update_outline_node` + 章 `result_summary`
-
-- **目标**：AI 能提案修改既有大纲节点的标题 / 计划摘要 / 实际摘要，人工确认后落库。
-- **口径（已定稿）**
-  1. 工具参数：`{ node_id, patches: { title?, summary?, result_summary? } }`，patches **至少一个键**；`.strict()`。
-  2. `result_summary` **仅章**：卷 / 场带该键 → 抛错（不是静默忽略）。它进 `data`（`chapterDataSchema` 加字段，长度上限用**常量单源**，不写字面量）。
-  3. 快照 = 节点 `updated_at`（与实体提案同口径；删除会推进 `updated_at` ⇒ 自动挡住「给已删节点写摘要」；`move` 只推父节点 ⇒ 移动不会误杀文本提案，位置与文本正交，**这是有意口径**）。
-  4. 节点不存在 / 软删 → 抛错（执行侧失败，不是提案）。
-  5. 空串 = 清空该字段（`""` 与「无摘要」等价）。
-  6. executor 复用 `updateOutlineNodeInfo(dir, id, { title?, summary?, data? }, nowIso())`（`db/src/queries/outline-ops.ts`）。**`data` 是浅合并**——这是本卡最关键的前提，必须有用例钉住。
-  7. 提案 permission = `proposal`；`content` 只给 `proposal_id` + 一句话摘要，预览走 `details`。
-- **触点**：`shared/src/types/api.ts`（`chapterDataSchema` + 长度常量）· `tools/src/schemas/outline.ts`（TypeBox 参数）· `tools/src/proposal/outline.ts`（build/run）· `tools/src/index.ts`（注册 + description 注明「result_summary 仅章」）· server 的提案执行分支 · `docs/api/tool-calling.md` · `docs/design/30-agent-loop.md`
-- **判据（硬）**：**「写 `result_summary` 不覆盖 `tags` / `status`」必须有一条落库用例**；`get_outline` 能带出 `result_summary`（`data` 原样透传，一行断言）；卷 / 场带 `result_summary` 抛错；快照不一致走既有冲突码。`pnpm -r build` + `pnpm typecheck` + `pnpm lint` + `pnpm --filter @whispering233/ai-editor-tools test` + `pnpm --filter @whispering233/ai-editor-server test`（本机 Windows 的 `EPERM` 平台红除外，见 backlog）全绿；新 commit + `git status` 干净。
 
 ---
 
