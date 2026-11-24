@@ -92,20 +92,8 @@ pnpm desktop:dist                                      # 全仓构建 + pnpm dep
 
 - **打包三段**：`pnpm -r build` → `pnpm --filter <desktop> deploy --prod packages/desktop/.deploy/app` → `electron-builder --config electron-builder.yml`（封装在 `packages/desktop/scripts/pack.mjs`）。`electron-builder.yml` 里 `npmRebuild: false` + `linux.executableName` 不可省（原因见 `50-desktop.md` §5 实测栏）。
 - **自动更新的元数据（三资产缺一不可，2026-09）**：`electron-builder.yml` 的 `publish` 段（provider github + owner/repo）是两份元数据的前提——包内 `resources/app-update.yml`（更新器读它定位更新源，本地 `pnpm desktop:dist` 后可断言存在）与 Release 资产 `latest.yml`（版本 + sha512，**旧版靠它才知道有新版本**）；`.exe.blockmap` 供差分下载。`pack.mjs` 对 electron-builder 显式传 `--publish never`：**上传唯一路径 = `softprops/action-gh-release`**（两条上传路径会打架，且 CI 没有 GH_TOKEN 可交给 electron-builder）。验收口径：本地打包断言 `app-update.yml` 存在且含 owner/repo 与 `updaterCacheDirName: ai-editor-desktop-updater`；CI 包断言三资产齐全且 **`latest.yml` 里的 `url` 与上传后的资产名逐字一致**。⚠ **资产名不得含空格**（含空格时 GitHub 上传换成**点**（v0.0.43 实测 `AI.Editor-0.0.43-win-x64.exe`），而 electron-builder 在 latest.yml 里把空格换成**短横**，更新器按 yml 的 url 直拼 `/releases/download/<tag>/<名>`（`GitHubProvider.resolveFiles`，无资产清单回退）⇒ 404、更新全断）。因此 `artifactName` 固定为无空格的 `AI-Editor-<v>-win-x64.exe`（linux / mac 同规则；macOS 暂不出包，配置同步去空格，恢复出包时不用再修；故本地 `latest-linux.yml` 的 `url` 恒等于磁盘文件名，可当不变式断言）。
-- **打包态启动冒烟不可省（2026-09 实测）**：`typecheck` / `lint` / 单测**全绿 ≠ 打包态能起**。v0.0.44 的 `updater.ts` 用 `import { autoUpdater } from "electron-updater"`（该包是 CJS），`tsc` 不报、开发态也看不出来，打包启动直接 `SyntaxError: The requested module 'electron-updater' does not provide an export named 'autoUpdater'`（Electron 的 ESM loader 与 Node 的 CJS 具名导出探测不一致）——现改为默认导入 + 解构。**改主进程依赖/import 后必跑**：
-  ```bash
-  pnpm --filter ai-editor-desktop build && node packages/desktop/scripts/pack.mjs
-  mkdir -p /tmp/smoke && printf '{"projectRoot":"/tmp/lib"}' > /tmp/smoke/desktop.json
-  timeout 40 packages/desktop/release/linux-unpacked/ai-editor --user-data-dir=/tmp/smoke
-  # 期望：存活到 timeout（124）、日志出现「菜单已就绪（… 检查更新项: <bool>）」、无更新相关异常
-  ```
-  - **win32 分支在 Linux 上也能跑一遍**（本地唯一能执行该分支的办法，2026-09 实测）：临时把 `isUpdateSupported()` 改成 `return true`，重打包后带假 `APPIMAGE` 跑：
-  ```bash
-  # 变异后：pnpm --filter ai-editor-desktop build && node packages/desktop/scripts/pack.mjs
-  APPIMAGE=/tmp/fake.AppImage timeout 60 packages/desktop/release/linux-unpacked/ai-editor --user-data-dir=/tmp/smoke
-  # 期望：日志出现 [info] Checking for update / [error] Cannot find latest-linux.yml … 404（网络与错误路径都真跑）
-  git checkout -- packages/desktop/src/updater.ts   # 恢复守卫后必须重新 build+pack，别把变异产物当成品
-  ```
+- **打包态启动冒烟不可省（2026-09 实测）**：`typecheck` / `lint` / 单测**全绿 ≠ 打包态能起**。v0.0.44 的 `updater.ts` 用 `import { autoUpdater } from "electron-updater"`（该包是 CJS），`tsc` 不报、开发态也看不出来，打包启动直接 `SyntaxError: The requested module 'electron-updater' does not provide an export named 'autoUpdater'`（Electron 的 ESM loader 与 Node 的 CJS 具名导出探测不一致）——现改为默认导入 + 解构。**改主进程依赖/import 后必跑，唯一实现 = `node packages/desktop/scripts/smoke.mjs`**（先 `pnpm --filter ai-editor-desktop build && node packages/desktop/scripts/pack.mjs`）：判据与退路都在脚本头注释里，CI 在 `desktop.yml` 出包后跑同一条命令，失败即红、坏包不上传。
+  - 脚注（手工自查，2026-09 实测；只用于**本地无 Windows 产物时验 win32 分支**）：本地只有 Linux 产物可先跑 `smoke.mjs` 过 linux 分支；win32 分支的互验只能这么跑——临时把 `isUpdateSupported()` 改成 `return true`，重打包后 `APPIMAGE=/tmp/fake.AppImage node packages/desktop/scripts/smoke.mjs`（环境变量直接透传给它 spawn 的产物），期望日志出现 `[info] Checking for update` / `[error] Cannot find latest-linux.yml … 404`（网络与错误路径都真跑）；随后 `git checkout -- packages/desktop/src/updater.ts` 并重新 build+pack，别把变异产物当成品。
 
 - **真机更新验证（两版闭环，只能人工）**：发 vX（首个带更新能力的版本）→ 真机装 `AI-Editor-vX-win-x64.exe` → 发 vX+1（确认三资产已挂在 Release）→ 启动 vX：应弹「新版本 vX+1 已下载」→ 点「立即重启安装」→ 重启后 菜单 → 帮助 里的版本号应为 vX+1。⚠ **老版本（无更新器）不可能自动升上来**，这一跳必须手动装一次；日志看 `<userData>\logs\ai-editor.log`。
 - **Electron 二进制不再随 install 下载**（Electron 42+ 移除 postinstall，改懒下载）：`pnpm install` 不碰二进制；开发态首次 `pnpm --filter <desktop> start` 会打印 `Downloading Electron binary...` 并下载（此时才需要 `ELECTRON_MIRROR`）；打包时 electron-builder 自行下载所需二进制。`ELECTRON_SKIP_BINARY_DOWNLOAD` 已失效，手动预下载用 `pnpm --filter <desktop> exec install-electron --no`。
