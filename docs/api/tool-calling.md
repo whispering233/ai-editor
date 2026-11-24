@@ -63,6 +63,8 @@ query_relationships(opts: {
 get_outline()
   → 完整大纲树（严格三层，无游离节点）
   注意：默认不含 metadata 统计（省 token）；需统计走 API `GET /outline?with_metadata=`
+  注：章节点 `data.result_summary` = 写完之后的事实摘要（与写作前的 `summary` 并存）
+    ——跨章衔接 / 一致性 / 伏笔回收分析前先读它，不要凭标题推断
 
 get_outline_path(node_id)
   → 从根到该节点的路径 ID 列表
@@ -306,6 +308,8 @@ propose_update_outline_node(node_id, patches)
     （位置与文本正交，**有意口径**）；软删会推进自身 `updated_at` 且执行层重查存在性
     ⇒ 已删节点无法再写摘要
   确认后：Executor 直接调 db `updateOutlineNodeInfo`（不新增执行类工具名）
+  用法：作者写完一章后回填 `result_summary`（写进「实际发生了什么」）；回填的摘要随后续
+    `get_outline` 与聚焦注入供跨章分析使用
 
 // 伏笔五件套（参数与返回结构以 packages/tools/src/index.ts 的工具描述为单一来源）
 propose_create_hook(name, data?, plant_at_node_id?)

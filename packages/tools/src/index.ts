@@ -125,7 +125,9 @@ const queryToolDefs: ToolDefinition[] = [
     name: "get_outline",
     description:
       "完整大纲树查询（严格三层：卷→章→场景）。默认不含 metadata 统计（省 token）；" +
-      "软删节点不返回。用于了解作品整体结构。",
+      "软删节点不返回。用于了解作品整体结构。" +
+      "章节点 data.result_summary = 写完之后的事实摘要（作者的 summary 是写作前的计划摘要，两者并存）：" +
+      "做跨章衔接、一致性或伏笔回收分析前先读它，不要凭标题推断。",
     parameters: getOutlineArgsSchema,
     permission: TOOL_PERMISSION.AUTO,
     scope: "novel",
@@ -551,6 +553,8 @@ const proposalToolDefs: ToolDefinition[] = [
       "title 节点标题、summary 计划摘要、result_summary 实际摘要（写完后本章实际发生了什么）。" +
       `result_summary 仅章（卷/场景带该键返回错误，不会静默忽略），最长 ${MAX_CHAPTER_RESULT_SUMMARY_CHARS} 字；` +
       "空串 = 清空该字段（等价于没有摘要）。" +
+      "作者写完一章后可用它回填 result_summary（写进「实际发生了什么」）——" +
+      "回填的摘要随后续 get_outline 与聚焦注入供跨章分析使用。" +
       "仅生成提案，需用户确认后生效；确认时服务端校验节点 updated_at 快照（节点被改动则提案失效），" +
       "节点不存在或已软删返回错误。",
     parameters: proposeUpdateOutlineNodeArgsSchema,

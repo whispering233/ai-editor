@@ -118,6 +118,11 @@ describe("@whispering233/ai-editor-tools 入口冒烟", () => {
     expect(m.getTool("propose_update_outline_node")!.description).toContain(
       `最长 ${MAX_CHAPTER_RESULT_SUMMARY_CHARS} 字`,
     );
+ // 摘要指路：模型必须能从 description 知道「实际摘要存在」与「何时去读 / 何时回填」
+ // （按 `20-context.md` §3，领域工具用法归工具说明，不写进内核提示词）
+    expect(m.getTool("get_outline")!.description).toContain("result_summary");
+    expect(m.getTool("get_outline")!.description).toContain("先读它");
+    expect(m.getTool("propose_update_outline_node")!.description).toContain("回填");
  // 全部提案工具注册（`PROPOSAL_TOOLS` 常量与注册表一致；含 propose_create_reference）
     expect(PROPOSAL_TOOLS.length).toBe(17);
     for (const name of PROPOSAL_TOOLS) {
