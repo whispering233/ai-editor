@@ -181,8 +181,12 @@ describe("工具注册（入口副作用，import ./index.js 触发）", () => {
     expect(accepts(def, { depth: 1, relation_type: "自定义类型" })).toBe(false);
   });
 
-  it("get_outline 无参数；compute_state / get_delta_history / get_outline_path 必填字段校验", () => {
+  it("get_outline 参数：depth 只能 1/2/3、volume_id 字符串（均可不传）；compute_state / get_delta_history / get_outline_path 必填字段校验", () => {
     expect(accepts(getTool("get_outline")!, {})).toBe(true);
+    expect(accepts(getTool("get_outline")!, { depth: 1, volume_id: "vol-1" })).toBe(true);
+    expect(accepts(getTool("get_outline")!, { depth: 3 })).toBe(true);
+    expect(accepts(getTool("get_outline")!, { depth: 0 })).toBe(false);
+    expect(accepts(getTool("get_outline")!, { depth: 4 })).toBe(false);
     expect(accepts(getTool("get_outline")!, { with_metadata: true })).toBe(false); // 严格：未知字段拒绝
     const compute = getTool("compute_state")!;
     expect(accepts(compute, { target_type: "character", target_id: "char-1", at_node_id: "sc-1" })).toBe(true);

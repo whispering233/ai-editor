@@ -173,8 +173,8 @@ describe("executeProposal（proposal.type → 执行函数映射）", () => {
  // 浅合并：只换 result_summary，其余 data 字段原样保留
     expect(node.data).toEqual({ status: "revision", tags: ["主线"], function: "turn", result_summary: "主角拿到断剑" });
     expect(node.summary).toBe("计划摘要");
- // get_outline 能带出 result_summary（data 原样透传）
-    expect(runGetOutline(makeCtx()).children[0].children?.[0].data?.result_summary).toBe("主角拿到断剑");
+ // get_outline 能带出 result_summary（data 原样透传；depth=2 才展开到章）
+    expect(runGetOutline(makeCtx(), { depth: 2 }).children[0].children?.[0].data?.result_summary).toBe("主角拿到断剑");
   });
 
   it("propose_update_outline_node：patches 非字符串 → 抛错且不推进节点版本（不白写 updated_at）", () => {

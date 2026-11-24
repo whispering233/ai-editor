@@ -123,6 +123,11 @@ describe("@whispering233/ai-editor-tools 入口冒烟", () => {
     expect(m.getTool("get_outline")!.description).toContain("result_summary");
     expect(m.getTool("get_outline")!.description).toContain("先读它");
     expect(m.getTool("propose_update_outline_node")!.description).toContain("回填");
+ // 分层语义写在描述里：模型得知「缺省只回卷」与千章用法（地图 → 按卷放大）的唯一渠道；
+ // 「不返 updatedAt」也要说，否则模型会等一个不存在的字段
+    for (const hint of ["depth=1（缺省）", "depth=2", "depth=3", "volume_id", "不返回 updatedAt"]) {
+      expect(m.getTool("get_outline")!.description).toContain(hint);
+    }
  // 全部提案工具注册（`PROPOSAL_TOOLS` 常量与注册表一致；含 propose_create_reference）
     expect(PROPOSAL_TOOLS.length).toBe(17);
     for (const name of PROPOSAL_TOOLS) {
