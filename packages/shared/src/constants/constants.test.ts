@@ -367,9 +367,9 @@ describe("文风练习上限常量（2026-10 改版）", () => {
 
 describe("章级历史快照常量（2026-11）", () => {
   it("三个值与 docs/db/schema.md / docs/api/110-api-manuscript.md 同值（唯一定义处）", () => {
-    expect(CHAPTER_SNAPSHOT_MIN_INTERVAL_MS).toBe(120_000);
-    expect(MAX_SNAPSHOTS_PER_DOCUMENT).toBe(50);
-    expect(SNAPSHOT_BUDGET_MULTIPLIER).toBe(20);
+    expect(CHAPTER_SNAPSHOT_MIN_INTERVAL_MS).toBe(60_000);
+    expect(MAX_SNAPSHOTS_PER_DOCUMENT).toBe(20);
+    expect(SNAPSHOT_BUDGET_MULTIPLIER).toBe(4);
   });
 });
 
