@@ -1253,32 +1253,21 @@ describe("listHooksWrittenUnresolved（预计回收章已写正文却未回收�
     const bare = createEntity(db, { type: "hook", name: "无名信", data: { expected_resolve_node_id: "ch-2" } });
 
     const items = listHooksWrittenUnresolved(db, dir);
-    expect(items).toEqual([
-      {
-        id: planted.id,
-        name: "断剑来历",
-        status: "planted",
-        expectedResolveNodeId: "ch-1",
-        expectedResolveChapterNumber: 1,
-        expectedResolveChapterTitle: "第一章",
-      },
-      {
-        id: progressing.id,
-        name: "旧盟友背叛",
-        status: "progressing",
-        expectedResolveNodeId: "ch-2",
-        expectedResolveChapterNumber: 2,
-        expectedResolveChapterTitle: "第二章",
-      },
-      {
-        id: bare.id,
-        name: "无名信",
-        status: "planted",
-        expectedResolveNodeId: "ch-2",
-        expectedResolveChapterNumber: 2,
-        expectedResolveChapterTitle: "第二章",
-      },
-    ]);
+    // 排序键 = (章序, id)。id 是随机生成 ⇒ 同章号那两条的**相对次序不稳定**，
+    // 所以这里只钉「第一章在前」+「同章两条都在」（曾用 localeCompare 排序，中文名在
+    // ICU zh-CN 与 CI 的 C locale 下顺序不同，导致这条用例在 CI 上红）。
+    expect(items).toHaveLength(3);
+    expect(items[0]).toEqual({
+      id: planted.id,
+      name: "断剑来历",
+      status: "planted",
+      expectedResolveNodeId: "ch-1",
+      expectedResolveChapterNumber: 1,
+      expectedResolveChapterTitle: "第一章",
+    });
+    expect(items.map((item) => item.expectedResolveChapterNumber)).toEqual([1, 2, 2]);
+    expect(items.slice(1).map((item) => item.id).sort()).toEqual([bare.id, progressing.id].sort());
+    expect(items.slice(1).every((item) => item.expectedResolveChapterTitle === "第二章")).toBe(true);
   });
 
   it("预计回收章尚未写正文（无文档行 / 空投影 / 纯空白投影）→ 都不算", () => {

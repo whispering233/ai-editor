@@ -306,6 +306,7 @@ export function listEntities(db: Db, query: EntityListQuery): EntityListResult {
  // SQL 取全量候选行（type/q/软删），JS 层执行 data/层级过滤 + 分页（MVP 数据量小，全行查询可接受）；
  // 两者皆无时保持 COUNT + LIMIT SQL 原路径（行为不变）。
   if (query.filters !== undefined || query.parentId !== undefined) {
+// SAFETY: 无投影 select() 返回 entities/relation_records 全列，widen 成列名映射的记录类型与行映射器（rowToXxx）的假设一致
     const all = q.select().from(entities).where(whereExpr).orderBy(...orderByExpr).all() as unknown as Array<
       Record<string, unknown>
     >;
@@ -323,6 +324,7 @@ export function listEntities(db: Db, query: EntityListQuery): EntityListResult {
   }
 
   const total = (q.select({ c: count() }).from(entities).where(whereExpr).get() as { c: number }).c;
+// SAFETY: 无投影 select() 返回 entities/relation_records 全列，widen 成列名映射的记录类型与行映射器（rowToXxx）的假设一致
   const rows = q
     .select()
     .from(entities)
@@ -337,6 +339,7 @@ export function listEntities(db: Db, query: EntityListQuery): EntityListResult {
 
 /** 按 id 取实体详情（GET /api/v1/entity/:type/:id）；不存在或已软删返回 null */
 export function getEntity(db: Db, id: string): EntityRow | null {
+// SAFETY: 无投影 select() 返回 entities/relation_records 全列，widen 成列名映射的记录类型与行映射器（rowToXxx）的假设一致
   const row = queryDb(db)
     .select()
     .from(entities)
@@ -459,11 +462,13 @@ export function listHooksWrittenUnresolved(db: Db, outlineDir: string): WrittenU
       expectedResolveChapterTitle: findOutlineNode(tree, nodeId)?.title ?? "",
     });
   }
+  // 排序键只用**章序 + id**（都是平台无关的码元比较）：
+  // 禁止用 `name.localeCompare`——中文名在 ICU（Windows zh-CN）与 C locale（Linux/CI）下顺序不同，
+  // 会让同章号多条伏笔的次序随平台翻转（曾在 CI 上红）。
   items.sort(
     (a, b) =>
       a.expectedResolveChapterNumber - b.expectedResolveChapterNumber ||
-      a.name.localeCompare(b.name) ||
-      a.id.localeCompare(b.id),
+      (a.id < b.id ? -1 : a.id > b.id ? 1 : 0),
   );
   return items;
 }
@@ -558,6 +563,7 @@ export function moveEvent(db: Db, id: string, order: number, updatedAt: string):
   return withTransaction(db, () => {
     const q = queryDb(db);
  // 全部未软删 event，按 sort_order 升序（NULL 沉底）排成数组（id 作稳定次序）
+// SAFETY: 无投影 select() 返回 entities/relation_records 全列，widen 成列名映射的记录类型与行映射器（rowToXxx）的假设一致
     const rows = q
       .select()
       .from(entities)
@@ -592,6 +598,7 @@ export function moveEvent(db: Db, id: string, order: number, updatedAt: string):
  * G2.2/2.3（时间轴渲染、AI 排序 propose_reorder_timepoints）共用，单一事实来源查询。
  */
 export function listTimepoints(db: Db): EntityRow[] {
+// SAFETY: 无投影 select() 返回 entities/relation_records 全列，widen 成列名映射的记录类型与行映射器（rowToXxx）的假设一致
   const rows = queryDb(db)
     .select()
     .from(entities)
@@ -618,6 +625,7 @@ export function moveTimepoint(db: Db, id: string, order: number, updatedAt: stri
   return withTransaction(db, () => {
     const q = queryDb(db);
     const rows = q
+// SAFETY: 无投影 select() 返回 entities/relation_records 全列，widen 成列名映射的记录类型与行映射器（rowToXxx）的假设一致
       .select()
       .from(entities)
       .where(and(eq(entities.type, "timepoint"), isNull(entities.deleted_at)))
@@ -780,6 +788,7 @@ export function moveSetting(
  * @returns 挂载关系（RelationRow，source_id = timepoint id）；未挂载/关系软删/timepoint 软删 → null
  */
 export function eventOccursAt(db: Db, eventId: string): RelationRow | null {
+// SAFETY: 无投影 select() 返回 entities/relation_records 全列，widen 成列名映射的记录类型与行映射器（rowToXxx）的假设一致
   const row = queryDb(db)
     .select()
     .from(relationRecords)
@@ -974,6 +983,7 @@ function topAbilityPanelCounts(
  * setting→byTags、location→byType、hook→byStatus/byPayoffTiming；缺字段（data 未填）不报错、不计入。
  */
 export function getEntitySummaryStats(db: Db, type: EntityType): EntitySummaryStats {
+// SAFETY: 无投影 select() 返回 entities/relation_records 全列，widen 成列名映射的记录类型与行映射器（rowToXxx）的假设一致
   const rows = queryDb(db)
     .select({ data: entities.data })
     .from(entities)
