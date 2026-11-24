@@ -139,6 +139,8 @@ export function ChapterEditor({
   // 「回填本章摘要」（C2）：一条普通用户消息 + 本次发送的 focus_node_id（照练习页既有姿势）
   const sendMessage = useChatStore((s) => s.sendMessage);
   const requestFocusInput = useChatStore((s) => s.requestFocusInput);
+  // 生成中：`sendMessage` 在 streaming 时直接 return（无任何可见反馈）⇒ 按钮必须同时禁点
+  const streaming = useChatStore((s) => s.streaming);
 
   /** 版本戳基准（保存时回传 base_updated_at）；null = 服务端从未写过 */
   const baseRef = useRef<string | null>(null);
@@ -514,7 +516,7 @@ export function ChapterEditor({
                 color="default"
                 variant="text"
                 size="small"
-                disabled={!canRequestChapterSummary(charCount)}
+                disabled={streaming || !canRequestChapterSummary(charCount)}
                 icon={<ThunderboltOutlined className="text-sm" />}
                 title="回填本章摘要"
                 aria-label="回填本章摘要"

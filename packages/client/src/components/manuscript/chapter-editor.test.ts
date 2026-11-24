@@ -62,6 +62,17 @@ describe("单章 TXT 导出（exportPlainText）", () => {
 });
 
 describe("页头「回填本章摘要」（C2）", () => {
+  /** 按钮切片：`<Button` 开头到它的自闭合 `/>`（其中含 disabled / aria-label / onClick） */
+  function summaryButtonSource(): string {
+    const label = chapterEditor.indexOf('aria-label="回填本章摘要"');
+    expect(label).toBeGreaterThan(-1);
+    const from = chapterEditor.lastIndexOf("<Button", label);
+    expect(from).toBeGreaterThan(-1);
+    const end = chapterEditor.indexOf("/>", label);
+    expect(end).toBeGreaterThan(label);
+    return chapterEditor.slice(from, end);
+  }
+
   it("发送 = 消息常量 + 本章 focus_node_id，并聚焦右栏输入框（不新增端点 / 通道）", () => {
     const source = functionSource("function requestChapterSummary");
     expect(source).toContain("sendMessage(CHAPTER_SUMMARY_MESSAGE, { focus_node_id: chapterId });");
@@ -73,5 +84,17 @@ describe("页头「回填本章摘要」（C2）", () => {
     const button = actions.indexOf('aria-label="回填本章摘要"');
     expect(button).toBeGreaterThan(-1);
     expect(actions.indexOf("headerActions}")).toBeGreaterThan(button);
+  });
+
+  it("按钮带 onClick（否则是个死按钮：发送表达式再对也无从触发）", () => {
+    expect(summaryButtonSource()).toContain("onClick={requestChapterSummary}");
+  });
+
+  it("生成中 + 空章都禁点：disabled 同时含 streaming 与 canRequestChapterSummary", () => {
+    // streaming 来自 chat store（`sendMessage` 在生成中直接 return，点了只会静默无反应）
+    expect(chapterEditor).toContain("const streaming = useChatStore((s) => s.streaming);");
+    const disabled = /disabled=\{[^}]*\}/.exec(summaryButtonSource())?.[0] ?? "";
+    expect(disabled).toContain("streaming");
+    expect(disabled).toContain("canRequestChapterSummary(charCount)");
   });
 });
