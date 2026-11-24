@@ -125,6 +125,9 @@
 
 - 各包 `test` script = `vitest run`；各包 tsconfig 已 `exclude: ["src/**/*.test.ts"]`，不要改回——**`*.test.ts` 不进 `pnpm typecheck`**，编译期断言（`satisfies` / 穷尽性检查）必须写在 src 模块里；`.test.tsx` 仍会被 typecheck（有意保留）。
 - 改 shared / db / tools 的 `src` 后先 `pnpm -r build` 再 typecheck / 下游测试（下游读上游 **dist**，不重建会给假绿）。
+- **排序键必须平台无关**：`localeCompare` 的结果取决于 ICU（Windows zh-CN）与 C locale（Linux/CI）——
+  凡进入**断言**或**接口契约**（列表返回顺序）的排序一律用码元比较（`a < b ? -1 : a > b ? 1 : 0`）或 ASCII 键；
+  中文名排序只允许出现在纯展示层，且不得被测试固定。已因此红过两次 CI（v0.0.66 前后各一次）。
 - 变异 / 探针验证只能用 `cp -r` 真副本或 `git worktree`，禁止硬链接副本 + 就地截断写（会写穿 inode 污染源仓库）；恢复后复跑全量回归。
 
 ## 产品非目标与延期项
