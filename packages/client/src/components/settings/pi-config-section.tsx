@@ -2,12 +2,14 @@
 //
 // 独立成一个组件而不是把两块直接写进 Settings.tsx：编辑器的挂载点只有这一处，
 // 新增面板不必再改页面壳（页面壳只负责 tab 表）。
+import { ConfigFileEditor } from "./config-file-editor";
 import { PiDirPanel } from "./pi-dir-panel";
 
 export function PiConfigSection() {
   return (
     <div className="flex flex-col gap-3">
       <PiDirPanel />
+      <ConfigFileEditor />
     </div>
   );
 }
