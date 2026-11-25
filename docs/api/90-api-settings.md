@@ -103,7 +103,7 @@
 
 整份写入。**先按 pi 的读口径校验**（否则会拒绝 pi 自己读得懂的文件），通过后原子写（`writeTextAtomic`，保留用户缩进与注释），再走与目录同一套「立即生效」。
 
-**`models.json` 的写入保护（2026-11）**：写入前若盘上文件存在且内容与本次不同，先把原文**滚动备份**为同目录 `models.json.bak`（单份，覆盖上一代）；备份失败则**中止保存**（500 `INTERNAL_ERROR`，主文件不动）。`.bak` 不在 `CONFIG_FILE_NAMES` 白名单里 —— 这对端点读写不到它，只能手动删；也不参与「立即生效」（`applyPiConfigChange()` 只读 `models.json`）。
+**`models.json` 的写入保护（2026-11）**：写入前若盘上文件存在且内容与本次不同，先把原文**滚动备份**为同目录 `models.json.bak`（单份，覆盖上一代）；备份失败则**中止保存**（500 `INTERNAL_ERROR`，主文件不动）。`.bak` 不在 `CONFIG_FILE_NAMES` 白名单里 —— 这对端点读写不到它，只能手动删；也不参与「立即生效」（`applyPiConfigChange()` 只读 `models.json`）。`.bak` 与 `models.json` 同目录、同为**明文凭据副本**（provider 的 `apiKey` 可能是字面量）——同样不进项目文件 / 备份 / 云端 / 导出；将来收紧 `models.json` 文件权限时必须同步收紧 `.bak`。
 
 | 文件 | 位置 | 校验口径 |
 | :--- | :--- | :--- |
