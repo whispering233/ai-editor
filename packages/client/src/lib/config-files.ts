@@ -22,7 +22,7 @@ export const CONFIG_FILE_ENTRIES: readonly ConfigFileEntry[] = [
   {
     name: "models.json",
     label: "自定义模型",
-    hint: "自定义 provider 与模型覆盖（baseUrl、模型元数据）。允许 // 注释与尾逗号（与 pi 的读取口径一致）。",
+    hint: "自定义 provider 与模型覆盖（baseUrl、模型元数据）。允许 // 注释与尾逗号（与 pi 的读取口径一致）。与上方「自定义模型」表单写同一份文件：先保存 JSON 再回来用表单。",
   },
   {
     name: "settings.json",
