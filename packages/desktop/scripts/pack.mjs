@@ -21,15 +21,19 @@ const deployDir = join(pkgDir, ".deploy");
 const deployApp = join(deployDir, "app");
 
 /**
- * 是否经 shell 执行子进程：**Windows 上必须**——pnpm 在那里是 `.cmd` 包装脚本，而 Node 20+
- * （CVE-2024-27980 的修补）**禁止直接 spawn `.bat`/`.cmd`**：不带 shell 是 `spawnSync pnpm ENOENT`，
- * 指定 `pnpm.cmd` 则是 `spawnSync pnpm.cmd EINVAL`（v0.0.40 的 Windows 打包 job 两次实测踩到）。
- * 已核实的官方解法就是 `shell: true`（nodejs/node#52681）。
+ * 哪些命令必须经 shell 执行：**Windows 上只有 pnpm / npm**——它们是 `.cmd` 包装脚本，
+ * 而 Node 20+（CVE-2024-27980 的修补）**禁止直接 spawn `.bat`/`.cmd`**：不带 shell 是
+ * `spawnSync pnpm ENOENT`，指定 `pnpm.cmd` 则是 `spawnSync pnpm.cmd EINVAL`（v0.0.40 的 Windows
+ * 打包 job 两次实测踩到）；官方解法是 `shell: true`（nodejs/node#52681）。
  *
- * 前提：**当前所有参数均不含空格**（仓库路径、`--filter` 包名、子命令与开关皆然）。
- * 若将来出现含空格的参数（如含空格的用户路径），必须改为显式加引号或换用 cross-spawn。
+ * 反方向同样致命：`process.execPath`（本脚本用它跑 `copy-client-dist.mjs`）**不能**过 shell ——
+ * `shell: true` 会被包成 `cmd /c "C:\Program Files\nodejs\node.exe …"`，cmd 在空格处截断成
+ * `'C:\Program' 不是内部或外部命令`（Node 装在含空格的默认路径时必现，2026-11 实测）。
+ *
+ * 前提不变：**参数本身不含空格**（仓库路径、`--filter` 包名、子命令与开关皆然）；
+ * 将来出现含空格的参数（如含空格的用户路径）时，必须显式加引号或换用 cross-spawn。
  */
-const USE_SHELL = process.platform === "win32";
+const SHELL_COMMANDS = new Set(["pnpm", "npm"]);
 
 /**
  * 自动更新的**资产名不变式**：`latest*.yml` 里的 `files[].url` / `path` 必须与 `release/` 下的
@@ -64,9 +68,14 @@ function assertUpdateAssetNames() {
   }
 }
 
-/** 同步执行并继承 stdio（打包过程需可见；失败即抛，由调用方脚本链中断） */
+/** 同步执行并继承 stdio（打包过程需可见；失败即抛，由调用方脚本链中断）。
+ * shell 只给 `.cmd` 包装脚本（pnpm / npm），其余（尤其是 `process.execPath`）一律不过 shell。 */
 function run(cmd, args, cwd = pkgDir) {
-  execFileSync(cmd, args, { cwd, stdio: "inherit", shell: USE_SHELL });
+  execFileSync(cmd, args, {
+    cwd,
+    stdio: "inherit",
+    shell: process.platform === "win32" && SHELL_COMMANDS.has(cmd),
+  });
 }
 
 /**
