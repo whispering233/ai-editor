@@ -1,16 +1,24 @@
 // 桌面版应用级配置（`docs/design/50-desktop.md` §2）。
 //
-// 唯一载体 = `<userData>/desktop.json`，唯一键 = 书库位置（创作根绝对路径）。创作根属「部署级」，
-// 不能存进它自己的 `<创作根>/.ai-editor/config.json`（那要先知道创作根才能读）；CLI 形态永不读本文件。
+// 唯一载体 = `<userData>/desktop.json`，键 = 书库位置（创作根绝对路径）与界面缩放 factor。创作根属
+// 「部署级」，不能存进它自己的 `<创作根>/.ai-editor/config.json`（那要先知道创作根才能读）；CLI 形态永不读本文件。
 //
 // 本模块只做纯路径/编解码（入参是路径，不碰 `app.getPath`），便于单测与主进程注入。
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { dirname, isAbsolute, join } from "node:path";
+import { isZoomFactor } from "./zoom.js";
 
-/** desktop.json 的结构（当前只有一个键；解析时未知键一律忽略） */
+/** desktop.json 的结构（解析时未知键一律忽略） */
 export interface DesktopConfig {
   /** 书库位置（创作根）；必须是绝对路径——桌面版不得依赖 cwd 语义 */
   projectRoot: string;
+  /**
+   * 界面缩放 factor（档位阶梯与语义见 `zoom.ts` / `50-desktop.md` §4.1）。
+   *
+   * 必填是为了让写入方**无法忘记带上它**：`writeDesktopConfig` 是整对象覆写，换书库与启动自愈
+   * 都会走这里——漏带一个键就是「缩放静默重置回 100%」，而且不会报错。
+   */
+  zoom: number;
 }
 
 /** 配置文件路径：`<userData>/desktop.json` */
@@ -78,7 +86,10 @@ export function parseDesktopConfig(raw: string): DesktopConfig | null {
   if (typeof parsed !== "object" || parsed === null) return null;
   const root = (parsed as { projectRoot?: unknown }).projectRoot;
   if (typeof root !== "string" || root.trim() === "" || !isAbsolute(root)) return null;
-  return { projectRoot: root };
+  // 缩放不影响「能不能启动」：缺失 / 坏类型 / 不在档位阶梯上（含手改过的 1.37）一律回落 100%，
+  // 绝不因此判整份配置非法（那样会把用户的书库位置一起丢掉）。
+  const zoom = (parsed as { zoom?: unknown }).zoom;
+  return { projectRoot: root, zoom: isZoomFactor(zoom) ? zoom : 1 };
 }
 
 /** 读配置：文件不存在 / 读失败 / 内容非法 → null */

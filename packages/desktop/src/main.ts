@@ -237,7 +237,9 @@ function resolveLibraryRoot(): string {
       continue;
     }
     if (saved?.projectRoot !== candidate) {
-      writeDesktopConfig(configFile, { projectRoot: candidate });
+      // 整对象覆写 ⇒ 必须带上盘上的 zoom（`saved === null` 才是真没有值，回落 1）；
+      // 否则启动自愈 / 换书库会把用户设过的缩放静默重置回 100%。
+      writeDesktopConfig(configFile, { projectRoot: candidate, zoom: saved?.zoom ?? 1 });
       console.log(
         saved === null
           ? `[desktop] 首次启动：使用默认书库位置 ${candidate}（可在 设置 → 通用 → 书库位置 更改）`
@@ -328,7 +330,11 @@ void app.whenReady().then(async () => {
     if (chosen === null || chosen === libraryRoot) return null;
 
     mkdirSync(chosen, { recursive: true });
-    writeDesktopConfig(desktopConfigPath(app.getPath("userData")), { projectRoot: chosen });
+    // 整对象覆写：zoom 取盘上的当前值（本卡不接键位，内存里还没有一份可靠的缩放状态），
+    // 重新读一次而不是写常量 1——否则换书库会把缩放重置回 100%。
+    const configFile = desktopConfigPath(app.getPath("userData"));
+    const zoom = readDesktopConfig(configFile)?.zoom ?? 1;
+    writeDesktopConfig(configFile, { projectRoot: chosen, zoom });
     console.log(`[desktop] 书库位置切换为 ${chosen}，重启应用`);
 
     await closeServer(); // 先收敛 WAL/备份调度再重启，不靠进程猝死

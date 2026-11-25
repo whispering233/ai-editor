@@ -28,11 +28,38 @@ describe("parseDesktopConfig", () => {
   it("接受绝对路径的 projectRoot", () => {
     expect(parseDesktopConfig('{"projectRoot":"/home/me/AI Editor"}')).toEqual({
       projectRoot: "/home/me/AI Editor",
+      zoom: 1,
     });
   });
 
+  it("接受阶梯上的 zoom（读回的就是写的那个值）", () => {
+    expect(parseDesktopConfig('{"projectRoot":"/x","zoom":1.5}')).toEqual({
+      projectRoot: "/x",
+      zoom: 1.5,
+    });
+  });
+
+  it("缺 zoom 键 → 1（不影响 projectRoot 有效性）", () => {
+    expect(parseDesktopConfig('{"projectRoot":"/x"}')?.zoom).toBe(1);
+  });
+
+  it("zoom 不在阶梯上（1.37）或坏类型（字符串 / null）→ 1，且不因此丢掉 projectRoot", () => {
+    expect(parseDesktopConfig('{"projectRoot":"/x","zoom":1.37}')).toEqual({
+      projectRoot: "/x",
+      zoom: 1,
+    });
+    expect(parseDesktopConfig('{"projectRoot":"/x","zoom":"1.1"}')).toEqual({
+      projectRoot: "/x",
+      zoom: 1,
+    });
+    expect(parseDesktopConfig('{"projectRoot":"/x","zoom":null}')?.zoom).toBe(1);
+  });
+
   it("忽略未知键", () => {
-    expect(parseDesktopConfig('{"projectRoot":"/x","future":1}')).toEqual({ projectRoot: "/x" });
+    expect(parseDesktopConfig('{"projectRoot":"/x","future":1}')).toEqual({
+      projectRoot: "/x",
+      zoom: 1,
+    });
   });
 
   it("非法 JSON / 非对象 / 缺键 / 空串 / 相对路径 一律 null", () => {
@@ -51,11 +78,18 @@ describe("readDesktopConfig / writeDesktopConfig", () => {
   it("写后读回同一值，且不留临时文件", () => {
     const dir = tempDir();
     const file = desktopConfigPath(dir);
-    writeDesktopConfig(file, { projectRoot: "/books/mine" });
-    expect(readDesktopConfig(file)).toEqual({ projectRoot: "/books/mine" });
+    writeDesktopConfig(file, { projectRoot: "/books/mine", zoom: 1 });
+    expect(readDesktopConfig(file)).toEqual({ projectRoot: "/books/mine", zoom: 1 });
     const raw = readFileSync(file, "utf-8");
     expect(raw.endsWith("\n")).toBe(true);
     expect(() => readFileSync(`${file}.tmp`, "utf-8")).toThrow();
+  });
+
+  it("写后读回保留合法 zoom（整对象覆写不丢值）", () => {
+    const dir = tempDir();
+    const file = desktopConfigPath(dir);
+    writeDesktopConfig(file, { projectRoot: "/books/mine", zoom: 1.5 });
+    expect(readDesktopConfig(file)).toEqual({ projectRoot: "/books/mine", zoom: 1.5 });
   });
 
   it("文件不存在 / 内容损坏 → null（不抛）", () => {
@@ -69,8 +103,8 @@ describe("readDesktopConfig / writeDesktopConfig", () => {
   it("父目录不存在时自动创建（userData 首次可能尚未落盘）", () => {
     const dir = tempDir();
     const file = join(dir, "nested", "deeper", "desktop.json");
-    writeDesktopConfig(file, { projectRoot: "/books/x" });
-    expect(readDesktopConfig(file)).toEqual({ projectRoot: "/books/x" });
+    writeDesktopConfig(file, { projectRoot: "/books/x", zoom: 1 });
+    expect(readDesktopConfig(file)).toEqual({ projectRoot: "/books/x", zoom: 1 });
   });
 });
 
