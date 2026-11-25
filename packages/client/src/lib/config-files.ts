@@ -27,7 +27,7 @@ export const CONFIG_FILE_ENTRIES: readonly ConfigFileEntry[] = [
   {
     name: "settings.json",
     label: "运行参数",
-    hint: "激活模型、可见模型作用域、重试 / 压缩 / 思考预算、出站代理。必须是严格 JSON（不支持注释）。",
+    hint: "激活模型、可见模型作用域、重试 / 压缩 / 思考预算、出站代理。必须是严格 JSON（不支持注释）。重试 / 压缩 / 空闲超时三个键的屏幕表单在上方「运行参数」卡，这里只写其余字段。",
   },
   {
     name: "search.json",
