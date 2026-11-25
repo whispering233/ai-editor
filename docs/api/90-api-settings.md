@@ -103,6 +103,8 @@
 
 整份写入。**先按 pi 的读口径校验**（否则会拒绝 pi 自己读得懂的文件），通过后原子写（`writeTextAtomic`，保留用户缩进与注释），再走与目录同一套「立即生效」。
 
+**`models.json` 的写入保护（2026-11）**：写入前若盘上文件存在且内容与本次不同，先把原文**滚动备份**为同目录 `models.json.bak`（单份，覆盖上一代）；备份失败则**中止保存**（500 `INTERNAL_ERROR`，主文件不动）。`.bak` 不在 `CONFIG_FILE_NAMES` 白名单里 —— 这对端点读写不到它，只能手动删；也不参与「立即生效」（`applyPiConfigChange()` 只读 `models.json`）。
+
 | 文件 | 位置 | 校验口径 |
 | :--- | :--- | :--- |
 | `auth.json` | pi 配置目录 | 严格 `JSON.parse`（顶层必须是对象） |
@@ -125,5 +127,5 @@
 ### 不做的事
 
 - **不提供 OAuth 登录流程**（pi 支持的订阅登录不在本仓 UI 范围）：需要订阅凭据的用户用 pi CLI 登录，本仓只读该凭据状态。
-- **pi 配置文件仍不做表单**（2026-11 复核）：`auth.json` / `models.json` / `settings.json` 的结构属 pi，表单一改就漂——「高级」tab 对这三份只提供**整份 JSON 文本编辑**。表单化按面推进（已排期的面见 `../design/tasks.md`），开做前必须先解决两条：`parse → stringify` 会丢注释（`models.json` 允许 `//`）与未知键透传；且任何表单都必须仍走这两个端点（校验 + 原子写 + 立即生效三样不重写）。
+- **pi 配置文件只对 `models.json` 提供表单**（2026-11）：自定义 provider 与其模型行的常用字段走「高级 → 自定义模型」表单（契约见 `../ui/DESIGN.md` `tab-advanced`）；`auth.json` / `settings.json` / `models.json` 的其余字段仍只提供**整份 JSON 文本编辑**（结构属 pi，表单一改就漂）。模型表单必须遵守两条：`parse → stringify` 会丢注释（保存前弹确认，服务端留 `.bak`）与未知字段必须原样透传。
 - **`search.json` 有单字段表单**（2026-11 起）：`apiKey` 走设置页「高级 → 联网搜索」的密码框，写入仍复用 `PUT /settings/config-file/search.json`（服务端 `searchConfigFileSchema` strict 校验不放松）；JSON 编辑器保留为兜底。理由：它是本仓自己的 schema（零上游漂移），而未配置时只有工具报错一条发现路径。
