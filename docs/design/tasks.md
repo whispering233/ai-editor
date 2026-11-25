@@ -3,6 +3,7 @@
 只放当前 / 进行中的任务卡，完成后清卡（历史 = `CHANGELOG.md` 的逐版本段）；未排期项进 `backlog.md`。执行纪律与派工流程见 `AGENTS.md`「协作流程」。
 
 契约已先行登记（实现阶段不得再改契约；发现文档与代码冲突就停下提问）：
+
 - `docs/ui/DESIGN.md` `tab-advanced`（四张卡顺序 + `models-providers` 全量形态）
 - `docs/api/90-api-settings.md`（`models.json` 写入前滚动备份 `models.json.bak`；pi 配置文件只对 `models.json` 提供表单）
 - `docs/design/config.md`（`models.json` 的读写方）
@@ -40,7 +41,7 @@
    - `readCustomProviders(text)`：用 shared `parseJsonc` 解析，返回 `models.json` 里的自定义 provider 列表 + 原始对象（未知键原样保留）；解析失败给 reason。
    - `composeModelsText(original, providers)`：只覆盖表单负责的字段（provider 级 `id/name/baseUrl/api/authHeader/apiKey` + 模型行 `id/name/contextWindow/maxTokens/reasoning`），顶层与 provider 级未知键透传。
    - 校验：provider `id` 必填（新建后不可改）、模型 `id` 必填、数字字段（`contextWindow` / `maxTokens`）正整数或空、模型 id 不重复；`id` 与 pi 内置 provider 同名 → 行内**警告**（不禁止，pi overlay 允许覆盖）。
-2. 新增 `packages/client/src/components/settings/models-providers-panel.tsx`（含受控 `Dialog` 表单，复用 `components/ui/dialog.tsx`）：形态严格按 `DESIGN.md` `models-providers`——列表行 + 「添加」+ 编辑/删除（删除 `ConfirmDialog` 二次确认）；空列表 `empty-state`；只列 `models.json` 里的自定义 provider。
+2. 新增 `packages/client/src/components/settings/models-providers-panel.tsx`（含受控 `Dialog` 表单，复用 `components/ui/dialog.tsx`）：形态严格按 `DESIGN.md` `models-providers`——列表行 + 「添加」+ 编辑/删除（删除 `ConfirmDialog` 二次确认）+ 标题行的 `icon-button`「重新读取」；空列表 `empty-state`；只列 `models.json` 里的自定义 provider。空文本 `models.json` 视为「无自定义 provider」（不得报解析失败）。
 3. 保存：组装文本 → 若 `countJsoncLosses(loadedText) > 0` 先弹确认（文案含处数与「原文会备份为 models.json.bak」）→ `saveConfigFile("models.json", text)` → 成功 `showToast("已保存，立即生效")` 并重读列表；失败在弹窗内展示服务端文案、**不清空输入**。
 4. `components/settings/pi-config-section.tsx`：顺序 = `PiDirPanel` → `SearchKeyPanel` → `ModelsProvidersPanel` → `ConfigFileEditor`。
 5. 测试：`lib/models-config.test.ts`（未知键透传 / 模型行增删 / 校验 / 注释计数接入）+ 面板 SSR 走查（空列表、有 provider、按钮禁用态）。
