@@ -315,6 +315,9 @@ async function openWindow(): Promise<void> {
   const win = new BrowserWindow({
     width: 1280,
     height: 860,
+    // 先不显示：缩放只能在 `did-finish-load` 里生效（导航后 Chromium 会把缩放重置回 100%），
+    // 先显示会让设过缩放的用户看到一帧 100% 再跳到目标值。见下方 `did-finish-load` 里的 show。
+    show: false,
     webPreferences: {
       preload: join(here, "preload.cjs"),
       // 安全基线（`50-desktop.md` §3）：渲染层跑的是本地 HTTP 页面，不给 Node 权限
@@ -381,10 +384,15 @@ async function openWindow(): Promise<void> {
   );
   console.log(`[desktop] 界面缩放 ${zoomPercent(currentZoom)}%（Ctrl/Cmd + = / - / 0）`);
 
-  // 应用时机（`50-desktop.md` §4.1）：`loadURL` 前设一次；Chromium 的 per-host 记录可能在导航后回写，
-  // 所以 `did-finish-load` 幂等重放一次——保证「盘上的值赢」，而不是命中外来的 100%。
-  win.webContents.setZoomFactor(currentZoom);
-  win.webContents.on("did-finish-load", () => win.webContents.setZoomFactor(currentZoom));
+  // 应用时机（`50-desktop.md` §4.1）：**只能在 `did-finish-load` 里设**。已实测（Electron 44.3.0）：
+  // ① `loadURL` 之前的 `setZoomFactor` 是空操作（读回仍 1）；② 每次导航都会把缩放重置回 100%；
+  // ③ `did-finish-load` 早于 `ready-to-show` ⇒ 先重放再 `show()`，用户看不到那一帧 100%。
+  // `did-fail-load` 也 show：否则页面加载失败就只剩一个永远不出现的窗口（比白屏更难排障）。
+  win.webContents.on("did-finish-load", () => {
+    win.webContents.setZoomFactor(currentZoom);
+    win.show();
+  });
+  win.webContents.on("did-fail-load", () => win.show());
 
   await win.loadURL(`http://127.0.0.1:${handle.port}`);
   // 窗口出来之后再后台检查（不阻塞启动）；失败静默，细节落 logFile
