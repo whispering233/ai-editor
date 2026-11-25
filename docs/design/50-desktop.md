@@ -36,7 +36,7 @@
 
 | 载体 | 内容 | 归属 |
 | :--- | :--- | :--- |
-| `<userData>/desktop.json`（应用级） | `projectRoot`（书库位置，绝对路径） | 桌面版专属，见 `config.md` |
+| `<userData>/desktop.json`（应用级） | `projectRoot`（书库位置，绝对路径）、`zoom`（界面缩放 factor，见 §4.1） | 桌面版专属，见 `config.md` |
 | `<userData>/logs/ai-editor.log` | 主进程 console 输出（含 server 启动日志） | 桌面版专属；GUI 用户没有终端，日志是唯一排障线索 |
 | `<创作根>/.ai-editor/config.json` | `debug` / `lastProject` | 服务端，语义不变 |
 | pi 配置目录（缺省 `~/.ai-editor/pi-agent/`） | 凭据 / 模型 / settings | 本机级，**桌面版与 CLI/浏览器形态共用同一份**——桌面版不发明第二份凭据真相源；与用户自己的 pi CLI 目录（`~/.pi/agent`）隔离，见 `config.md` §1 |
@@ -76,10 +76,27 @@
 | :--- | :--- |
 | 目录选择 | preload `pickDirectory()` → 主进程 `dialog.showOpenDialog({properties:['openDirectory']})`。client 侧**能力检测**（无该 API 则不渲染按钮），浏览器形态保留手输路径框 |
 | 关窗前落盘 | 主进程拦 `win.close` → preload 转发的 `onFlushRequest(handler)` → 渲染侧保存后回执 `ok`；口径与失败分支见 §1.1。不暴露 `ipcRenderer` 原语 |
-| 应用菜单 | 最小模板：Edit 角色（undo/redo/cut/copy/paste/selectAll）+ reload + devtools（仅 dev）+ 打开书库目录 + 打开日志目录 + quit/close。**macOS 上不设菜单 ⇒ Cmd+C/V 失效**（输入框粘贴全废），菜单是刚需不是装饰 |
+| 应用菜单 | 最小模板：Edit 角色（undo/redo/cut/copy/paste/selectAll）+ 视图（界面缩放三项，见 §4.1）+ reload + devtools（仅 dev）+ 打开书库目录 + 打开日志目录 + quit/close。**macOS 上不设菜单 ⇒ Cmd+C/V 失效**（输入框粘贴全废），菜单是刚需不是装饰 |
 | 外链与导航 | `setWindowOpenHandler` → **一律 deny** + `shell.openExternal`；`will-navigate` 只放行同源 `http://127.0.0.1:<端口>`（含 SPA hash 变化），其余 `preventDefault` 后转外部浏览器；**非 http(s) 协议直接丢弃**（不调 openExternal）。参考资料页有 `target="_blank"` 外链，不拦就弹出无地址栏的怪窗口 |
 | 导出下载（项目 zip / 小说文档 zip / 纯文本 TXT） | **零改动**：Electron 默认弹保存对话框（只有显式调 `setSavePath` 才会静默落盘）；三条导出共用同一 `<a download>` 管道，「目录选择」属未排期项（见 `backlog.md`） |
 | 不做 | 「在浏览器中打开」入口（web 能力由 CLI 形态承担）、API key 首配向导、托盘、多窗口、拖拽导入、`showDirectoryPicker`（Chromium 的 File System Access API 拿不到绝对路径，对「打开项目」无用） |
+
+### 4.1 界面缩放（整站，2026-11）
+
+桌面版提供**整站**缩放：Electron 的 layout zoom（`webContents.setZoomFactor`）——让 layout viewport 的 CSS px 变少、DPR 变大，语义与浏览器 `Ctrl/Cmd + =/-/0` 完全一致。**不是** `transform: scale`（不参与布局、会破 ProseMirror 命中测试与画布拖拽坐标），也**不改**任何 `--writing-*` 偏好（正文视觉字号仍由写作设置四档决定，缩放只是等比放大）。**浏览器形态不做任何事**：原生页面缩放已覆盖，我们拦键反而夺走无障碍能力。
+
+| 项 | 决定 | 理由 |
+| :--- | :--- | :--- |
+| 档位 | `80 / 90 / 100 / 110 / 125 / 150 / 175 / 200`（%）—— `packages/desktop/src/zoom.ts` 的 `ZOOM_FACTORS` 是唯一定义处，本表是契约（改档位必须同步；`zoom.test.ts` 断言字面值） | 直接取 Chromium 自己的 `kPresetZoomFactors`（`components/zoom/page_zoom_constants.cc`）在 80%–200% 的那一段——没有理由发明第二套；靠近 100% 步长更细，200% 满足 WCAG 1.4.4「放大 200% 不丢内容」。⚠ 不要照抄 `1.2^level` 的连乘链（`0.83 / 1.2 / 1.44`）：那是 Electron 菜单 role 的 ±0.5 level 与 VS Code 整数 level 的工程产物，Chromium 自己的 UI 档位就是上面这张整齐表 |
+| 键位 | `Ctrl/Cmd + =` 放大、`Ctrl/Cmd + -` 缩小、`Ctrl/Cmd + 0` 回 100%。判定在**主进程** `before-input-event`：`input.type === "keyDown"`、`input.key` ∈ `=` `+` `-` `0`（含小键盘 `NumpadAdd` / `NumpadSubtract` / `Numpad0`，按 `input.code` 兜住）、须 Ctrl 或 Cmd、非 Alt | 按 `input.key` 判天生吃各键盘布局（德语 `+` 是不带 Shift 的独立键），且避开 Electron accelerator 的三个已知坑：`CommandOrControl+Plus` 曾整条不触发（electron#14742）、macOS 显示成 `Shift Cmd =`（#1507）、非美布局绑不上。**菜单项因此不挂 accelerator**（挂了会与 `before-input-event` 双触发） |
+| 持久化 | `<userData>/desktop.json` 的必填键 `zoom`（factor 数值；缺失 / 不在阶梯上 → `1`），每次档位变化后原子写一次；写失败只落日志、不影响本次生效 | 缩放是长期偏好不是会话瞬态；`desktop.json` 已是桌面版唯一应用级载体。**写入是整对象覆写** ⇒ 换书库（`resolveLibraryRoot` 的自愈分支与 `change-library-root`）必须带上当前 `zoom`，否则会静默重置回 100% |
+| 应用时机 | 建窗后 `loadURL` 前 `setZoomFactor(zoom)`，并在 `did-finish-load` 幂等重放一次 | `setZoomLevel` 按 webContents 生效，但 Chromium 的 per-host 记录可能在导航后回写；重放保证「盘上的值赢」 |
+| 入口 | 应用菜单新增「视图」：`放大` / `缩小` / `实际大小 · 125%`（第三项标签带当前百分比；到端点时对应项 `enabled: false`；每次档位变化重建一次菜单） | 百分比是「到这个状态没有」的廉价线索；`Menu.setApplicationMenu` 是主进程内同步调用，**零 IPC**——不为一条纯桌面偏好新增 main→renderer 通道（既有通道只有 flush 一条，见 §1.1） |
+| 与其它缩放面的关系 | 正文走写作设置四档（`--writing-font-size`）、画布走 xyflow 0.25–2 视口缩放（`CANVAS_MIN_ZOOM` / `CANVAS_MAX_ZOOM`）；**画布 LOD 阈值不随界面缩放改变**（`canvasLodLevel` 只读视口 zoom） | 三个缩放对象各有自己的键位、载体与语义，不互相解释；界面缩放不参与任何布局计算 |
+
+**已知后果（有意，非缺陷）**：桌面断点 = `matchMedia("min-width: 1024px")`。默认窗口 1280px 下 125% 恰好 1024（仍桌形态），**150% 起 CSS 宽度 853 < 1024 ⇒ 三栏翻成窄屏抽屉形态**——与浏览器里按 `Ctrl+=` 的结果完全一致；窄屏形态本身全功能（抽屉 + 返回条已真机验证），不接受用「布局不许变」换掉 200% 可访问性。
+
+**不做**（有意）：`preload` 新增缩放通道（主进程自己知道当前值）、设置页缩放控件（菜单标签已是可见状态）、浏览器形态拦键、随界面缩放调整画布 LOD。
 
 ## 5. 打包与发布
 
