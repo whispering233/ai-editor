@@ -18,6 +18,11 @@ describe("formatShortcutKey", () => {
     expect(formatShortcutKey("s", false)).toBe("Ctrl + S");
     expect(formatShortcutKey("s", true)).toBe("⌘ + S");
   });
+
+  it("界面缩放的符号键原样保留（大小写不变形）", () => {
+    expect(formatShortcutKey("=", false)).toBe("Ctrl + =");
+    expect(formatShortcutKey("=", true)).toBe("⌘ + =");
+  });
 });
 
 describe("快捷键清单", () => {
@@ -26,5 +31,30 @@ describe("快捷键清单", () => {
     expect(save).toBeDefined();
     expect(save?.key).toBe(SAVE_SHORTCUT_KEY);
     expect(save?.description).not.toBe("");
+  });
+
+  it("id 唯一（React key 与测试定位都依赖它）", () => {
+    const ids = SHORTCUTS.map((item) => item.id);
+    expect(new Set(ids).size).toBe(ids.length);
+  });
+
+  it("界面缩放三条登记为 desktopOnly，且文案为契约值", () => {
+    const zoom = SHORTCUTS.filter((item) => item.desktopOnly === true);
+    expect(zoom.map((item) => [item.id, item.key, item.description])).toEqual([
+      ["zoom-in", "=", "放大界面"],
+      ["zoom-out", "-", "缩小界面"],
+      ["zoom-reset", "0", "界面缩放恢复 100%"],
+    ]);
+  });
+
+  it("界面缩放三条排在整栏快捷键之后（顺序 = 展示序）", () => {
+    const ids = SHORTCUTS.map((item) => item.id);
+    const firstZoomIndex = Math.min(
+      ids.indexOf("zoom-in"),
+      ids.indexOf("zoom-out"),
+      ids.indexOf("zoom-reset"),
+    );
+    expect(ids.indexOf("toggle-chat")).toBeLessThan(firstZoomIndex);
+    expect(firstZoomIndex).toBe(ids.length - 3);
   });
 });

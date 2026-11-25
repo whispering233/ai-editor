@@ -4,6 +4,8 @@
 //   `formatKeyboardShortcut`（那会把整块编辑器库拖进设置页 chunk），两者口径一致
 // - 清单里的键位引用真实绑定用的常量（`save-shortcut.ts` 的 SAVE_SHORTCUT_KEY、
 //   `panel-shortcuts.ts` 的 PANEL_SHORTCUT_KEY）：键位改了清单跟着改，禁止两处各写一份字面量
+// - 界面缩放三键（Ctrl/Cmd + = / - / 0）的判定在主进程 `before-input-event`（不在渲染层），
+//   这里只登记展示文案与可见性；档位阶梯见 `docs/design/50-desktop.md` §4.1
 import { PANEL_SHORTCUT_KEY } from "./panel-shortcuts";
 import { SAVE_SHORTCUT_KEY } from "./save-shortcut";
 
@@ -23,6 +25,9 @@ export interface ShortcutEntry {
   key: string;
   /** 组合键是否带 Shift（右栏整栏开关 = Ctrl/Cmd+Shift+B） */
   shift?: boolean;
+  /** 仅桌面版生效：浏览器形态不登记展示（否则用户按了没反应会以为键坏了）；
+   * 渲染侧按 `desktopBridge()` 非空过滤，与「通用」tab 同口径 */
+  desktopOnly?: boolean;
   description: string;
 }
 
@@ -36,4 +41,8 @@ export const SHORTCUTS: readonly ShortcutEntry[] = [
     shift: true,
     description: "收起 / 展开右栏（桌面态）",
   },
+  // 界面缩放（仅桌面形态）：键位判定在主进程，见文件头
+  { id: "zoom-in", key: "=", desktopOnly: true, description: "放大界面" },
+  { id: "zoom-out", key: "-", desktopOnly: true, description: "缩小界面" },
+  { id: "zoom-reset", key: "0", desktopOnly: true, description: "界面缩放恢复 100%" },
 ];
