@@ -125,5 +125,5 @@
 ### 不做的事
 
 - **不提供 OAuth 登录流程**（pi 支持的订阅登录不在本仓 UI 范围）：需要订阅凭据的用户用 pi CLI 登录，本仓只读该凭据状态。
-- **不为 pi 配置做表单**：`models.json` / `settings.json` 的参数结构属 pi，表单一改就漂——「高级」tab 只提供**整份 JSON 文本编辑**（服务端按 pi 的读口径校验）。
-- **不提供搜索表单**：`search.json` 同样只有 JSON 文本框（只有一个键，加表单不值）。
+- **pi 配置文件仍不做表单**（2026-11 复核）：`auth.json` / `models.json` / `settings.json` 的结构属 pi，表单一改就漂——「高级」tab 对这三份只提供**整份 JSON 文本编辑**。表单化按面推进（已排期的面见 `../design/tasks.md`），开做前必须先解决两条：`parse → stringify` 会丢注释（`models.json` 允许 `//`）与未知键透传；且任何表单都必须仍走这两个端点（校验 + 原子写 + 立即生效三样不重写）。
+- **`search.json` 有单字段表单**（2026-11 起）：`apiKey` 走设置页「高级 → 联网搜索」的密码框，写入仍复用 `PUT /settings/config-file/search.json`（服务端 `searchConfigFileSchema` strict 校验不放松）；JSON 编辑器保留为兜底。理由：它是本仓自己的 schema（零上游漂移），而未配置时只有工具报错一条发现路径。

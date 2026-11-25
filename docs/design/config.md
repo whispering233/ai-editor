@@ -11,7 +11,7 @@
 | 同上目录的 `models.json` | 自定义 provider / 模型覆盖（baseUrl、api 形态、模型元数据、`$ENV` 取值） | pi `models.json` 语义；本仓不解析，交由 `ModelRuntime` |
 | 同上目录的 `settings.json` | 模型与运行参数：`defaultModel` / `enabledModels`（可见模型作用域）/ 重试（`retry`）/ 压缩（`compaction`）/ 思考预算（`thinkingBudgets`）/ 出站代理与空闲超时 | pi settings；本仓经 `SettingsManager` 读写 |
 | 同上目录的其余内容（`models-store.json`、`themes/`、`prompts/`、`tools/`、`bin/`、`debug.log`） | pi 自有的缓存与资源目录 | pi 自用，本仓不读不写 |
-| `~/.ai-editor/search.json` | **联网搜索 / 网页抓取的凭据**（可选文件）：`apiKey` = 字面 key（缺失 / 空串 = 未配置；坏 JSON = 整份忽略）。**唯一来源、无回退**：不读模型凭据、不读环境变量；当前只接入 DeepSeek 的 `tools/search` 与 `tools/fetch` 两个端点。由设置页「高级」的 JSON 编辑器写（无表单） | server 包 `src/search-config.ts`（唯一解析点）；消费方 = `web-search.ts` / `fetch.ts` |
+| `~/.ai-editor/search.json` | **联网搜索 / 网页抓取的凭据**（可选文件）：`apiKey` = 字面 key（缺失 / 空串 = 未配置；坏 JSON = 整份忽略）。**唯一来源、无回退**：不读模型凭据、不读环境变量；当前只接入 DeepSeek 的 `tools/search` 与 `tools/fetch` 两个端点。由设置页「高级 → 联网搜索」的单字段表单写（空串 = 未配置；写入仍走配置文本文端点，服务端 strict 校验）；同页 JSON 编辑器保留为兜底 | server 包 `src/search-config.ts`（唯一解析点）；消费方 = `web-search.ts` / `fetch.ts` |
 | `<userData>/desktop.json` | **桌面版专属**应用级配置：`projectRoot` = 书库位置（绝对路径）。创作根属于「部署级」——不能存进它自己的 `.ai-editor/config.json`（鸡生蛋）；CLI 形态**永不读取**（创作根由启动参数决定）。平台路径 = Windows `%APPDATA%\AI Editor\` / macOS `~/Library/Application Support/AI Editor/` / Linux `~/.config/AI Editor/` | 桌面版 `packages/desktop`；语义见 `50-desktop.md` §2 |
 | `<userData>/logs/ai-editor.log` | 桌面版主进程 console 输出（含服务启动日志）；GUI 用户没有终端，这是唯一排障线索 | 桌面版 `packages/desktop`；见 `50-desktop.md` §2 |
 | 启动参数 `projectRoot` + 环境变量 `AI_EDITOR_PORT` | 创作根目录 / 服务端口覆盖（仅 bin 直接执行入口读取）；**默认端口按形态分段取**（shared `PORT_RANGES`：桌面端 / web 生产 / web 开发三段互不相交），覆盖即绕过分段隔离 | `build.md` §端口策略 |

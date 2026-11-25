@@ -531,9 +531,11 @@ components:
 - **不得让工具条成为自身滚动容器（2026-09 实测缺陷固化）**：`overflow` 必须为 `visible`。`position: sticky` 已使工具条成为后代绝对定位元素的**包含块**，若它同时是滚动容器（`overflow-x:auto` 会把 `overflow-y:visible` 的计算值变成 `auto`），库的 tooltip 与 ariakit 的 select / menu 就**被它自己裁掉**——实测：hover 的 `.bn-ak-tooltip` 落在 y 99–149 而工具条是 153–193（看不见），块类型下拉被压成 **18px** 高的一条缝（⇒ 「改块类型/颜色」实际不可用）。库自带浮动条同样有 `overflow:scroll` 却不受影响，是因为它**没有 position**（包含块在滚动容器之外）。窄幅因此用折行而非滚动。
 - **`sticky` 的作用域 = 编辑器区块**：包含块是 `.bn-container`，故滚过章末时工具条随区块一起离开（不是「永远贴在中栏顶部」——那需要 `fixed` 定位，会与页头/专注模式耦合，不采纳）。
 - **内容**：左侧 = 块类型下拉 + 粗/斜/下/删 + 颜色 + 对齐 + 缩进 + 链接（**全部复用库自带按钮组件** ⇒ 与编辑器同源表皮，激活态由库管理）；右侧 = 撤销 / 重做 / 保存（**写作页与参考资料详情页（编辑态）各自注入**；新建参考资料草稿态不注入——那里是带跳转的「创建」动作）/ 写作设置（字体·字号·行高·纸张·纹理·段首缩进）/ 命令帮助 / 专注模式（仅写作页由页面注入）/ 字数与保存态（**仅专注态由页面注入；常规态它在页头说明行，两处不同时显示**）。
-  - **为什么手动「保存」放在工具条而不是页头（2026-09）**：正文是 1.5s 空闲自动保存（`AUTOSAVE_DELAY_MS`），手动按钮是**保底**入口（用户诉求原文：「加一个保存按钮就行」）。工具条随正文 `sticky`（与滚动位置无关）、页头不是 ⇒ 工具条是唯一「写着写着也点得到」的位置（两页都有，见 §Layout「页头常驻」）。点击恒发一次 `PUT`（**即使无待存内容也重发**）——保证「点击必有可见反应」（状态转 `保存中…` → `已保存 · HH:MM`），且不会引入冲突（保存成功后版本戳前移）。`saving` 期间禁用（防连点双发）。
+  - **为什么手动「保存」放在工具条而不是页头（2026-09）**：正文是 1.5s 空闲自动保存（`AUTOSAVE_DELAY_MS`），手动按钮是**保底**入口（用户诉求原文：「加一个保存按钮就行」）。工具条随正文 `sticky`（与滚动位置无关）、页头不是 ⇒ 工具条是唯一「写着写着也点得到」的位置（两页都有，见 §Layout「页头常驻」）。点击恒发一次 `PUT`（**即使无待存内容也重发**）——保证「点击必有可见反应」（**成功后 toast「已保存」** + 状态转 `保存中…` → `已保存 · HH:MM`；自动保存只改这行文字、**不弹 toast**），且不会引入冲突（保存成功后版本戳前移）。`saving` 期间禁用（防连点双发）。
 - **失焦态**：库按钮无选中时回落到光标所在块，故常显可用；**不做禁用态**（库无 `canUndo`：撤销/重做保持可点、点空即无变化——宁可无反馈也不要假禁用）。
 - **与浮动工具条并存**：选中文字时的浮动条保留（就近操作）；两者按钮集有意重叠；若日后观感重复，关浮动条 = `formattingToolbar={false}` 一处开关。
+
+**`save-status`（保存态，2026-11）** — 章正文 / 参考资料 / 练习稿 / 自由练习四处共用的保存态文案，**唯一实现 = `components/ui/save-status.tsx`**（页面只提供状态与时刻，不各写一份 span）。四态：`idle` 不渲染、`pending`「编辑中…」、`saving`「保存中…」、`saved`「已保存 · HH:MM」（时刻 = 最近一次保存**完成**的本地时间，`formatSavedAt`）。**输入即 pending**——自动保存防抖期间不得继续显示上一次「已保存」（2026-11 修正：旧实现只在保存完成时置态，打字全程都在谎报已保存）；自动保存失败回落错误条（`idle` + 页内错误 UI + 重试），不静默。手动保存页（练习 / 自由练习）的 `pending` = 有改动未保存。字号 / 字色沿用 `text-xs text-muted-foreground`（不新增视觉语言）；位置不变：常规态在页头说明行（与字数同行）、专注态在工具条右端，**两处不同时显示**。
 
 **`command-help`** — 工具条「命令帮助」打开的静态弹窗（复用 `components/ui/dialog.tsx`）：`/` 斜杠菜单、块手柄、快捷键。**快捷键文案一律从 `@blocknote/core/locales` 的 `zh` 字典插值**（`formatting_toolbar.*.secondary_tooltip` + `formatKeyboardShortcut`，Mac = `⌘` / 其他 = `Ctrl`；撤销/重做字典内没有 ⇒ 由库 keymap 核实后取字面量并存出处注释），**禁止手抄**。用途 = 「不让用户猜命令」的兜底文档；与工具条按钮集**同卡维护**（加按钮就补条目；**唯一例外 = 弹窗自身的入口**——自指条目无信息量）。**已知代价**：专注态下页头承载的操作（上一章 / 下一章 / 导入 / 导出）随之不可达，要动它们先退出专注（有意的取舍：专注 = 无干扰）。
 
@@ -718,7 +720,7 @@ components:
 **`proposal-card`（提案组卡，2026-11）** — 一轮的全部提案合并为一张组卡（单条也同形态）：头部 = 灯泡图标 + `本轮提案 · N 条（M 待处理）` + 右侧「全部确认 / 全部拒绝」（仅有 pending 时可用）；行 = 图标 + 类型中文名 + 摘要首行（truncate）+ 状态 + 行尾逐条「确认 / 拒绝」；点行展开该提案的完整预览。组卡沿用现有 1px `{colors.primary}` 25% 描边 + primary 5% 淡底；确认按钮 `button-primary`，拒绝 `button-default`。批量执行 = 客户端串行调用现有 confirm/reject 端点（无服务端批量端点），逐条记账、失败继续、成功只刷新一次数据、结束一条汇总 toast。YOLO 自动确认走同一条批量路径。
 
 **历史提案卡（2026-11）** — 每条 assistant 消息的正文之后，若该消息的 `toolCalls` 含 `propose_*`，渲染一张只读历史卡：头部 = 灯泡 + `历史提案 · N 条（只读）`；行 = 类型中文名 + 摘要首行（truncate），点行展开参数摘要；**不显示确认/拒绝状态、不提供按钮、不做名称解析**（参数里的 id 原样展示）。历史卡只从会话消息的 `toolCalls` 重建，不新增持久化；live 组卡按 `toolCallId` 去重（live 提案对应的历史行不渲染），不按消息位置猜测。消息内顺序扩展为 思考 → 工具行 → 正文 → 历史提案卡；历史卡沿用组卡的描边/淡底，不再引入新色。
-**`toast`** — 全局提示走 antd `message`（`App.useApp()`），顶部居中；`success/error/info` 对应 store 的 `ToastKind`，时长由 store 的 3s 定时器决定（`duration: 3` 对齐）。**命令式反馈的上下文入口**：`AntdProvider` 在 `ConfigProvider` 内部包 `<App component={false}>`（`component={false}` 不渲染包裹 div，不插进三栏 flex 链）——`message`/`notification`/`modal` 需经 `App.useApp()` 取实例才能继承本 Provider 的主题与 locale，不要用静态方法。
+**`toast`** — 全局提示走 antd `message`（`App.useApp()`），顶部居中；`success/error/info` 对应 store 的 `ToastKind`，时长由 store 的 3s 定时器决定（`duration: 3` 对齐）。**命令式反馈的上下文入口**：`AntdProvider` 在 `ConfigProvider` 内部包 `<App component={false}>`（`component={false}` 不渲染包裹 div，不插进三栏 flex 链）——`message`/`notification`/`modal` 需经 `App.useApp()` 取实例才能继承本 Provider 的主题与 locale，不要用静态方法。**同槽位升级（2026-11）**：`showToast(text, kind?, key?)` 的 `key` 透传 `message.open({ key, type, content, duration })`——同 key 的提示**替换**而非叠加；唯一使用方 = 手动保存（保存入口弹「已保存」，存档阶段用同一 `key` 把它升级为「已保存并生成存档」/ 节流文案 / 存档错误 ⇒ 一次 `Ctrl/Cmd+S` 只有一条提示）。**自动保存不弹 toast**（1.5s 一次的噪音），它的反馈由 `save-status` 的文字承担。
 
 ### 设置页「通用」区（桌面版专属）
 
@@ -730,10 +732,11 @@ components:
 
 ### 设置页「高级」区（本机级配置，两形态恒在）
 
-**`tab-advanced`** — 内容 = 两张 `card`，顺序固定：
+**`tab-advanced`** — 内容 = 三张 `card`，顺序固定：
 
-1. `pi-dir`：`section-title`「pi 配置目录」+ 单行 `input`（当前生效目录，可编辑）+ 标题行右侧 `button-primary`「保存」（唯一 primary）+ 次行 `button-default`「恢复默认」+ `caption-text`（默认目录值 + 与 pi CLI 隔离）+ 卡片底部一句说明（换目录立即生效、目录不存在会自动创建）。失败（409 在途对话 / 400 非绝对路径）走 `toast` 呈现服务端文案。
-2. `config-file-editor`：`section-title`「本机配置文件」+ `Segmented`（**四项且恒定四项**：凭据 / 自定义模型 / 运行参数 / 搜索凭据；顺序 = shared `CONFIG_FILE_NAMES`，展示登记单源 = `lib/config-files.ts`，有测试同序守卫）+ 一行 `caption-text`（当前项用途）+ 文件名行（含「文件不存在，保存即创建」与「未保存」两个状态词，`font-mono`）+ 等宽 `TextArea`（`rows=14`、`font-mono text-xs`、关拼写检查）+ 底部 `caption-text`（明文只在本机回传）。保存是唯一 `primary`；校验失败的服务端文案内联展示且**不清空输入**（草稿状态机 = `lib/config-file-draft.ts`）。
+1. `pi-dir`：`section-title`「pi 配置目录」+ 单行 `input`（当前生效目录，可编辑）+ 行内 `button-default`「浏览…」（**仅桌面形态**：`desktopBridge()` 非空，走 preload `pickDirectory()`，与书架「打开其他路径」同款；浏览器形态整钮不渲染）+ 标题行右侧 `button-primary`「保存」（唯一 primary）+ 次行 `button-default`「恢复默认」+ `caption-text`（默认目录值 + 与 pi CLI 隔离）+ 卡片底部一句说明（换目录立即生效、目录不存在会自动创建）。失败（409 在途对话 / 400 非绝对路径）走 `toast` 呈现服务端文案。
+2. `search-key`（联网搜索，2026-11）：`section-title`「联网搜索」+ 标题行右侧 `button-primary`「保存」（唯一 primary，有改动才可点）+ `Input.Password`（**回显当前 key**、眼睛切换明文；空串 = 未配置；弹性宽度挂外层 `div`——antd `Input` 会注入 `min-width: 0`，见 §已知边界）+ `caption-text`（key 只存本机 `~/.ai-editor/search.json`；搜索按次计费、与对话 key 是两份独立配置；未配置时 `web_search` / `fetch_content` 报错并指回这里）。写入 = `PUT /settings/config-file/search.json`（服务端 strict `{ apiKey }` 校验；空串 = 清空），成功 toast「已保存，立即生效」。**不做「测试连接」**（真检测要发真请求且按次计费）。`search.json` 仍保留在下方 `config-file-editor` 的四项里作兜底。
+3. `config-file-editor`：`section-title`「本机配置文件」+ `Segmented`（**四项且恒定四项**：凭据 / 自定义模型 / 运行参数 / 搜索凭据；顺序 = shared `CONFIG_FILE_NAMES`，展示登记单源 = `lib/config-files.ts`，有测试同序守卫）+ 一行 `caption-text`（当前项用途）+ 文件名行（含「文件不存在，保存即创建」与「未保存」两个状态词，`font-mono`）+ 等宽 `TextArea`（`rows=14`、`font-mono text-xs`、关拼写检查）+ 底部 `caption-text`（明文只在本机回传）。保存是唯一 `primary`；校验失败的服务端文案内联展示且**不清空输入**（草稿状态机 = `lib/config-file-draft.ts`）。
 
 ### 设置页「快捷键」区
 
