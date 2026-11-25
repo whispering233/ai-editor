@@ -5,11 +5,13 @@
 import { useEffect, useState } from "react";
 import { Button, Input } from "antd";
 import { ApiError, getPiConfigDir, setPiConfigDir } from "../../lib/api";
+import { desktopBridge } from "../../lib/desktop";
 import { useUiStore } from "../../stores/ui";
 import { SectionCard } from "../ui/section-card";
 
 export function PiDirPanel() {
   const showToast = useUiStore((s) => s.showToast);
+  const bridge = desktopBridge();
   /** 生效目录（服务端值）；null = 加载中或读取失败 */
   const [dir, setDir] = useState<string | null>(null);
   /** 缺省目录（「恢复默认」用的值） */
@@ -44,6 +46,13 @@ export function PiDirPanel() {
     }
   }
 
+  /** 桌面版「浏览…」：原生选目录 → 只填输入框，不自动保存（换目录由用户按「保存」确认） */
+  async function browse(): Promise<void> {
+    if (bridge === null) return;
+    const picked = await bridge.pickDirectory();
+    if (picked !== null && picked !== "") setDraft(picked);
+  }
+
   const dirty = dir !== null && draft.trim() !== dir;
 
   return (
@@ -61,13 +70,23 @@ export function PiDirPanel() {
         </Button>
       }
     >
-      <Input
-        value={draft}
-        onChange={(e) => setDraft(e.target.value)}
-        onPressEnter={() => void save(draft)}
-        placeholder="加载中…"
-        aria-label="pi 配置目录"
-      />
+      {/* 弹性宽度挂外层：antd Input 会给自身注入 min-width: 0（见 AGENTS.md） */}
+      <div className="flex items-center gap-2">
+        <div className="flex-1">
+          <Input
+            value={draft}
+            onChange={(e) => setDraft(e.target.value)}
+            onPressEnter={() => void save(draft)}
+            placeholder="加载中…"
+            aria-label="pi 配置目录"
+          />
+        </div>
+        {bridge !== null && (
+          <Button size="small" disabled={saving} onClick={() => void browse()}>
+            浏览…
+          </Button>
+        )}
+      </div>
       <div className="mt-2 flex flex-wrap items-center gap-2">
         <Button
           size="small"
