@@ -30,13 +30,13 @@
 
 - **依赖**：Z1、Z2
 - **交付**（全部在 `packages/desktop/src/main.ts`）：
-  1. `before-input-event`：`input.type === "keyDown"`、`(control || meta) && !alt`；`input.key` ∈ `=` `+` `-` `0`，小键盘按 `input.code`（`NumpadAdd` / `NumpadSubtract` / `Numpad0`）兜住；命中即 `event.preventDefault()` 并走档位函数（端点值未变则直接返回，**不写盘**）
+  1. 键位判定拆两层：**纯函数**放在 `zoom.ts` —— `zoomKeyIntent(input: { type: string; key: string; code: string; control: boolean; meta: boolean; alt: boolean }): "in" | "out" | "reset" | null`（`type !== "keyDown"` 或 `!(control || meta)` 或 `alt` → `null`；`key` ∈ `=` `+` → `in`、`-` → `out`、`0` → `reset`；小键盘按 `code` 的 `NumpadAdd` / `NumpadSubtract` / `Numpad0` 兜住）并配套单测；`main.ts` 只做「拿到非 null → `event.preventDefault()` → 分派」。端点值未变时直接返回，**不写盘**
   2. `applyZoom(next)`：内存值 → `webContents.setZoomFactor` → 原子写 `desktop.json`（失败只 `console.warn`，不影响本次生效）→ 重建菜单
   3. 应用时机：建窗后 `loadURL` 前设一次，`did-finish-load` 幂等重放一次
   4. 菜单：新增「视图」三项 `放大` / `缩小` / `实际大小 · N%`（第三项标签带百分比，端点 `enabled: false`）；`installMenu` 加第 5 个参数（形如 `{ percent, step, reset }`，**参数总数不得超过 5**）
   5. `resolveLibraryRoot` 返回缩放值（或在调用处分派）使启动自愈写入带上真实 `zoom`，不再恒为 1
 - **硬约束**：不挂菜单 `accelerator`（会与 `before-input-event` 双触发）；不新增 preload 通道；不动 `preload.cts`；浏览器形态零改动
-- **验收**：`pnpm typecheck` + `pnpm lint` + `pnpm --filter ai-editor-desktop test`；打包态冒烟 `node packages/desktop/scripts/smoke.mjs`（先 `pnpm --filter ai-editor-desktop pack.mjs` 或仓内等价脚本），日志确认启动后 `zoomFactor` = 盘上值
+- **验收**：`pnpm typecheck` + `pnpm lint` + `pnpm --filter ai-editor-desktop test`（含 `zoomKeyIntent` 用例）。**打包态冒烟与真机手测不在卡内**（依赖打包产物与显示会话），由主会话收尾执行
 - **真机手测（留给主会话，不要求子代理）**：Ctrl/Cmd+= / - / 0、小键盘、连按到端点的置灰、重启保留、换书库不重置、150% 翻窄屏
 - **完成判据**：同 Z1
 
