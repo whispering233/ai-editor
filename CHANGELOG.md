@@ -9,6 +9,10 @@
 
 ## [Unreleased]
 
+### Fixed
+
+- **桌面打包脚本在 Node 装在含空格路径时跑不起来**：`pack.mjs` 曾对所有子命令统一开 `shell`，导致 `process.execPath` 被 `cmd /c` 在 `C:\Program Files` 的空格处截断（`'C:\Program' 不是内部或外部命令`）。现 shell 只用于 `pnpm` / `npm` 这类 `.cmd` 包装脚本，node 一律不过 shell。
+
 ## [v0.0.72] - 2026-11-26
 
 ### Added
