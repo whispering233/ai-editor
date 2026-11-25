@@ -127,5 +127,5 @@
 ### 不做的事
 
 - **不提供 OAuth 登录流程**（pi 支持的订阅登录不在本仓 UI 范围）：需要订阅凭据的用户用 pi CLI 登录，本仓只读该凭据状态。
-- **pi 配置文件只对 `models.json` 提供表单**（2026-11）：自定义 provider 与其模型行的常用字段走「高级 → 自定义模型」表单（契约见 `../ui/DESIGN.md` `tab-advanced`）；`auth.json` / `settings.json` / `models.json` 的其余字段仍只提供**整份 JSON 文本编辑**（结构属 pi，表单一改就漂）。模型表单必须遵守两条：`parse → stringify` 会丢注释（保存前弹确认，服务端留 `.bak`）与未知字段必须原样透传。
+- **pi 配置文件只对 `models.json` 与 `settings.json` 提供表单**（2026-11）：自定义 provider / 模型行走「高级 → 自定义模型」，重试启用 / 压缩启用 / 出站空闲超时走「高级 → 运行参数」（契约见 `../ui/DESIGN.md` `tab-advanced`）；`auth.json` 与其余字段仍只提供**整份 JSON 文本编辑**（结构属 pi，表单一改就漂）。两条纪律：`parse → stringify` 会丢注释（`models.json` 保存前弹确认并留 `.bak`；`settings.json` 是严格 JSON，不做确认、只重排格式）与未知字段必须原样透传（`settings.json` 的 `retry` / `compaction` 用浅合并保住其它键）。
 - **`search.json` 有单字段表单**（2026-11 起）：`apiKey` 走设置页「高级 → 联网搜索」的密码框，写入仍复用 `PUT /settings/config-file/search.json`（服务端 `searchConfigFileSchema` strict 校验不放松）；JSON 编辑器保留为兜底。理由：它是本仓自己的 schema（零上游漂移），而未配置时只有工具报错一条发现路径。
