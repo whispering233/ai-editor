@@ -133,7 +133,7 @@ pnpm desktop:dist                                      # 全仓构建 + pnpm dep
   publish.yml 5 包 npm 发布（OIDC Trusted Publisher）+ verify-installed 安装态冒烟
 ```
 
-脚本约束（`scripts/publish-packages.mjs`）：依赖序硬编码 shared → db → tools → agent → server；每包先 `npm view <name>@<version>` 判重（**仅 E404 视为未发布**，网络错误直接中止）——重跑幂等安全；`npm pack` 后 `tar -xOf` 断言包内 package.json 无 `workspace:` 残留；`GITHUB_REF=refs/tags/vX.Y.Z` 时校验 tag 与包版本一致（不一致中止，防漂移误发）。本地验证链路（pack 安装冒烟）见上节 `pnpm pack:test` / `pnpm test:packed`。
+脚本约束（`scripts/publish-packages.mjs`）：**运行平台 = Linux**（CI 跑 `ubuntu-latest`）——它调 `npm` / `tar` / `node` 时**不经 shell**，而 Windows 上 `npm` 是 `.cmd`、Node 20+（CVE-2024-27980 修补）禁止直接 spawn ⇒ **Windows 本机不跑发布脚本（含 `--dry-run`）**，要演练用 WSL 或直接跑 CI；这与 `pack.mjs` 按命令选 shell 的口径**有意分歧**（后者必须在 Windows 打包机上跑）；`scripts/verify-installed.mjs` 同理。依赖序硬编码 shared → db → tools → agent → server；每包先 `npm view <name>@<version>` 判重（**仅 E404 视为未发布**，网络错误直接中止）——重跑幂等安全；`npm pack` 后 `tar -xOf` 断言包内 package.json 无 `workspace:` 残留；`GITHUB_REF=refs/tags/vX.Y.Z` 时校验 tag 与包版本一致（不一致中止，防漂移误发）。本地验证链路（pack 安装冒烟）见上节 `pnpm pack:test` / `pnpm test:packed`。
 
 前置（一次性，npmjs）：账号开 2FA；5 个发布包各配置 Trusted Publisher（GitHub Actions / whispering233/ai-editor 仓库 / publish.yml 工作流）。**token 能力边界（2026-09-11 实测修订）**：本仓 granular token **可以执行 `npm deprecate`**（实测 10 条成功、无需 OTP）；被拒的是账号/组织/设置类操作（`npm profile get` → 403，npm 2026-07-31 起限制 bypass-2FA token 的设置类操作）。`unpublish` 未实测（不可逆）——官方文档仍列为需 2FA 的敏感操作，真要 unpublish 请备好 `--otp`。2027-01 起 bypass-2FA token 将失去直接发布能力，本仓已用 OIDC Trusted Publisher 不受影响。
 

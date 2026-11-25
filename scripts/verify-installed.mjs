@@ -2,7 +2,8 @@
 // 安装态验证脚本（E6）：CI 发布后冒烟 —— 临时目录真实 `npm install @whispering233/ai-editor-server@<version>`，
 // 断言 bin 链接与版本正确，再短时启动服务验证「服务已启动」输出（发布链路的最后一道闸）。
 //
-// 用法：
+// 用法（**仅 Linux**：本脚本调 `npm` 时不走 shell，Windows 上 `npm` 是 `.cmd`、Node 20+ 不允许直接 spawn；
+// 本机演练用 WSL 或直接看 CI。口径与理由同 `publish-packages.mjs` 头注释）：
 //   node scripts/verify-installed.mjs           # 版本默认读 packages/server/package.json
 //   node scripts/verify-installed.mjs 0.2.0     # 显式指定版本（一般不需要）
 //

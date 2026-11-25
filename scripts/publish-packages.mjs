@@ -1,10 +1,16 @@
 #!/usr/bin/env node
 // 发布 5 包脚本（E6，借鉴 static-web-data 的判重幂等 + inkos 的 tarball workspace: 防线）。
 //
-// 用法：
+// 用法（**仅 Linux**，见下）：
 //   node scripts/publish-packages.mjs            # 发布 5 包（依赖序；已存在版本跳过）
 //   node scripts/publish-packages.mjs --tag v0.2.0  # 校验 tag 与各包版本一致（不一致退出）
 //   node scripts/publish-packages.mjs --dry-run  # 只跑检查（判重/防线/tag），不真 publish
+//
+// **运行平台 = Linux**（CI `publish.yml` 跑在 ubuntu-latest）：本脚本调 `npm`/`tar`/`node` 时**不经 shell**，
+// 而 Windows 上 `npm` 是 `.cmd` 包装脚本、Node 20+（CVE-2024-27980 修补）禁止直接 spawn（`spawnSync npm
+// ENOENT` / `npm.cmd EINVAL`，与 `pack.mjs` 当年同因）——所以 **Windows 本机不要跑它**（包括 `--dry-run`）；
+// 需要本地演练就用 WSL，或直接跑 CI。与 `pack.mjs` 的口径区别是有意的：那个必须在 Windows 打包机上跑，
+// 所以按命令选 shell；这个只服务 Linux CI，加分支等于维护一条没人走的路径。
 //
 // 流程（每包）：
 //   1. tag 版本一致性校验（可选，--tag 或环境变量 GITHUB_REF=refs/tags/vX.Y.Z）：
