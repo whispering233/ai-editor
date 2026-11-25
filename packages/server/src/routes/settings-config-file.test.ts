@@ -2,7 +2,7 @@
 //
 // 隔离手法：路径/生效动作被 mock（`state.agentDir` 指向临时目录），**校验逻辑用真实实现**
 // （vi.importActual）——非法 JSON 不写盘这条必须验真，不能跟着一起 mock 掉。
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Hono } from "hono";
@@ -168,5 +168,64 @@ describe("GET/PUT /settings/config-file/:name", () => {
   it("空文本允许（= 未配置）", async () => {
     const { status } = await put("/api/v1/settings/config-file/auth.json", { content: "" });
     expect(status).toBe(200);
+  });
+});
+
+describe("models.json 写入前滚动备份（models.json.bak）", () => {
+  const modelsPath = (): string => join(state.agentDir, "models.json");
+  const bakPath = (): string => join(state.agentDir, "models.json.bak");
+  const first = '{\n  // 旧文\n  "providers": { "x": { "baseUrl": "http://a" } },\n}\n';
+  const second = '{ "providers": { "x": { "baseUrl": "http://b" } } }';
+  const third = '{ "providers": { "x": { "baseUrl": "http://c" } } }';
+
+  it("写入后 .bak = 旧文；再次写入滚动覆盖上一代", async () => {
+    writeFileSync(modelsPath(), first);
+    expect((await put("/api/v1/settings/config-file/models.json", { content: second })).status).toBe(200);
+    expect(readFileSync(bakPath(), "utf8")).toBe(first);
+    expect(readFileSync(modelsPath(), "utf8")).toBe(second);
+
+    expect((await put("/api/v1/settings/config-file/models.json", { content: third })).status).toBe(200);
+    expect(readFileSync(bakPath(), "utf8")).toBe(second); // 单份滚动：上一代被覆盖
+    expect(readFileSync(modelsPath(), "utf8")).toBe(third);
+  });
+
+  it("内容与盘上相同 → 不产生也不改 .bak", async () => {
+    writeFileSync(modelsPath(), first);
+    expect((await put("/api/v1/settings/config-file/models.json", { content: first })).status).toBe(200);
+    expect(existsSync(bakPath())).toBe(false);
+
+    writeFileSync(bakPath(), "上一代");
+    expect((await put("/api/v1/settings/config-file/models.json", { content: first })).status).toBe(200);
+    expect(readFileSync(bakPath(), "utf8")).toBe("上一代");
+  });
+
+  it("文件不存在（首次保存）→ 不备份；其他配置文件不备份", async () => {
+    expect((await put("/api/v1/settings/config-file/models.json", { content: second })).status).toBe(200);
+    expect(existsSync(bakPath())).toBe(false);
+
+    writeFileSync(join(state.agentDir, "auth.json"), '{"a":{"type":"api_key","key":"sk-1"}}');
+    expect((await put("/api/v1/settings/config-file/auth.json", { content: '{"a":{}}' })).status).toBe(200);
+    expect(existsSync(join(state.agentDir, "auth.json.bak"))).toBe(false);
+  });
+
+  it("备份失败 → 500 INTERNAL_ERROR，主文件不动", async () => {
+    writeFileSync(modelsPath(), first);
+    mkdirSync(bakPath()); // .bak 是目录 → 原子改名失败
+    const { status, body } = await put("/api/v1/settings/config-file/models.json", { content: second });
+    expect(status).toBe(500);
+    expect((body.error as Record<string, unknown>).code).toBe("INTERNAL_ERROR");
+    expect(String((body.error as Record<string, unknown>).message)).toContain("models.json.bak");
+    expect(readFileSync(modelsPath(), "utf8")).toBe(first);
+    expect(state.calls).toEqual([]); // 中止保存，不再触发「立即生效」
+  });
+
+  it(".bak 不在白名单 → 该对端点读写不到它（GET / PUT 都 400）", async () => {
+    writeFileSync(bakPath(), "机密");
+    const got = await get("/api/v1/settings/config-file/models.json.bak");
+    expect(got.status).toBe(400);
+    expect((got.body.error as Record<string, unknown>).code).toBe("VALIDATION_ERROR");
+    const putRes = await put("/api/v1/settings/config-file/models.json.bak", { content: "{}" });
+    expect(putRes.status).toBe(400);
+    expect(readFileSync(bakPath(), "utf8")).toBe("机密");
   });
 });

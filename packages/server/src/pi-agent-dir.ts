@@ -9,10 +9,11 @@
 // - 改目录与改配置文件共用同一个生效点 `applyPiConfigChange()`（重设 env → 重建单例 → 释放项目运行时
 //   → 重挂出站 dispatcher）。不重建就会继续用旧目录的凭据，且 httpProxy / 空闲超时也读不到新值。
 // - 本模块顶层零 I/O、不写 env；env 只在 `initPiAgentDir()` 内写（测试隔离依赖这一点）。
-import { mkdirSync, readFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, isAbsolute, join } from "node:path";
-import { writeJsonAtomic } from "@whispering233/ai-editor-db";
+import { writeJsonAtomic, writeTextAtomic } from "@whispering233/ai-editor-db";
+import { stripJsonComments } from "@whispering233/ai-editor-shared";
 import { CONFIG_FILE_NAMES, searchConfigFileSchema, type ConfigFileName } from "@whispering233/ai-editor-shared/schemas";
 import { disposeProjectRuntime } from "./chat-runtime.js";
 import { applyHttpProxySettings, configureHttpDispatcher } from "./http-dispatcher.js";
@@ -109,15 +110,19 @@ export function configFilePath(name: ConfigFileName): string {
 }
 
 /**
- * pi `models.json` 的宽松 JSON 口径（pi `dist/utils/json.js` 的 `stripJsonComments`：去 `//` 注释与尾逗号，
- * 字符串字面量不动）。pi 不从包根导出该函数，这里按同一语义实现——**升级 pi 时复查**。
+ * `models.json` 写入前滚动备份：盘上原文 → 同目录 `models.json.bak`（单份，覆盖上一代）。
+ * `configPath` 由 `configFilePath()` 给出（`.bak` 兄弟名的唯一归属地就是本函数）。
+ *
+ * 返回是否真的备份了（文件不存在 / 内容与本次相同 → 不备份）。失败向上抛——调用方必须中止
+ * 保存，主文件不动。`.bak` 不在 `CONFIG_FILE_NAMES` 白名单里：那对端点读写不到它。
  */
-function stripJsonComments(input: string): string {
-  return input
-    .replace(/"(?:\\.|[^"\\])*"|\/\/[^\n]*/g, (m) => (m[0] === '"' ? m : ""))
-    .replace(/"(?:\\.|[^"\\])*"|,(\s*[}\]])/g, (m, tail: string | undefined) =>
-      tail === undefined ? (m[0] === '"' ? m : "") : tail,
-    );
+export function backupModelsConfig(configPath: string, content: string): boolean {
+  if (!existsSync(configPath)) return false;
+  const existing = readFileSync(configPath, "utf8");
+  if (existing === content) return false;
+  mkdirSync(dirname(configPath), { recursive: true });
+  writeTextAtomic(`${configPath}.bak`, existing);
+  return true;
 }
 
 /**

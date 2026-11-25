@@ -11,3 +11,4 @@ export * from "./deduction.js"; // 推演节点标记纯函数（唯一编号口
 export * from "./outline-numbering.js"; // 大纲展示编号派生（卷号 + 章号；消费 orderVisibleChapters）
 export * from "./file-name.js"; // 文件名 sanitize（唯一实现；正文导入导出 + 小说文档导出）
 export * from "./novel-export.js"; // 小说文档导出（zip 条目 / 章正文组装 / 下载文件名）
+export * from "./jsonc.js"; // jsonc 宽松 JSON（去注释 / 尾逗号 + 解析 + 丢失处数；pi models.json 同口径）

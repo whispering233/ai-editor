@@ -37,6 +37,7 @@ import { HttpError, ok } from "../middleware/error.js";
 import {
   DEFAULT_PI_AGENT_DIR,
   applyPiConfigChange,
+  backupModelsConfig,
   checkConfigFileText,
   configFilePath,
   isConfigFileName,
@@ -322,6 +323,14 @@ settingsRoutes.put("/config-file/:name", async (c) => {
   if (invalid !== null) throw new HttpError(400, "VALIDATION_ERROR", invalid);
 
   const path = configFilePath(name);
+  if (name === "models.json") {
+    // 写入前滚动备份（失败中止保存：主文件暂不动——注释 / 未知键丢了就回不去）
+    try {
+      backupModelsConfig(path, content);
+    } catch (err) {
+      throw new HttpError(500, "INTERNAL_ERROR", `models.json.bak 备份失败，已取消保存：${messageOf(err)}`);
+    }
+  }
   mkdirSync(dirname(path), { recursive: true });
   writeTextAtomic(path, content); // 保用户缩进与注释（models.json 允许注释）
   applyPiConfigChange(); // 目录未变，但 pi 必须重新读文件（凭据 / 模型 / 参数）
