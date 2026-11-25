@@ -21,7 +21,7 @@
 ## 卡 Z2 — `desktop.json` 增加必填 `zoom`（行为不变）
 
 - **依赖**：Z1
-- **交付**：`packages/desktop/src/config.ts` 的 `DesktopConfig.zoom: number` 必填；`parseDesktopConfig` 用 `isZoomFactor` 校验，缺失 / 坏类型 / 不在阶梯 → `1`（未知键仍忽略）。`main.ts` 两处 `writeDesktopConfig` 调用点带上当前值（`resolveLibraryRoot` 的自愈分支、`change-library-root`）——**本卡内该值恒为 `1`，不得顺手接键位或菜单**。
+- **交付**：`packages/desktop/src/config.ts` 的 `DesktopConfig.zoom: number` 必填；`parseDesktopConfig` 用 `isZoomFactor` 校验，缺失 / 坏类型 / 不在阶梯 → `1`（未知键仍忽略）。`main.ts` 两处 `writeDesktopConfig` 调用点带上**盘上的真实值**（`resolveLibraryRoot` 用已读到的 `saved.zoom`；`change-library-root` 重新 `readDesktopConfig` 取，读不到才回落 `1`）——**本卡不得接键位或菜单**，但也不得写成常量 `1`（那会让换书库/启动自愈静默重置缩放）。
 - **测试**：`config.test.ts` 补「缺 `zoom` → 1」「`zoom` 不在阶梯 → 1」「写后读回保留 `zoom`」，并同步既有往返用例
 - **验收**：`pnpm --filter ai-editor-desktop test` + `pnpm typecheck` + `pnpm lint`
 - **完成判据**：同 Z1
