@@ -28,6 +28,7 @@ import {
 import { logFilePath, redirectConsoleToFile } from "./log.js";
 import { shouldCloseServerOnBeforeQuit, shouldSkipFlushOnClose } from "./quit-sequence.js";
 import { checkForUpdatesManually, isUpdateSupported, setupAutoUpdate } from "./updater.js";
+import { ZOOM_FACTORS, nextZoomFactor, zoomKeyIntent, zoomPercent } from "./zoom.js";
 
 const here = dirname(fileURLToPath(import.meta.url));
 
@@ -123,18 +124,35 @@ function guardCloseFlush(win: BrowserWindow): void {
 
 /**
  * 最小应用菜单。**Edit 角色不是装饰**：macOS 上不设菜单 ⇒ Cmd+C/V 失效（输入框全废）。
- * 自有条目 = 两个目录入口（书库/日志）+ 「帮助」（版本可见性 + 检查更新）；devtools 仅在未打包态出现。
- * `onCheckUpdates` 为 null = 当前平台没有更新能力（菜单项不出现，不留点了没反应的死项）。
+ * 自有条目 = 「视图」（界面缩放三项）+ 两个目录入口（书库/日志）+ 「帮助」（版本可见性 + 检查更新）；
+ * devtools 仅在未打包态出现。`onCheckUpdates` 为 null = 当前平台没有更新能力（菜单项不出现，
+ * 不留点了没反应的死项）。
+ *
+ * 缩放项**不挂 `accelerator`**（`50-desktop.md` §4.1）：键位由 `before-input-event` 判，两边都挂会双触发；
+ * 菜单只负责可见状态（当前百分比 + 端点置灰），所以每次档位变化重建一次——`Menu.setApplicationMenu`
+ * 是主进程内同步调用，零 IPC。
  */
 function installMenu(
   libraryRoot: string,
   logDir: string,
   isDev: boolean,
   onCheckUpdates: (() => void) | null,
+  zoom: { percent: number; step: (direction: 1 | -1) => void; reset: () => void },
 ): void {
+  // 上下限从档位表派生（不在菜单里写 80 / 200 字面量）
+  const minPercent = zoomPercent(ZOOM_FACTORS[0]);
+  const maxPercent = zoomPercent(ZOOM_FACTORS[ZOOM_FACTORS.length - 1]);
   const template: MenuItemConstructorOptions[] = [
     ...(process.platform === "darwin" ? [{ role: "appMenu" as const }] : []),
     { role: "editMenu" },
+    {
+      label: "视图",
+      submenu: [
+        { label: "放大", enabled: zoom.percent < maxPercent, click: () => zoom.step(1) },
+        { label: "缩小", enabled: zoom.percent > minPercent, click: () => zoom.step(-1) },
+        { label: `实际大小 · ${zoom.percent}%`, enabled: zoom.percent !== 100, click: () => zoom.reset() },
+      ],
+    },
     {
       label: "书库",
       submenu: [
@@ -289,6 +307,11 @@ async function openWindow(): Promise<void> {
   console.log(`[desktop] server: http://127.0.0.1:${handle.port} root=${root}`);
   libraryRoot = root;
 
+  // 缩放起点 = 盘上的值（`resolveLibraryRoot` 的自愈分支刚可能写过盘，所以在那之后读）。
+  // 本次会话的权威值只在内存 `currentZoom`（`preload` 零新通道：主进程自己知道当前值）。
+  const configFile = desktopConfigPath(userData);
+  let currentZoom = readDesktopConfig(configFile)?.zoom ?? 1;
+
   const win = new BrowserWindow({
     width: 1280,
     height: 860,
@@ -308,10 +331,59 @@ async function openWindow(): Promise<void> {
   const onCheckUpdates = isUpdateSupported()
     ? () => void checkForUpdatesManually({ win, closeServer, logFile })
     : null;
-  installMenu(root, dirname(logFile), !app.isPackaged, onCheckUpdates);
+
+  // 改缩放的唯一入口（键位与菜单都走这里）：值没变就直接返回，**不重复写盘**——
+  // 端点连按不该把 desktop.json 翻来覆去重写（`nextZoomFactor` 已在两端夹住）
+  const applyZoom = (next: number): void => {
+    if (next === currentZoom) return;
+    currentZoom = next;
+    win.webContents.setZoomFactor(next);
+    try {
+      // 整对象覆写：带上同一个 `root`（书库位置不因缩放而变）
+      writeDesktopConfig(configFile, { projectRoot: root, zoom: next });
+    } catch (err) {
+      // 写失败不影响本次生效（缩放已经作用在 webContents 上）；下次启动回落盘上的旧值
+      console.warn(
+        `[desktop] 界面缩放写入 desktop.json 失败（本次已生效）：${err instanceof Error ? err.message : String(err)}`,
+      );
+    }
+    rebuildMenu(); // 「实际大小 · N%」与端点置灰跟着值走
+  };
+
+  const rebuildMenu = (): void => {
+    installMenu(root, dirname(logFile), !app.isPackaged, onCheckUpdates, {
+      percent: zoomPercent(currentZoom),
+      step: (direction) => applyZoom(nextZoomFactor(currentZoom, direction)),
+      reset: () => applyZoom(1),
+    });
+  };
+
+  // 键位（`50-desktop.md` §4.1）：判定在 `zoomKeyIntent`，这里只负责「非 null → 吃掉 → 分派」。
+  // 不吃掉的话 `Ctrl+-` 会同时命中 Chromium 自己的页面缩放，两个缩放叠在一起。
+  win.webContents.on("before-input-event", (event, input) => {
+    const intent = zoomKeyIntent({
+      type: input.type,
+      key: input.key,
+      code: input.code,
+      control: input.control,
+      meta: input.meta,
+      alt: input.alt,
+    });
+    if (intent === null) return;
+    event.preventDefault();
+    applyZoom(intent === "reset" ? 1 : nextZoomFactor(currentZoom, intent === "in" ? 1 : -1));
+  });
+
+  rebuildMenu();
   console.log(
-    `[desktop] 菜单已就绪（书库 / 日志目录入口；devtools 项: ${!app.isPackaged}；检查更新项: ${onCheckUpdates !== null}）；日志: ${logFile}`,
+    `[desktop] 菜单已就绪（视图 / 书库 / 日志目录入口；devtools 项: ${!app.isPackaged}；检查更新项: ${onCheckUpdates !== null}）；日志: ${logFile}`,
   );
+  console.log(`[desktop] 界面缩放 ${zoomPercent(currentZoom)}%（Ctrl/Cmd + = / - / 0）`);
+
+  // 应用时机（`50-desktop.md` §4.1）：`loadURL` 前设一次；Chromium 的 per-host 记录可能在导航后回写，
+  // 所以 `did-finish-load` 幂等重放一次——保证「盘上的值赢」，而不是命中外来的 100%。
+  win.webContents.setZoomFactor(currentZoom);
+  win.webContents.on("did-finish-load", () => win.webContents.setZoomFactor(currentZoom));
 
   await win.loadURL(`http://127.0.0.1:${handle.port}`);
   // 窗口出来之后再后台检查（不阻塞启动）；失败静默，细节落 logFile
@@ -330,7 +402,7 @@ void app.whenReady().then(async () => {
     if (chosen === null || chosen === libraryRoot) return null;
 
     mkdirSync(chosen, { recursive: true });
-    // 整对象覆写：zoom 取盘上的当前值（本卡不接键位，内存里还没有一份可靠的缩放状态），
+    // 整对象覆写：zoom 取盘上的当前值（每次档位变化都已写过盘，盘上就是权威值），
     // 重新读一次而不是写常量 1——否则换书库会把缩放重置回 100%。
     const configFile = desktopConfigPath(app.getPath("userData"));
     const zoom = readDesktopConfig(configFile)?.zoom ?? 1;

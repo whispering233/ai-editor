@@ -1,7 +1,7 @@
 // 界面缩放档位单测：钉住 `50-desktop.md` §4.1 那张表的字面值，以及主进程接线依赖的三条判定
 // （读回容差、严格跨档、端点夹住）。改档位先改文档那张表，再改这里。
 import { describe, expect, it } from "vitest";
-import { ZOOM_EPSILON, ZOOM_FACTORS, isZoomFactor, nextZoomFactor, zoomPercent } from "./zoom.js";
+import { ZOOM_EPSILON, ZOOM_FACTORS, isZoomFactor, nextZoomFactor, zoomKeyIntent, zoomPercent } from "./zoom.js";
 
 describe("ZOOM_FACTORS", () => {
   it("与 50-desktop.md §4.1 的档位表逐项同值（80/90/100/110/125/150/175/200 %）", () => {
@@ -86,5 +86,59 @@ describe("zoomPercent", () => {
     expect(zoomPercent(1.25)).toBe(125);
     expect(zoomPercent(1.75)).toBe(175);
     expect(zoomPercent(2)).toBe(200);
+  });
+});
+
+/** `before-input-event` 的 `input` 子集，缺省 = 主键盘、按下的 Ctrl+键 */
+function keyInput(overrides: Partial<Parameters<typeof zoomKeyIntent>[0]>): Parameters<typeof zoomKeyIntent>[0] {
+  return { type: "keyDown", key: "", code: "", control: false, meta: false, alt: false, ...overrides };
+}
+
+describe("zoomKeyIntent", () => {
+  it("主键盘 = / + / - / 0", () => {
+    expect(zoomKeyIntent(keyInput({ key: "=", code: "Equal", control: true }))).toBe("in");
+    // Shift+= 出来的 `+`：key 变了、modifier 不含 shift 以外的差别，必须同样放大
+    expect(zoomKeyIntent(keyInput({ key: "+", code: "Equal", control: true }))).toBe("in");
+    expect(zoomKeyIntent(keyInput({ key: "-", code: "Minus", control: true }))).toBe("out");
+    expect(zoomKeyIntent(keyInput({ key: "0", code: "Digit0", control: true }))).toBe("reset");
+  });
+
+  it("小键盘按 code 兜住（NumLock 关闭时 key 会变成 Insert / End / ArrowDown）", () => {
+    expect(zoomKeyIntent(keyInput({ key: "+", code: "NumpadAdd", control: true }))).toBe("in");
+    expect(zoomKeyIntent(keyInput({ key: "-", code: "NumpadSubtract", control: true }))).toBe("out");
+    expect(zoomKeyIntent(keyInput({ key: "0", code: "Numpad0", control: true }))).toBe("reset");
+    // NumLock 关闭的真实形态
+    expect(zoomKeyIntent(keyInput({ key: "Insert", code: "Numpad0", control: true }))).toBe("reset");
+    expect(zoomKeyIntent(keyInput({ key: "End", code: "NumpadSubtract", control: true }))).toBe("out");
+  });
+
+  it("没有 Ctrl / Meta 时一律不吃（不是缩放键）", () => {
+    expect(zoomKeyIntent(keyInput({ key: "=", code: "Equal" }))).toBeNull();
+    expect(zoomKeyIntent(keyInput({ key: "-", code: "Minus" }))).toBeNull();
+    expect(zoomKeyIntent(keyInput({ key: "0", code: "Digit0" }))).toBeNull();
+  });
+
+  it("只有 Meta（macOS 的 Cmd）同样有效", () => {
+    expect(zoomKeyIntent(keyInput({ key: "=", code: "Equal", meta: true }))).toBe("in");
+    expect(zoomKeyIntent(keyInput({ key: "-", code: "Minus", meta: true }))).toBe("out");
+    expect(zoomKeyIntent(keyInput({ key: "0", code: "Digit0", meta: true }))).toBe("reset");
+  });
+
+  it("Alt / AltGr（Windows 上报 Ctrl+Alt）组合一律不动（否则部分布局打不出 + ）", () => {
+    expect(zoomKeyIntent(keyInput({ key: "+", code: "Equal", control: true, alt: true }))).toBeNull();
+    expect(zoomKeyIntent(keyInput({ key: "-", code: "Minus", control: true, alt: true }))).toBeNull();
+    expect(zoomKeyIntent(keyInput({ key: "0", code: "Digit0", control: true, alt: true }))).toBeNull();
+    expect(zoomKeyIntent(keyInput({ key: "=", code: "Equal", meta: true, alt: true }))).toBeNull();
+  });
+
+  it("只有 keyDown 才算（keyUp / char 不重复计数）", () => {
+    for (const type of ["keyUp", "char", "rawKeyDown"]) {
+      expect(zoomKeyIntent(keyInput({ type, key: "=", code: "Equal", control: true }))).toBeNull();
+    }
+  });
+
+  it("其它按键不吃（Ctrl+C 等必须照常传到渲染层）", () => {
+    expect(zoomKeyIntent(keyInput({ key: "c", code: "KeyC", control: true }))).toBeNull();
+    expect(zoomKeyIntent(keyInput({ key: "?", code: "Slash", control: true }))).toBeNull();
   });
 });

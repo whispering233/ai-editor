@@ -50,3 +50,37 @@ export function nextZoomFactor(current: number, direction: 1 | -1): number {
 export function zoomPercent(factor: number): number {
   return Math.round(factor * 100);
 }
+
+/**
+ * 缩放键位判定（`50-desktop.md` §4.1）：`Ctrl/Cmd + =` 放大、`-` 缩小、`0` 回 100%。
+ *
+ * 按 `key` 而不是 `code` 判，天生吃各键盘布局（德语 `+` 是不带 Shift 的独立键）；小键盘的 `key`
+ * 在 NumLock 关闭时会变成 `Insert` / `End` / `ArrowDown`，所以另按 `code` 兜一层。
+ *
+ * 为什么不用菜单 accelerator：`CommandOrControl+Plus` 曾整条不触发（electron#14742）、macOS 上显示成
+ * `Shift Cmd =`（#1507）、非美布局绑不上，而且 accelerator 与本判定会**双触发**。
+ *
+ * 入参就是 Electron `before-input-event` 的 `input` 子集（事件本身不可单测，判定才可）。
+ */
+export function zoomKeyIntent(input: {
+  type: string;
+  key: string;
+  code: string;
+  control: boolean;
+  meta: boolean;
+  alt: boolean;
+}): "in" | "out" | "reset" | null {
+  // 只认按下：keyUp 也判会让一次按键走两遍（放大一次跳两档）
+  if (input.type !== "keyDown") return null;
+  if (!(input.control || input.meta)) return null;
+  // AltGr 在 Windows 上同时报 Ctrl + Alt，且会产出 `+` 一类的字符（如波兰语布局）——吃掉它会让
+  // 那些布局里打不出 `+`。菜单项没有 accelerator，所以拦不到的正常按键不受影响。
+  if (input.alt) return null;
+  if (input.key === "=" || input.key === "+") return "in";
+  if (input.key === "-") return "out";
+  if (input.key === "0") return "reset";
+  if (input.code === "NumpadAdd") return "in";
+  if (input.code === "NumpadSubtract") return "out";
+  if (input.code === "Numpad0") return "reset";
+  return null;
+}
