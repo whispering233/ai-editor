@@ -9,6 +9,8 @@
 
 ## [Unreleased]
 
+## [v0.0.71] - 2026-11-25
+
 ### Added
 
 - **设置 → 高级改为表单化（四张表单卡 + JSON 兜底）**：联网搜索 key（回显已存值、眼睛切换、写 `search.json`；坏 JSON 禁用并指路下方编辑器）、自定义模型 provider 与模型行（`models.json`；保存前确认「将丢失 N 处注释 / 尾逗号」并先把原文滚动备份为同目录 `models.json.bak`，未知字段原样透传）、运行参数三项（`retry.enabled` / `compaction.enabled` / `httpIdleTimeoutMs`；三态「默认 / 启用 / 关闭」，默认 = 删键跟随 pi 缺省；`retry` / `compaction` 其余字段浅合并保留）。pi 配置目录输入框在桌面形态补「浏览…」。四份本机配置文件的整份 JSON 编辑保留为兜底入口。

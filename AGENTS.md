@@ -34,7 +34,7 @@
 - 升级后复核模型目录：provider 家集合有增删改名要同步 `PROVIDER_ICONS`；`resolveDefaultModel` 对取不到的已选模型静默回落首个可用模型（不是缺陷）。
 - 凡调 LLM 一律走 pi 的 Agent 路径（`createAgentSessionServices` + `createAgentSessionFromServices` + `SessionManager`）；禁止直连 `completeSimple`、禁止自建 fetch / agent / 请求头——provider 特化头、重试 / 超时、思考档位只在 pi 的包装层生效。
 - pi 配置与凭据的唯一读写入口 = `packages/server/src/model-runtime.ts` 的 `getModelRuntime()` / `getSettingsManager()`；业务代码不得直读 pi 配置目录的 `auth.json` / `settings.json`（唯一例外 = 设置页「高级」的配置文件编辑器：整份文本透传、不解析语义）。
-- **pi 配置目录**唯一来源 = `~/.ai-editor/pi.json` 的 `agentDir`（缺失 / 非绝对路径 → 缺省 `~/.ai-editor/pi-agent`）；`process.env.PI_CODING_AGENT_DIR` 是**输出不是输入**（不读父进程值），只在 `packages/server/src/pi-agent-dir.ts` 里写、模块顶层零副作用（测试隔离靠这点）；改目录与改配置文件后统一走 `applyPiConfigChange()`（重设 env → 重建单例 → 释放项目运行时 → 重挂 dispatcher），否则读到的还是旧目录。编辑器可编的文件白名单 = shared `CONFIG_FILE_NAMES`（`name → 绝对路径`映射唯一，永不拼接客户端值），校验口径必须跟 pi 的**读**一致（`models.json` 宽容注释、`auth/settings` 严格、`search.json` 只认 `apiKey`）；明文凭据只在这一个本机回环端点回传，不进日志 / 备份 / 导出 / 云端 / 项目文件。
+- **pi 配置目录**唯一来源 = `~/.ai-editor/pi.json` 的 `agentDir`（缺失 / 非绝对路径 → 缺省 `~/.ai-editor/pi-agent`）；`process.env.PI_CODING_AGENT_DIR` 是**输出不是输入**（不读父进程值），只在 `packages/server/src/pi-agent-dir.ts` 里写、模块顶层零副作用（测试隔离靠这点）；改目录与改配置文件后统一走 `applyPiConfigChange()`（重设 env → 重建单例 → 释放项目运行时 → 重挂 dispatcher），否则读到的还是旧目录。编辑器可编的文件白名单 = shared `CONFIG_FILE_NAMES`（`name → 绝对路径`映射唯一，永不拼接客户端值），校验口径必须跟 pi 的**读**一致（`models.json` 宽容注释、`auth/settings` 严格、`search.json` 只认 `apiKey`）；明文凭据只在这一个本机回环端点回传，不进日志 / 备份 / 导出 / 云端 / 项目文件。`models.json` 写入前必须滚动备份为同目录 `models.json.bak`（唯一实现 = `pi-agent-dir.ts` 的 `backupModelsConfig`，备份失败中止保存、主文件不动；`.bak` 不进白名单、不参与 `applyPiConfigChange`）。
 - 搜索 / 抓取（`web_search` / `fetch_content`）的凭据唯一来源 = `~/.ai-editor/search.json` 的 `apiKey`：**不复用模型凭据、不读环境变量、无回退**；未配置就抛可读错误（指向「设置 → 高级」）。
 - 出站 HTTP 走服务启动时安装的全局 undici dispatcher（`packages/server/src/http-dispatcher.ts`：连接族退避 + 环境代理 + 空闲超时）；业务代码不要另建 fetch / agent（云端 WebDAV 同样走它）。
 
@@ -83,6 +83,9 @@
 - 客户端派生（格式化 / 阈值 / 段优先级 / 热力档位 / 日历固定周数 `MONTH_CALENDAR_WEEKS`）同样单源：`client/src/lib/session-status.ts`、`client/src/lib/writing-stats.ts`；`--heat-*` 等 CSS 变量只定义在 `client/src/index.css`。
 
 ### 前端
+
+- **保存态文案单源 = `components/ui/save-status.tsx`**（`编辑中… / 保存中… / 已保存 · HH:MM` 四态；输入即 pending）：章正文 / 参考资料 / 练习 / 自由练习四处只传状态与时刻，不各写一份 span。手动保存（按钮 / `Ctrl/Cmd+S`）成功 `showToast("已保存", "success", "save")`，自动保存**不弹**；存档三条提示用**同一个 `key: "save"`** 升级同一条（`stores/ui.ts` 的第三参 → `message.open`），否则一次快捷键会叠两条。
+- **本机配置文件表单写入只有一条路** = `PUT /settings/config-file/:name`（表单只负责拼文本，不自建写入 / 不新增 typed 端点）；jsonc 解析与注释计数单源 = shared `utils/jsonc.ts`（与 pi 读口径同语义，`"disabled"` 等 pi 合法但表单不表达的写法一律判解析失败并指路 JSON，不静默改写）。
 
 - 任何切换当前项目的端点之后，客户端必须收敛项目镜像（重拉 config + outline + 书架）——服务端 `currentProject` 是单例事实源，客户端只是镜像。
 - 同一路由组件的「形态」状态也是状态：`Dashboard` 的 `mode` 在 `#/` ↔ `#/overview` 之间不重挂载，凡 `if (mode !== "overview") return` 的 effect 必须把 `mode` 写进依赖数组。

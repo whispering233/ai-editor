@@ -42,7 +42,7 @@ export default function Settings() {
             ? [{ key: "general", label: "通用", children: <LibraryLocationPanel /> }]
             : []),
           { key: "llm", label: "AI 模型", children: <LlmSection /> },
-          // 「高级」两种形态都渲染：pi 配置目录 + 本机配置文件编辑器（本机级，与项目无关）
+          // 「高级」两种形态都渲染：本机级配置五张卡（pi 目录 / 联网搜索 / 自定义模型 / 运行参数 / 配置文件编辑器）
           { key: "advanced", label: "高级", children: <PiConfigSection /> },
           { key: "rules", label: "项目规则", children: <ProjectRulesSection /> },
           { key: "backup", label: "备份", children: <BackupSection /> },

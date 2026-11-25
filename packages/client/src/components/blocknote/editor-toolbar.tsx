@@ -21,7 +21,8 @@
 //   各自注入**，草稿态与其它页面不传 = 不渲染）。动机见 DESIGN.md §Components
 //   「为什么手动「保存」放在工具条而不是页头」：工具条随正文 sticky（与滚动位置无关），而页头不是。
 //   `saving` 期间禁用（防连点双发）；**不在这里做「有无待存内容」判断**——点击恒发一次 PUT，
-//   保证点击必有可见反应（状态转「保存中…」→「已保存 · HH:MM」）。
+//   保证点击必有可见反应（成功后 toast「已保存」+ 状态转「保存中…」→「已保存 · HH:MM」；
+//   自动保存只改文字、不弹 toast）。
 import { useState, type ReactNode } from "react";
 import {
   FontSizeOutlined,
