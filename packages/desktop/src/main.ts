@@ -359,7 +359,8 @@ async function openWindow(): Promise<void> {
   };
 
   // 键位（`50-desktop.md` §4.1）：判定在 `zoomKeyIntent`，这里只负责「非 null → 吃掉 → 分派」。
-  // 不吃掉的话 `Ctrl+-` 会同时命中 Chromium 自己的页面缩放，两个缩放叠在一起。
+  // 吃掉 = 不让这组键继续流向渲染层（正文编辑器若将来绑 `Mod+-` 不会与我们打架）；未注册 zoom role 时
+  // Electron 本身没有内置页面缩放，所以这里**不是**在防双触发。
   win.webContents.on("before-input-event", (event, input) => {
     const intent = zoomKeyIntent({
       type: input.type,
