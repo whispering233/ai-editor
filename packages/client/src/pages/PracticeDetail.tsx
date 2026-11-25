@@ -40,11 +40,12 @@ import {
   shouldRefreshPracticeCard,
   type PracticeFeedbackDimension,
 } from "../lib/practice";
-import { formatSavedAt, formatTextLength } from "../lib/manuscript";
+import { formatTextLength } from "../lib/manuscript";
 import { useSaveShortcut } from "../lib/save-shortcut";
 import { errorBannerClass } from "../lib/styles";
 import { cn } from "../lib/utils";
 import { PageHeader } from "@/components/ui/page-header";
+import { SaveStatus, type SaveState } from "@/components/ui/save-status";
 import { SectionCard } from "@/components/ui/section-card";
 import { EmptyState } from "@/components/ui/empty-state";
 import { ConfirmDialog } from "../components/outline/dialogs";
@@ -157,7 +158,8 @@ export interface PracticeSampleSectionsProps {
   onDraftChange: (value: string) => void;
   /** 写作面偏好（`--writing-*` 变量来源；容器调 `useWritingPrefs` 后传入——纯展示层不碰 localStorage） */
   writingPrefs: WritingPrefs;
-  saving: boolean;
+  /** 保存态（由容器派生，见 `PracticeDetail` 的 `saveState`；本层只画文案） */
+  saveState: SaveState;
   /** 最近一次保存**完成**的本地时刻（`null` = 本页尚未保存过） */
   savedAt: Date | null;
   /** 保存失败文案（错误条 + 重试，不静默） */
@@ -177,7 +179,7 @@ export function PracticeSampleSections({
   draft,
   onDraftChange,
   writingPrefs,
-  saving,
+  saveState,
   savedAt,
   saveError,
   onSave,
@@ -199,12 +201,9 @@ export function PracticeSampleSections({
           <div className="flex items-center gap-2">
             <span className="flex items-center gap-2 text-xs text-muted-foreground">
               <span className="tabular-nums">{formatTextLength(draft.length) ?? "0 字"}</span>
-              {saving && <span>保存中…</span>}
-              {!saving && savedAt !== null && (
-                <span className="tabular-nums">已保存 · {formatSavedAt(savedAt)}</span>
-              )}
+              <SaveStatus state={saveState} savedAt={savedAt} />
             </span>
-            <Button type="primary" loading={saving} onClick={onSave}>
+            <Button type="primary" loading={saveState === "saving"} onClick={onSave}>
               保存
             </Button>
           </div>
@@ -392,7 +391,7 @@ export default function PracticeDetail({ sampleId }: { sampleId: string }) {
   async function saveDraft(): Promise<boolean> {
     setSaving(true);
     try {
-      return await savePracticeDraft({
+      const ok = await savePracticeDraft({
         sampleId,
         draft,
         onSaved: (updatedAt) => {
@@ -412,6 +411,9 @@ export default function PracticeDetail({ sampleId }: { sampleId: string }) {
           setSaveError(failure.message);
         },
       });
+      // 手动保存必给可见反馈：与存档阶段同槽位 key（同 key 替换、不叠加）
+      if (ok) showToast("已保存", "success", "save");
+      return ok;
     } finally {
       setSaving(false);
     }
@@ -433,6 +435,15 @@ export default function PracticeDetail({ sampleId }: { sampleId: string }) {
     showToast("已删除");
     navigate("/practice");
   }
+
+  /** 保存态派生（四态单源 = components/ui/save-status）：在途保存优先，其次「有改动未保存」，再次「保存过」 */
+  const saveState: SaveState = saving
+    ? "saving"
+    : detail !== null && draft !== detail.draft
+      ? "pending"
+      : savedAt !== null
+        ? "saved"
+        : "idle";
 
   const missing = loadError?.code === "PRACTICE_NOT_FOUND";
   if (missing) return <PracticeSampleMissing />;
@@ -471,7 +482,7 @@ export default function PracticeDetail({ sampleId }: { sampleId: string }) {
             draft={draft}
             onDraftChange={setDraft}
             writingPrefs={writingPrefs}
-            saving={saving}
+            saveState={saveState}
             savedAt={savedAt}
             saveError={saveError}
             onSave={() => void saveDraft()}

@@ -63,7 +63,7 @@ function render(overrides: Partial<Parameters<typeof PracticeSampleSections>[0]>
       draft={DETAIL.draft}
       onDraftChange={() => {}}
       writingPrefs={PREFS}
-      saving={false}
+      saveState="idle"
       savedAt={null}
       saveError={null}
       onSave={() => {}}
@@ -182,13 +182,20 @@ describe("练习页三段（范文 → 我的稿 → 点评卡）", () => {
     expect(html).not.toContain("paper-cream");
   });
 
-  it("保存态：页内「保存」按钮恒在；saving → 保存中…；保存完成 → 已保存 · HH:MM", () => {
+  it("保存态：页内「保存」按钮恒在；四态文案各按 `saveState` 画（idle 不画）", () => {
     const idle = render();
     expect(idle).toMatch(/保\s*存/);
     expect(idle).not.toContain("保存中…"); // 未在保存中
-    expect(render({ saving: true })).toContain("保存中…");
-    const saved = render({ savedAt: new Date(2026, 9, 1, 9, 5) });
+    expect(idle).not.toContain("编辑中…");
+    expect(render({ saveState: "pending" })).toContain("编辑中…");
+    expect(render({ saveState: "saving" })).toContain("保存中…");
+    const saved = render({ saveState: "saved", savedAt: new Date(2026, 9, 1, 9, 5) });
     expect(saved).toContain("已保存 · 09:05");
+  });
+
+  it("保存按钮的 loading 跟随 `saveState === \"saving\"`（其余态不转圈）", () => {
+    expect(render({ saveState: "saving" })).toContain("ant-btn-loading");
+    expect(render({ saveState: "pending" })).not.toContain("ant-btn-loading");
   });
 
   it("保存失败可见（不静默）：错误条 + 重试", () => {

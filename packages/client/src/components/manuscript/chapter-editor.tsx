@@ -33,6 +33,7 @@ import {
   ThunderboltOutlined,
 } from "@ant-design/icons";
 import { PanelHeader } from "@/components/ui/panel-header";
+import { SaveStatus, type SaveState } from "@/components/ui/save-status";
 import {
   DocumentEditor,
   type DocumentEditorApi,
@@ -52,7 +53,6 @@ import {
   AUTOSAVE_DELAY_MS,
   chapterNeighbors,
   createAutosave,
-  formatSavedAt,
   formatTextLength,
   hasVisibleOverlay,
   manuscriptErrorAction,
@@ -78,8 +78,6 @@ import { useProjectStore } from "../../stores/project";
 import { useWritingSessionStore } from "../../stores/writing-session";
 import { useUiStore } from "../../stores/ui";
 import { cn } from "../../lib/utils";
-
-type SaveState = "idle" | "saving" | "saved";
 
 /** 加载失败形态（错误码 + 文案）：正文端点的加载/保存两条路径共用 */
 interface LoadFailure {
@@ -127,6 +125,7 @@ export function ChapterEditor({
   const [editorApi, setEditorApi] = useState<DocumentEditorApi | null>(null);
   /** 隐藏的文件选择框（导入入口；桌面形态不加原生能力，同一套 <input type="file">） */
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  /** 保存态（四态单源 = components/ui/save-status）：`pending` = 有输入未落盘（自动保存防抖期间） */
   const [saveState, setSaveState] = useState<SaveState>("idle");
   /** 最近一次保存**完成**的本地时刻（卡 13.6）：瞬态，不持久化；null = 本页尚未保存过（无时间戳） */
   const [savedAt, setSavedAt] = useState<Date | null>(null);
@@ -201,8 +200,10 @@ export function ChapterEditor({
       baseRef.current = res.updatedAt; // 本地基准前移（后续保存以新版本戳比对）
       setCharCount(res.charCount);
       setSaveError(null);
-      setSaveState("saved");
-      setSavedAt(new Date()); // 「已保存 · HH:MM」的时刻基准 = 这次保存完成的时刻
+      // 请求在途时可能又输入了（`handleChange` 已置 pending）⇒ 只有「本次提交的文本仍是最新」才转
+      // `saved`，否则保留 `pending`：慢网下不得出现「有未落盘输入却显示已保存」
+      setSaveState(latestRef.current === text ? "saved" : "pending");
+      setSavedAt(new Date()); // 「已保存 · HH:MM」的时刻基准 = 这次保存**完成**的时刻（无条件）
       onSaved?.({ charCount: res.charCount, updatedAt: res.updatedAt });
       return true;
     } catch (err) {
@@ -232,7 +233,12 @@ export function ChapterEditor({
   /** 立即保存最新内容（工具条「保存」/ Ctrl+S）：串行化在途保存；
    * 结果透传 `false`（保存失败）——Ctrl+S 据此不生成备份 */
   function saveNow(): Promise<void | boolean> {
-    const run = saveChainRef.current.then(() => saveContent(latestRef.current ?? ""));
+    const run = saveChainRef.current.then(async () => {
+      const ok = await saveContent(latestRef.current ?? "");
+      // 手动保存（按钮 / Ctrl+S）必给可见反馈：toast 与存档阶段同槽位 key（同 key 替换、不叠加）
+      if (ok === true) useUiStore.getState().showToast("已保存", "success", "save");
+      return ok;
+    });
     saveChainRef.current = run;
     return run;
   }
@@ -275,9 +281,10 @@ export function ChapterEditor({
     return () => window.removeEventListener("keydown", onKeyDown, true);
   }, [focusMode, setFocusMode]);
 
-  /** 编辑器内容变化：记录最新内容 + 排入自动保存 */
+  /** 编辑器内容变化：记录最新内容 + 排入自动保存 + 状态置 `pending`（输入即「编辑中…」，不谎报已保存） */
   function handleChange(text: string): void {
     latestRef.current = text;
+    setSaveState("pending");
     autosave.schedule(text);
   }
 
@@ -428,10 +435,7 @@ export function ChapterEditor({
   const statusText = (
     <div className="flex items-center gap-2 text-xs text-muted-foreground">
       <span className="tabular-nums">{formatTextLength(charCount) ?? "0 字"}</span>
-      {saveState === "saving" && <span>保存中…</span>}
-      {saveState === "saved" && savedAt !== null && (
-        <span className="tabular-nums">已保存 · {formatSavedAt(savedAt)}</span>
-      )}
+      <SaveStatus state={saveState} savedAt={savedAt} />
     </div>
   );
 

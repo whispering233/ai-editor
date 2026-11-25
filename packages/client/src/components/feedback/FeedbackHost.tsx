@@ -12,12 +12,31 @@
 import { useEffect, useRef } from "react";
 import { App, Button } from "antd";
 import { CloseOutlined, ExclamationCircleFilled } from "@ant-design/icons";
-import { useUiStore, TOAST_DURATION_MS, type Toast } from "../../stores/ui";
+import { useUiStore, TOAST_DURATION_MS, type Toast, type ToastKind } from "../../stores/ui";
 import { ConfirmDialog } from "../outline/dialogs";
 
 /** antd message 的 duration 单位是**秒**（antd/es/message/interface.d.ts `duration?: number`），
  * 故由 store 的单一事实源毫秒值换算；store 定时器仍负责 3s 后清空快照。*/
 const TOAST_DURATION_SECONDS = TOAST_DURATION_MS / 1000;
+
+/**
+ * toast → antd `message.open` 参数（纯函数，可单测）：三分支（success/error/info）合并成一次 open。
+ * `key` 有值时透传 ⇒ 同 key 的提示**替换**而非叠加（同槽位升级，见 DESIGN.md §Components「toast」）；
+ * 无 key 时**不带该字段**（保持既有无序提示的行为）。
+ */
+export function toastMessageArgs(toast: Toast): {
+  content: string;
+  type: ToastKind;
+  duration: number;
+  key?: string;
+} {
+  return {
+    content: toast.text,
+    type: toast.kind,
+    duration: TOAST_DURATION_SECONDS,
+    ...(toast.key !== undefined ? { key: toast.key } : {}),
+  };
+}
 
 /**
  * toast → antd message 触发判定（纯函数，可单测）：
@@ -54,17 +73,12 @@ export function FeedbackHost() {
   const { message } = App.useApp();
   const lastHandledToastId = useRef<number | null>(null);
 
-  // toast 桥接：新快照（新 id）触发 antd message（顶部居中），kind 映射 success/error/info
+  // toast 桥接：新快照（新 id）触发 antd message（顶部居中），kind 映射 success/error/info；
+  // 带 key 的快照替换同槽位旧提示（三分支合并为一次 message.open）
   useEffect(() => {
     if (!toastState || !shouldNotifyToast(toastState, lastHandledToastId.current)) return;
     lastHandledToastId.current = toastState.id;
-    if (toastState.kind === "error") {
-      message.error(toastState.text, TOAST_DURATION_SECONDS);
-    } else if (toastState.kind === "info") {
-      message.info(toastState.text, TOAST_DURATION_SECONDS);
-    } else {
-      message.success(toastState.text, TOAST_DURATION_SECONDS);
-    }
+    message.open(toastMessageArgs(toastState));
   }, [toastState, message]);
 
   return (

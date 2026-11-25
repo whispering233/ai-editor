@@ -12,6 +12,9 @@ export interface Toast {
   id: number;
   kind: ToastKind;
   text: string;
+  /** 同槽位升级键（DESIGN.md §Components「toast」）：同 key 的提示**替换**而非叠加——
+   * 一次手动保存 + 存档只留一条（唯一使用方 = 保存链路） */
+  key?: string;
 }
 
 /** 错误横幅内容（code + message） */
@@ -34,8 +37,9 @@ interface UiState {
   clearError: () => void;
 
   toast: Toast | null;
- /** 轻提示（保存成功、已移入回收站等）；3s 自动消失；info = 中性引导提示 */
-  showToast: (text: string, kind?: ToastKind) => void;
+ /** 轻提示（保存成功、已移入回收站等）；3s 自动消失；info = 中性引导提示；
+  * key = 同槽位升级（同 key 替换旧提示，见 `Toast.key`） */
+  showToast: (text: string, kind?: ToastKind, key?: string) => void;
   clearToast: () => void;
 
  /** 进行中的确认对话框（含 resolve）；null = 无 */
@@ -102,9 +106,9 @@ export const useUiStore = create<UiState>((set, get) => ({
   clearError: () => set({ error: null }),
 
   toast: null,
-  showToast: (text, kind = "success") => {
+  showToast: (text, kind = "success", key) => {
     const id = ++toastSeq;
-    set({ toast: { id, kind, text } });
+    set({ toast: { id, kind, text, ...(key !== undefined ? { key } : {}) } });
  // 自动消失：仅清除本次这条（新 toast 会覆盖旧定时器场景由 id 比对兜底）
     setTimeout(() => {
       set((s) => (s.toast?.id === id ? { toast: null } : {}));

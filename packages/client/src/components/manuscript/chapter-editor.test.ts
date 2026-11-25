@@ -98,3 +98,28 @@ describe("页头「回填本章摘要」（C2）", () => {
     expect(disabled).toContain("canRequestChapterSummary(charCount)");
   });
 });
+
+describe("保存态与手动保存提醒（DESIGN.md §Components「save-status」/「toast」同槽位升级）", () => {
+  it("输入即 pending（打字期间不谎报上一次「已保存」）", () => {
+    expect(functionSource("function handleChange")).toContain('setSaveState("pending")');
+  });
+
+  it("手动保存（按钮 / Ctrl+S）成功后弹「已保存」，走存档同槽位 key", () => {
+    const source = functionSource("function saveNow");
+    expect(source).toContain('showToast("已保存", "success", "save")');
+  });
+
+  it("自动保存不弹 toast（`saveContent` 里没有 showToast——反馈由 save-status 文字承担）", () => {
+    expect(functionSource("async function saveContent")).not.toContain("showToast");
+  });
+
+  it("保存成功只在「本次提交的文本仍是最新」时转 `saved`（慢网打字不谎报已保存）", () => {
+    expect(functionSource("async function saveContent")).toContain(
+      'setSaveState(latestRef.current === text ? "saved" : "pending")',
+    );
+  });
+
+  it("状态文案走共享组件（页头与专注态工具条同源，不各写一份 span）", () => {
+    expect(chapterEditor).toContain("<SaveStatus state={saveState} savedAt={savedAt} />");
+  });
+});

@@ -2,6 +2,7 @@
 // - 无项目打开：只保存、不存档、不提示（备份端点本身要求项目已打开）
 // - toast 文案里的分钟数由 SHORTCUT_BACKUP_THROTTLE_MINUTES 插值（不复述数字）
 // - 存档实例（节流基准 + 在途标志）进程内唯一：模块级实例，切页/重挂不重置，刷新页面才重置
+// - 三条 toast 带同槽位 key `save`：与页面的「已保存」同槽位（同 key 替换、不叠加）⇒ 一次 Ctrl+S 只留一条提示
 // - handler 只注册一次，行为经 ref 取最新（与 useSaveShortcut 同款，避免注册栈顺序频繁变动）
 import { useEffect, useRef } from "react";
 import { ApiError, CLIENT_NETWORK_ERROR, createProjectBackup } from "../lib/api";
@@ -36,17 +37,23 @@ export function useSaveArchive(): void {
           .then((result) => {
             switch (result.status) {
               case "archived":
-                showToast("已保存并生成存档");
+                showToast("已保存并生成存档", "success", "save");
                 break;
               case "skipped":
                 showToast(
                   `已保存 · 距上次存档不足 ${SHORTCUT_BACKUP_THROTTLE_MINUTES} 分钟，未生成新存档`,
+                  "success",
+                  "save",
                 );
                 break;
               case "busy":
                 break; // 上一份还在生成：它的结果会自己上报，不重复提示
               case "failed":
-                showToast(`已保存，但生成存档失败：${failureText(result.error)}`, "error");
+                showToast(
+                  `已保存，但生成存档失败：${failureText(result.error)}`,
+                  "error",
+                  "save",
+                );
                 break;
             }
           });

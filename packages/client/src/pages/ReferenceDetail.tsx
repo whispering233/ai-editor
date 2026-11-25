@@ -37,6 +37,7 @@ import { useUiStore } from "../stores/ui";
 import { cn } from "../lib/utils";
 import { errorBannerClass, skeletonClass } from "../lib/styles";
 import { Button, Dropdown, Input } from "antd";
+import { SaveStatus, type SaveState } from "../components/ui/save-status";
 import { PageTitle } from "../components/ui/page-title";
 import { PageHeader } from "../components/ui/page-header";
 import { TypeChip } from "../components/ui/tag-chip";
@@ -99,8 +100,11 @@ export default function ReferenceDetail({ id, draft = false }: { id?: string; dr
   const [editorEpoch, setEditorEpoch] = useState(0);
   // 导入导出的能力出口（md ↔ 块要真实例）：onReady 回调拿到；null = 编辑器未挂载
   const [editorApi, setEditorApi] = useState<DocumentEditorApi | null>(null);
-  // 正文保存状态：页头「保存中…/已保存」；失败走错误条 + 重试（不静默丢改动）
-  const [saveState, setSaveState] = useState<"idle" | "saving" | "saved">("idle");
+  // 正文保存状态（四态单源 = components/ui/save-status）：页头「编辑中…/保存中…/已保存 · HH:MM」；
+  // 失败走错误条 + 重试（不静默丢改动）
+  const [saveState, setSaveState] = useState<SaveState>("idle");
+  /** 最近一次保存**完成**的本地时刻（手动保存与正文自动保存成功都置）；null = 本页尚未保存过 */
+  const [savedAt, setSavedAt] = useState<Date | null>(null);
   const [saveError, setSaveError] = useState<string | null>(null);
   /** 失败保存的重试动作（自动保存 / 手动保存各自记自己的那份——重试不能变成另一种保存） */
   const retryRef = useRef<(() => void) | null>(null);
@@ -162,6 +166,7 @@ export default function ReferenceDetail({ id, draft = false }: { id?: string; dr
         setContent(initial);
         setEditorEpoch((epoch) => epoch + 1); // 换 key 重挂：外部内容只能在挂载时消费
         setSaveState("idle");
+        setSavedAt(null); // 重新加载后不显示旧时间戳
         setSaveError(null);
       })
       .catch((e) => {
@@ -182,7 +187,10 @@ export default function ReferenceDetail({ id, draft = false }: { id?: string; dr
     try {
       await updateEntity("reference", id, { data: { content: text } });
       setSaveError(null);
-      setSaveState("saved");
+      // 请求在途时可能又编辑了（`handleEditorChange` 已置 pending）⇒ 只有「本次提交的内容仍是最新」
+      // 才转 `saved`，否则保留 `pending`（不谎报已保存）
+      setSaveState(contentRef.current === text ? "saved" : "pending");
+      setSavedAt(new Date()); // 「已保存 · HH:MM」的时刻基准 = 这次保存**完成**的时刻（无条件）
     } catch (err) {
       const message = err instanceof ApiError ? err.message : "保存失败，请重试";
       setSaveState("idle");
@@ -207,7 +215,9 @@ export default function ReferenceDetail({ id, draft = false }: { id?: string; dr
   /** 编辑器内容变化：记录最新内容（手动保存也取它）+ 排入自动保存（新建态不排——条目还不存在） */
   function handleEditorChange(next: string): void {
     contentRef.current = next;
-    if (!draft) autosave.schedule(next);
+    if (draft) return;
+    setSaveState("pending"); // 输入即「编辑中…」（自动保存防抖期间不谎报已保存）
+    autosave.schedule(next);
   }
 
   const tagSuggestions = suggestTags(form.tagsInput, tagPool);
@@ -236,7 +246,7 @@ export default function ReferenceDetail({ id, draft = false }: { id?: string; dr
     setFormError(null);
     try {
       await updateEntity("reference", detail.id, { name });
-      useUiStore.getState().showToast("已保存");
+      useUiStore.getState().showToast("已保存", "success", "save");
       setTitleEditing(false);
       void refreshDetail();
     } catch (e) {
@@ -268,7 +278,8 @@ export default function ReferenceDetail({ id, draft = false }: { id?: string; dr
         autosave.reset(); // 手动保存已含最新正文：丢弃待存内容（不重复 PUT、不让旧内容回写）
         setSaveError(null);
         setSaveState("saved");
-        useUiStore.getState().showToast("已保存");
+        setSavedAt(new Date());
+        useUiStore.getState().showToast("已保存", "success", "save");
         useUiStore.getState().notifyDataChanged();
         void refreshDetail();
       }
@@ -501,8 +512,7 @@ export default function ReferenceDetail({ id, draft = false }: { id?: string; dr
                 <span>更新 {formatTime(detail.updatedAt)}</span>
               </>
             )}
-            {saveState === "saving" && <span>保存中…</span>}
-            {saveState === "saved" && <span>已保存</span>}
+            <SaveStatus state={saveState} savedAt={savedAt} />
           </div>
         }
       />
