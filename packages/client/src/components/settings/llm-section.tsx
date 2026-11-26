@@ -13,7 +13,8 @@
 // 数据：GET/PUT /api/v1/settings/llm——本分区只写 api_key（单家：认证状态行 + 新 key 输入 + 保存/清除）；
 // 模型只读展示（模型激活唯一入口在聊天栏 ComposerConfigRow——「浏览 provider 目录」与「切换全局激活模型」是两种意图，
 // 同处一个入口会误改）
-// 凭据解析（pi 事实，2026-09 校正；**升级 pi 时必须复查**）：key 存 pi 凭据库 ~/.pi/agent/auth.json，**一家一条**，
+// 凭据解析（pi 事实，2026-09 校正；**升级 pi 时必须复查**）：key 存 pi 配置目录的 auth.json（缺省
+// ~/.ai-editor/pi-agent，可在「高级」更改；**不是** pi CLI 的 ~/.pi/agent），**一家一条**，
 // 且**存量凭据优先**——只在 auth.json 没有该家条目时才回落到 provider 内置环境变量（如 DEEPSEEK_API_KEY）。
 // 需要引用环境变量就写在 auth.json 的值里（`$VAR` / `${VAR}` / `!命令`，pi 的 resolveConfigValue 语义），
 // 因此不存在「两个来源竞争」。（旧文案「环境变量优先于此处配置」是 K5 换核前的行为，已改正。）
@@ -331,7 +332,8 @@ export function LlmSection() {
                   </span>
                 </DialogTitle>
                 <DialogDescription>
-                  填入 API key 并保存；key 写入 pi 凭据库 ~/.pi/agent/auth.json，不进项目文件。
+                  填入 API key 并保存；key 写入 pi 配置目录的 auth.json（缺省 ~/.ai-editor/pi-agent），
+                  不进项目文件。
                 </DialogDescription>
               </DialogHeader>
               <div className="flex flex-col gap-1">
@@ -371,8 +373,8 @@ export function LlmSection() {
         message={
           <div className="text-xs leading-relaxed">
             <p>
-              · key 不进项目文件；保存后写入 pi 凭据库 ~/.pi/agent/auth.json（一家一条，值可以是字面 key、
-              `$ENV_VAR` 引用或 `!命令`）
+              · key 不进项目文件；保存后写入 pi 配置目录的 auth.json（缺省 ~/.ai-editor/pi-agent，可在
+              「高级」更改；一家一条，值可以是字面 key、`$ENV_VAR` 引用或 `!命令`）
             </p>
             <p>
               · 该家在 auth.json 没有条目时才回落到 provider 内置环境变量（如 DEEPSEEK_API_KEY）——
