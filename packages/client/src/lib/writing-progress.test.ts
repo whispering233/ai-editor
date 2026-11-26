@@ -1,6 +1,6 @@
 // 今日目标元信息行纯函数单测（DESIGN.md `writing-page`「卷章导航栏 · 今日目标元信息行」/
 // 130-api-writing-stats.md「每日目标与连续天数」）。
-// 覆盖：节流窗口边界（未拉过 / 窗口内 / 恰到窗口）与文案派生（达标 / 未达标 / 目标关闭 / 无数据）。
+// 覆盖：节流窗口边界（从未因保存刷新 / 窗口内 / 恰到窗口）与文案派生（达标 / 未达标 / 目标关闭 / 无数据）。
 import { describe, expect, it } from "vitest";
 import type { WritingStatsRes } from "@whispering233/ai-editor-shared";
 import { defaultWritingGoalPreference, WRITING_GOAL_PRESETS } from "./writing-goal";
