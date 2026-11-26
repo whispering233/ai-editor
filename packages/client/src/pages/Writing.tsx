@@ -21,6 +21,8 @@ import { ResizeHandle } from "../components/ui/resize-handle";
 import { useMediaQuery } from "../hooks/use-media-query";
 import { useDataRefresh } from "../hooks/use-data-refresh";
 import { useOutlineLoader } from "../hooks/use-outline-loader";
+import { useWritingGoal } from "../hooks/use-writing-goal";
+import { useWritingProgress } from "../hooks/use-writing-progress";
 import { useWritingRail } from "../hooks/use-writing-rail";
 import {
   getExpectedHooks,
@@ -30,6 +32,7 @@ import {
 } from "../lib/api";
 import { errorBannerClass, skeletonClass } from "../lib/styles";
 import { cn } from "../lib/utils";
+import { shouldRefreshProgress, writingProgressMeta } from "../lib/writing-progress";
 import {
   buildWritingRailRows,
   loadedForCurrentChapter,
@@ -121,6 +124,17 @@ export default function Writing({ chapterId }: { chapterId?: string }) {
   useDataRefresh(reloadRailHooks);
   const toggleExpected = useCallback(() => setExpectedCollapsed((prev) => !prev), []);
 
+  // rail 页头的今日目标元信息行（DESIGN.md `writing-page`「卷章导航栏 · 今日目标元信息行」）
+  const { preference: goalPreference } = useWritingGoal(projectId);
+  const [progressTick, setProgressTick] = useState(0);
+  // 触发点只有两个：进页一次 + 保存后过节流窗口（`shouldRefreshProgress`）；目标关闭 / 无项目不发请求
+  const { stats: progressStats, lastFetchedAt } = useWritingProgress({
+    enabled: projectId !== null && goalPreference.enabled,
+    tick: progressTick,
+  });
+  // 一行文案的派生已含四种不渲染情形（未打开项目 / 拉取失败 / 目标关闭 / 无数据 ⇒ null）
+  const progressMeta = writingProgressMeta(progressStats, goalPreference);
+
   // 大纲加载失败（以 store 的错误标记为准：首帧 / 加载中 outlineError 为 null，不误报失败）。
   // 错误提示在正文列（桌面）；窄屏目录页没有正文列，错误与重试挂在 rail 内。
   const outlineFailed = outline === null && outlineError !== null;
@@ -198,6 +212,20 @@ export default function Writing({ chapterId }: { chapterId?: string }) {
         loading={outline === null}
         error={!isDesktop && outlineFailed ? "大纲加载失败，章节目录暂不可用" : null}
         onRetry={retry}
+        // 今日目标一行（四种不渲染情形 = 不传 ⇒ 保持 24px 空带，不留假占位）
+        meta={
+          progressMeta === null ? undefined : (
+            <span
+              className={cn(
+                "min-w-0 truncate text-xs tabular-nums",
+                progressMeta.reached ? "text-primary" : "text-muted-foreground",
+              )}
+            >
+              {progressMeta.text}
+              {progressMeta.reached && <span aria-hidden> ✓</span>}
+            </span>
+          )
+        }
         // 右侧详情收起 = rail 吸收全宽（不写 layout.width）；窄屏全宽同此口径
         width={isDesktop && !detailHidden ? railLayout.width : undefined}
         // 无邻栏时抹掉 rail 自带的右边线（DESIGN.md §Layout「分栏边线单所有权」）；
@@ -288,9 +316,16 @@ export default function Writing({ chapterId }: { chapterId?: string }) {
             basePath="/writing"
             headerLeading={railCollapsed ? railToggle : undefined}
             headerActions={!railCollapsed ? detailToggle : undefined}
-            onSaved={({ charCount, updatedAt }) =>
-              patchChapterMetadata(chapterId, { textLength: charCount, documentUpdatedAt: updatedAt })
-            }
+            onSaved={({ charCount, updatedAt }) => {
+              patchChapterMetadata(chapterId, {
+                textLength: charCount,
+                documentUpdatedAt: updatedAt,
+              });
+              // 今日目标行按节流窗口刷新（不是每保存一次就发一次请求）
+              if (shouldRefreshProgress(lastFetchedAt(), Date.now())) {
+                setProgressTick((tick) => tick + 1);
+              }
+            }}
           />
         </div>
       );
