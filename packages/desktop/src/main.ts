@@ -28,7 +28,7 @@ import {
 import { logFilePath, redirectConsoleToFile } from "./log.js";
 import { shouldCloseServerOnBeforeQuit, shouldSkipFlushOnClose } from "./quit-sequence.js";
 import { checkForUpdatesManually, isUpdateSupported, setupAutoUpdate } from "./updater.js";
-import { nextZoomFactor, zoomKeyIntent, zoomPercent, zoomStateFrom, type ZoomState } from "./zoom.js";
+import { nextZoomFactor, zoomKeyIntent, zoomPercent, zoomStateFrom, type ZoomIntent, type ZoomState } from "./zoom.js";
 
 const here = dirname(fileURLToPath(import.meta.url));
 
@@ -129,11 +129,11 @@ function guardCloseFlush(win: BrowserWindow): void {
  */
 function registerZoomIpc(zoom: {
   state: () => ZoomState;
-  step: (intent: "in" | "out" | "reset") => void;
+  intent: (intent: ZoomIntent) => void;
 }): void {
   ipcMain.handle("desktop:get-zoom-state", () => zoom.state());
   ipcMain.handle("desktop:set-zoom", (_event, intent: unknown) => {
-    if (intent === "in" || intent === "out" || intent === "reset") zoom.step(intent);
+    if (intent === "in" || intent === "out" || intent === "reset") zoom.intent(intent);
   });
 }
 
@@ -152,7 +152,7 @@ function installMenu(
   logDir: string,
   isDev: boolean,
   onCheckUpdates: (() => void) | null,
-  zoom: { state: ZoomState; step: (direction: 1 | -1) => void; reset: () => void },
+  zoom: { state: ZoomState; intent: (intent: ZoomIntent) => void },
 ): void {
   const template: MenuItemConstructorOptions[] = [
     ...(process.platform === "darwin" ? [{ role: "appMenu" as const }] : []),
@@ -160,9 +160,9 @@ function installMenu(
     {
       label: "视图",
       submenu: [
-        { label: "放大", enabled: !zoom.state.atMax, click: () => zoom.step(1) },
-        { label: "缩小", enabled: !zoom.state.atMin, click: () => zoom.step(-1) },
-        { label: `实际大小 · ${zoom.state.percent}%`, enabled: !zoom.state.atDefault, click: () => zoom.reset() },
+        { label: "放大", enabled: !zoom.state.atMax, click: () => zoom.intent("in") },
+        { label: "缩小", enabled: !zoom.state.atMin, click: () => zoom.intent("out") },
+        { label: `实际大小 · ${zoom.state.percent}%`, enabled: !zoom.state.atDefault, click: () => zoom.intent("reset") },
       ],
     },
     {
@@ -350,8 +350,8 @@ async function openWindow(): Promise<void> {
   // 缩放状态的**唯一派生处**：菜单、IPC 读取、变更推送都读这个函数（客户端不重算）
   const zoomState = (): ZoomState => zoomStateFrom(currentZoom);
 
-  // 意图 → 档位（键位与 preload 的 `setZoom` 共用；传入值的白名单校验在 IPC 入口）
-  const stepZoom = (intent: "in" | "out" | "reset"): void => {
+  // 意图 → 档位（键位、应用菜单、preload 的 `setZoom` 共用这一处；白名单校验在 IPC 入口）
+  const stepZoom = (intent: ZoomIntent): void => {
     applyZoom(intent === "reset" ? 1 : nextZoomFactor(currentZoom, intent === "in" ? 1 : -1));
   };
 
@@ -382,8 +382,7 @@ async function openWindow(): Promise<void> {
   const rebuildMenu = (): void => {
     installMenu(root, dirname(logFile), !app.isPackaged, onCheckUpdates, {
       state: zoomState(),
-      step: (direction) => applyZoom(nextZoomFactor(currentZoom, direction)),
-      reset: () => applyZoom(1),
+      intent: stepZoom,
     });
   };
 
@@ -407,7 +406,7 @@ async function openWindow(): Promise<void> {
   rebuildMenu();
 
   // 渲染层接触缩放的三个能力（`50-desktop.md` §4.1「通道」）
-  registerZoomIpc({ state: zoomState, step: stepZoom });
+  registerZoomIpc({ state: zoomState, intent: stepZoom });
 
   console.log(
     `[desktop] 菜单已就绪（视图 / 书库 / 日志目录入口；devtools 项: ${!app.isPackaged}；检查更新项: ${onCheckUpdates !== null}）；日志: ${logFile}`,

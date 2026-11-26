@@ -8,10 +8,7 @@ import { useEffect, useState } from "react";
 import { Button } from "antd";
 import { MinusOutlined, PlusOutlined } from "@ant-design/icons";
 import { SectionCard } from "../ui/section-card";
-import { desktopBridge, type ZoomState } from "../../lib/desktop";
-
-/** 缩放意图（与 preload `setZoom` 的入参同源） */
-export type ZoomIntent = "in" | "out" | "reset";
+import { desktopBridge, type ZoomIntent, type ZoomState } from "../../lib/desktop";
 
 /** 展示层：`state === null` = 还没读到（三个按钮全禁用，文案「读取中…」） */
 export function ZoomControl({

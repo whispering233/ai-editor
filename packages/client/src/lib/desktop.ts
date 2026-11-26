@@ -2,6 +2,9 @@
 //
 // preload 只在桌面版存在（浏览器形态 = npm CLI + 浏览器，没有这个桥）。任何桌面专属 UI
 // 都必须经 `desktopBridge()` 判空决定是否渲染，浏览器形态行为因此完全不变。
+/** 缩放意图（与主进程 `zoom.ts` 的 `ZoomIntent` 同形）：通道**只收意图不收数字** */
+export type ZoomIntent = "in" | "out" | "reset";
+
 /** 界面缩放状态（与主进程 `desktop/src/zoom.ts` 的 `ZoomState` 同形）。
  * 档位表与端点判定都在主进程，客户端**不持档位表**（不出现 80 / 200 字面量）。 */
 export interface ZoomState {
@@ -25,7 +28,7 @@ export interface DesktopBridge {
   /** 当前缩放状态（百分比 + 端点）；容器挂载时读一次 */
   getZoomState(): Promise<ZoomState>;
   /** 缩放一步：**只接受意图**（`"in"` / `"out"` / `"reset"`），不收数字——档位与 clamp 在主进程 */
-  setZoom(intent: "in" | "out" | "reset"): Promise<void>;
+  setZoom(intent: ZoomIntent): Promise<void>;
   /** 订阅缩放变化（键盘 / 菜单 / 本页按钮都会触发）；返回注销函数 */
   onZoomChanged(handler: (state: ZoomState) => void): () => void;
   /** 关窗前落盘（`50-desktop.md` §1.1）：主进程拦 close 后调一次 handler，返回值即回执（`true` = 落盘成功）。

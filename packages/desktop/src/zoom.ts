@@ -51,6 +51,9 @@ export function zoomPercent(factor: number): number {
   return Math.round(factor * 100);
 }
 
+/** 缩放意图（键位 / 菜单 / preload 三处共用的唯一取值域；档位映射只在 `stepZoom`） */
+export type ZoomIntent = "in" | "out" | "reset";
+
 /**
  * 缩放状态的对外形状（菜单、IPC 下发、推送共用；渲染层也用它，但客户端**不重算**）。
  *
