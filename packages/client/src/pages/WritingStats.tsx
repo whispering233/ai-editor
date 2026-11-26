@@ -28,6 +28,8 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { MonthCalendar } from "@/components/stats/month-calendar";
 import { DailyBars } from "@/components/stats/daily-bars";
 import { YearHeatmap } from "@/components/stats/year-heatmap";
+import { GoalCard } from "@/components/stats/goal-card";
+import { useProjectStore } from "../stores/project";
 
 /** 四张摘要卡（顺序 = DESIGN.md 摘要区顺序：「今日」读服务端 today 日键） */
 const METRIC_LABELS = ["今日", "本月", "累计", "码字天数"] as const;
@@ -65,6 +67,9 @@ function StatsSkeleton() {
 }
 
 export default function WritingStats() {
+  const config = useProjectStore((s) => s.config);
+  /** 每日目标偏好按书隔离（key 里带项目 id） */
+  const projectId = config?.id ?? null;
   const [stats, setStats] = useState<WritingStatsRes | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [reloadTick, setReloadTick] = useState(0);
@@ -153,6 +158,8 @@ export default function WritingStats() {
                     ))}
                   </div>
                 )}
+
+                <GoalCard days={stats.days} today={stats.today} projectId={projectId} />
 
                 <div className="grid grid-cols-1 gap-4 @min-[720px]:grid-cols-[320px_minmax(0,1fr)]">
                   {empty ? (
