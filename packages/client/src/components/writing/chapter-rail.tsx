@@ -43,6 +43,8 @@ export interface ChapterRailProps {
   width?: number;
   /** 标题行最左的面板开关（详情列可见时 = 左钮；两页同一枚，见页面分发） */
   leading?: ReactNode;
+  /** 元信息行（今日目标一行，页面派生；不传 = 保持 24px 空带） */
+  meta?: ReactNode;
   /** 右侧详情当前是否收起（只驱动 header 按钮 / 无障碍状态；正文列由页面决定是否渲染） */
   detailCollapsed?: boolean;
   /** 切换右侧详情收起态；不传 = 不渲染该按钮（详情展开时右钮在正文页头、窄屏无相邻正文列） */
@@ -67,6 +69,7 @@ export function ChapterRail({
   className,
   width,
   leading,
+  meta,
   detailCollapsed,
   onToggleDetail,
   expectedHooks = [],
@@ -100,6 +103,7 @@ export function ChapterRail({
       <PanelHeader
         title="卷章"
         leading={leading}
+        meta={meta}
         className="mb-0"
         insetClassName={leading !== undefined || onToggleDetail !== undefined ? "px-6" : undefined}
         actions={

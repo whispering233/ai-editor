@@ -319,3 +319,25 @@ describe("ChapterRail · 已写未回收", () => {
     expect(render({ selectedId: null, writtenUnresolved: WRITTEN })).not.toContain("已写未回收");
   });
 });
+
+describe("ChapterRail · 今日目标元信息行", () => {
+  // 四种不渲染情形（目标关闭 / 未打开项目 / 拉取失败 / 无数据）在页面侧都派生成 `meta = undefined`
+  it("不传 meta → 元信息行保持 24px 空带（不留假占位）", () => {
+    expect(render()).toContain('<div class="flex h-6 min-w-0 items-center gap-2"></div>');
+  });
+
+  it("传 meta → 落在同一个 24px 行（不另起一行；页头仍是 标题 40 → 元信息 24 → 分割线）", () => {
+    const html = render({
+      meta: (
+        <span className="min-w-0 truncate text-xs tabular-nums">
+          今日 1,234 / 1,000 字 · 连续 3 天
+        </span>
+      ),
+    });
+    expect(html).toContain("今日 1,234 / 1,000 字 · 连续 3 天");
+    expect(html).toContain("flex h-6 min-w-0 items-center gap-2");
+    expect(html).not.toContain('<div class="flex h-6 min-w-0 items-center gap-2"></div>');
+    expect(html.indexOf("h-10")).toBeLessThan(html.indexOf("h-6"));
+    expect(html.indexOf("h-6")).toBeLessThan(html.indexOf("h-px"));
+  });
+});
