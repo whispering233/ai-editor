@@ -95,7 +95,9 @@ export function GoalCard({ days, today, projectId }: GoalCardProps) {
                 setWritingDays(values.filter((value): value is number => typeof value === "number"))
               }
             />
-            <div className="text-xs text-muted-foreground">未勾的日子不计入连续天数</div>
+            <div className="text-xs text-muted-foreground">
+              未勾的日子不计入连续天数；全部不勾按每天都要写处理
+            </div>
           </div>
         </div>
       )}
