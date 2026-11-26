@@ -80,11 +80,12 @@
 ### 数值单源
 
 - 任何上限 / 缺省 / 阈值 / 档位常量**只在定义处出现**：散文与注释引用常量名，不复述数字；模型需要看到的数字必须由常量**插值**进工具 `description`，并有测试断言两者同值。
-- 客户端派生（格式化 / 阈值 / 段优先级 / 热力档位 / 日历固定周数 `MONTH_CALENDAR_WEEKS`）同样单源：`client/src/lib/session-status.ts`、`client/src/lib/writing-stats.ts`；`--heat-*` 等 CSS 变量只定义在 `client/src/index.css`。
+- 客户端派生（格式化 / 阈值 / 段优先级 / 热力档位 / 日历固定周数 `MONTH_CALENDAR_WEEKS` / 目标档位 `WRITING_GOAL_PRESETS` 与连续天数）同样单源：`client/src/lib/session-status.ts`、`client/src/lib/writing-stats.ts`、`client/src/lib/writing-goal.ts`；`--heat-*` 等 CSS 变量只定义在 `client/src/index.css`。
 
 ### 前端
 
 - **保存态文案单源 = `components/ui/save-status.tsx`**（`编辑中… / 保存中… / 已保存 · HH:MM` 四态；输入即 pending）：章正文 / 参考资料 / 练习 / 自由练习四处只传状态与时刻，不各写一份 span。手动保存（按钮 / `Ctrl/Cmd+S`）成功 `showToast("已保存", "success", "save")`，自动保存**不弹**；存档三条提示用**同一个 `key: "save"`** 升级同一条（`stores/ui.ts` 的第三参 → `message.open`），否则一次快捷键会叠两条。
+- **每日目标与连续天数**：口径单源 = `client/src/lib/writing-goal.ts`（严格连续 / 写作日集合 / **今天未达标不算断签** / 空集合按全勾），组件不得另写一遍；目标与写作日是**本机偏好**（`ai-editor:writing-goal:{projectId}`，按书隔离，不进备份 / 云端 / 项目文件），**不新增表与端点**。`GET /writing-stats` 在写作页是第二个消费点，**只允许两个触发点**（进页 + 保存后节流，窗口 = `WRITING_PROGRESS_REFRESH_MS`，基准必须是「保存触发的刷新时刻」——拿进页那次请求当基准会把进页后的保存全吞掉）；达成反馈只做内联（数字主色 + `✓`），不弹 toast / 不发系统通知。
 - **本机配置文件表单写入只有一条路** = `PUT /settings/config-file/:name`（表单只负责拼文本，不自建写入 / 不新增 typed 端点）；jsonc 解析与注释计数单源 = shared `utils/jsonc.ts`（与 pi 读口径同语义，`"disabled"` 等 pi 合法但表单不表达的写法一律判解析失败并指路 JSON，不静默改写）。
 
 - 任何切换当前项目的端点之后，客户端必须收敛项目镜像（重拉 config + outline + 书架）——服务端 `currentProject` 是单例事实源，客户端只是镜像。
@@ -134,7 +135,7 @@
 - **排序键必须平台无关**：`localeCompare` 的结果取决于 ICU（Windows zh-CN）与 C locale（Linux/CI）——
   凡进入**断言**或**接口契约**（列表返回顺序）的排序一律用码元比较（`a < b ? -1 : a > b ? 1 : 0`）或 ASCII 键；
   中文名排序只允许出现在纯展示层，且不得被测试固定。已因此红过两次 CI（v0.0.66 前后各一次）。
-- 变异 / 探针验证只能用 `cp -r` 真副本或 `git worktree`，禁止硬链接副本 + 就地截断写（会写穿 inode 污染源仓库）；恢复后复跑全量回归。
+- 变异 / 探针验证只能用 `cp -r` 真副本或 `git worktree`，禁止硬链接副本 + 就地截断写（会写穿 inode 污染源仓库）；恢复后复跑全量回归。**本机不要在 `git worktree` 里跑验证**：新检出没有根 `node_modules` 与 `packages/*/dist`（都在 `.gitignore`），`pnpm -r exec` 直接拒跑（`ERR_PNPM_UNSAFE_TASK_RUN_STATE_PATH`），补齐要 `pnpm install` + `pnpm -r build`——顺序卡因此在 main 里单写者执行，worktree 只用于临时隔离改动本身。
 - **测试沙箱必须同时设 `HOME` 与 `USERPROFILE`**（Windows 的 `os.homedir()` 只读后者；只改 `HOME` 会让用例静默读写真实 `~/.pi/agent` / `~/.ai-editor/pi-agent`）。已内置 `expect(homedir()).toBe(tmp)` 守卫的 6 个文件：`routes/{chat,settings,kind-guard,practice,smoke}.test.ts`、`web-search.test.ts`；新建靠家目录隔离的用例照抄该三行。Windows 本机剩余的既有红（`EPERM` / `0600` / 本地 WebDAV 403 / 端口占用）见 `backlog.md`「开发环境」——**不能当基线**。
 
 ## 产品非目标与延期项
