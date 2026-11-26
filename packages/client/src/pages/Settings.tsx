@@ -15,6 +15,7 @@ import { LlmSection } from "../components/settings/llm-section";
 import { PiConfigSection } from "../components/settings/pi-config-section";
 import { ProjectRulesSection } from "../components/settings/project-rules-section";
 import { ShortcutsSection } from "../components/settings/shortcuts-section";
+import { ZoomPanel } from "../components/settings/zoom-panel";
 import { desktopBridge } from "../lib/desktop";
 import { useCloudStore } from "../stores/cloud";
 
@@ -39,7 +40,19 @@ export default function Settings() {
         onChange={(key) => setTab(key as TabKey)}
         items={[
           ...(bridge !== null
-            ? [{ key: "general", label: "通用", children: <LibraryLocationPanel /> }]
+            ? [
+                {
+                  key: "general",
+                  label: "通用",
+                  // 两张卡：界面缩放（高频、轻量）在前，书库位置（重操作、会重启）在后
+                  children: (
+                    <div className="flex flex-col gap-3">
+                      <ZoomPanel />
+                      <LibraryLocationPanel />
+                    </div>
+                  ),
+                },
+              ]
             : []),
           { key: "llm", label: "AI 模型", children: <LlmSection /> },
           // 「高级」两种形态都渲染：本机级配置五张卡（pi 目录 / 联网搜索 / 自定义模型 / 运行参数 / 配置文件编辑器）
