@@ -2,17 +2,43 @@
 
 只放当前 / 进行中的任务卡，完成后清卡（历史 = `CHANGELOG.md` 的逐版本段）；未排期项进 `backlog.md`。执行纪律与派工流程见 `AGENTS.md`「协作流程」。
 
-## 本轮：桌面「界面缩放」可见性 + 设置页控件（2026-12）
+## 本轮：每日目标与连续天数（客户端派生，零新增表 / 端点）
 
-契约见 `50-desktop.md` §4.1（可见性 / 设置页控制 / 通道三行）与 `../ui/DESIGN.md` 的 `zoom-panel`。
+契约（先读，卡内不得自行发明口径）：
+`docs/api/130-api-writing-stats.md`「每日目标与连续天数」→ `docs/ui/DESIGN.md`「码字统计页 · 今日目标」与 `writing-page`「卷章导航栏 · 今日目标元信息行」→ `docs/design/config.md` §1 的 `ai-editor:writing-goal:{projectId}`。
 
-- [ ] **卡 1 · 契约文档先行**：`50-desktop.md`（§3 preload 能力面、§4 原生能力表、§4.1 三行新增 + 「不做」改写、§6 客户端契约增量）、`../ui/DESIGN.md`（`zoom-panel` 条目 + `library-location` 改第二项 + toast 同槽位使用方 + 快捷键段不显示比例）、`config.md`、`AGENTS.md`、`CHANGELOG.md`。
-  - 判据：`grep` 无「preload 新增缩放通道」「设置页缩放控件」残留旧口径；四处互相一致。
-- [ ] **卡 2 · desktop 通道**：`zoom.ts` 加 `zoomStateFrom(factor)`；`main.ts` 加 `zoomState()` / `pushZoomState()` / 三个 handler（注册点前移到 `loadURL` 之前）/ `applyZoom` 末尾推送 / `installMenu` 改用 `zoomStateFrom`；`preload.cts` 加三方法；`zoom.test.ts` 补端点用例。
-  - 判据：`pnpm --filter ai-editor-desktop test` 绿 + `pnpm typecheck` 绿。
-- [ ] **卡 3 · client 设置卡**：`lib/desktop.ts` 类型 + `components/settings/zoom-panel.tsx` + `pages/Settings.tsx` 通用 tab 接线（缩放在书库位置之上）+ `zoom-panel.test.tsx`。
-  - 判据：`pnpm --filter @whispering233/ai-editor-client test` 绿 + typecheck 绿 + 无桥形态不渲染。
-- [ ] **卡 4 · client 变化提示**：`AppShell` 订阅 `onZoomChanged` → `showToast("界面缩放 N%", "info", "zoom")`。
-  - 判据：同上；无桥形态零副作用。
-- [ ] **卡 5 · 真机核验**：`pnpm --filter ai-editor-desktop start` 逐项核对（100% → `+`×2 → 卡上 125% + toast → `Ctrl+0` → 卡上回 100% + toast；端点置灰；「恢复 100%」在 100% 时置灰）。
-  - 判据：五项逐条勾 + 截图或日志。
+#### 依赖顺序与并行度
+
+- `K1 → K2 →（K3 ∥ K4）`。K1 与 K2 串行（K2 消费 K1 的常量与类型）；K3 / K4 改不同文件，可并行；基座 = K1 + K2。
+- 每卡一 commit，卡内不做卡外顺手改动。验证命令：`pnpm typecheck` / `pnpm lint` / `pnpm -r test`（单包 filter 与 package.json 的 `name` 逐字一致）。
+
+---
+
+### K1 · 目标与连续天数的纯函数 + 常量
+
+- **改动面**：新增 `packages/client/src/lib/writing-goal.ts` 与其 `.test.ts`。不改任何现有文件的行为。
+- **内容**：
+  - `WRITING_GOAL_PRESETS`（档位表，**单一定义**；首项取 `WRITING_HEAT_THRESHOLDS[1]`，**严禁写数字字面量**）。
+  - 偏好形状 `{ goal, enabled, writingDays }` + 缺省值（首档 / 开启 / 全勾）。
+  - `parseWritingGoalPreference(raw)`：坏 JSON / 缺字段 / 非有限 / 负数 / 非法周序号 → 回落缺省。
+  - `goalProgress(days, today, goal)` → `{ chars, reached }`；`currentStreak(days, today, goal, writingDays)` → 天数；写作日判定（空集合按全勾）。
+- **口径（不得偏离）**：严格连续；未勾的写作日既不要求也不中断；`today` 尚未达标不算断签；只消费 `days[]` + `today`，**不自行生成「今天」**。
+- **判据**：单测覆盖 断日 / 跨月 / 闰日 / 未勾写作日 / 今天未达标 / 空 `days` / 坏偏好 / 空 `writingDays`。`pnpm typecheck` + `pnpm lint` + `pnpm --filter ai-editor-client test` 绿。
+
+### K2 · 目标偏好 hook
+
+- **改动面**：新增 `packages/client/src/hooks/use-writing-goal.ts`（照 `use-setting-desc.ts` 模板：解析纯函数 + 读写 `try/catch`，隐私模式静默）。
+- **内容**：key = `ai-editor:writing-goal:{projectId}`（**按书隔离**，`projectId` 变化即重读）；对外给 `{ preference, setGoal, setEnabled, setWritingDays }`；写回走 K1 的解析归一。
+- **判据**：无 localStorage / 坏值 / 切书三种情形行为明确（坏值回落缺省、不抛）；`pnpm typecheck` + `pnpm lint` + `pnpm --filter ai-editor-client test` 绿。
+
+### K3 · 统计页「今日目标」卡
+
+- **改动面**：`packages/client/src/pages/WritingStats.tsx` + 新建 `packages/client/src/components/stats/goal-card.tsx`（+ SSR 走查测试）。
+- **内容（照 `DESIGN.md`「码字统计页 · 今日目标」，逐条对齐）**：位置 = 摘要四卡之后、码字日历之前；关闭态整卡只留标题 + 「每日目标已关闭」，**开关仍在**；进度条自绘（宽度百分比 + `bg-primary`，**不引入 antd `Progress`**）；`{今日字数} / {目标} 字` + `连续 N 天`；达标态主色 + `✓`；`Segmented` 档位（常量取值）+ 写作日 `Checkbox.Group`。今日 0 字照常渲染，不打 `EmptyState`。**达成不弹 toast、不发系统通知**。
+- **判据**：契约要素全部到位且有 SSR 走查断言；不新增色值 / 字号（`design-discipline.test.ts` / `antd-tokens.test.ts` 绿）；三命令全绿。
+
+### K4 · 写作页 rail 元信息行「今日目标」
+
+- **改动面**：写作页 rail 页头（`packages/client/src/pages/Writing.tsx` / `components/manuscript/` 下承载 `PanelHeader` 的组件）+ 节流判定的纯函数与单测。
+- **内容（照 `DESIGN.md` `writing-page`「卷章导航栏 · 今日目标元信息行」）**：`今日 {已写} / {目标} 字 · 连续 {N} 天`，`caption-text` + `tabular-nums` + 单行 `truncate`；达标态主色 + `✓`。数据源 = `GET /writing-stats` 的**第二个消费点**：进页拉一次 + 保存成功后按节流窗口刷新（窗口常量单源）；**不做**「服务端 today + 客户端本次增量」相加。目标关闭 / 未打开项目 / 拉取失败 / 无数据 → 整行不渲染（失败静默）。**不加任何浮层**。
+- **判据**：节流判定是纯函数且有单测；行在四种不渲染情形下确实不渲染（SSR 走查）；三命令全绿。
