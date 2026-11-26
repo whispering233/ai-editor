@@ -15,6 +15,7 @@ import { usePanels } from "../hooks/use-panels";
 import { useCloudStore } from "../stores/cloud";
 import { useProjectStore } from "../stores/project";
 import { useSaveArchive } from "../hooks/use-save-archive";
+import { useZoomNotice } from "../hooks/use-zoom-notice";
 import { useUiStore } from "../stores/ui";
 import { cn } from "../lib/utils";
 import { desktopBridge } from "../lib/desktop";
@@ -54,6 +55,9 @@ export function AppShell({ route, children }: { route: Route; children: ReactNod
     if (!bridge) return;
     return bridge.onFlushRequest(() => flushSucceeded(triggerSaveShortcut()));
   }, []);
+
+  // 界面缩放的变化提示（`50-desktop.md` §4.1「可见性」）：三个入口都经主进程推送落到这里
+  useZoomNotice();
 
   // 整栏快捷键（卡 L2，DESIGN.md §Layout「三栏」）：仅桌面 + 非专注模式注册；
   // 可编辑区不抢键（块编辑器 Mod+B 保持加粗），口径与判定同在 lib/panel-shortcuts
