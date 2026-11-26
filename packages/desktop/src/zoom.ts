@@ -51,6 +51,36 @@ export function zoomPercent(factor: number): number {
   return Math.round(factor * 100);
 }
 
+/** 缩放意图（键位 / 菜单 / preload 三处共用的唯一取值域；档位映射只在 `stepZoom`） */
+export type ZoomIntent = "in" | "out" | "reset";
+
+/**
+ * 缩放状态的对外形状（菜单、IPC 下发、推送共用；渲染层也用它，但客户端**不重算**）。
+ *
+ * 三个端点布尔是给调用方的「还能不能动」信号：客户端据此置灰按钮，从而不需要在渲染层持一份
+ * `ZOOM_FACTORS`（数值单源：档位表只在本文件）。
+ */
+export interface ZoomState {
+  /** 百分比整数（如 125） */
+  percent: number;
+  /** 已在阶梯最小档 */
+  atMin: boolean;
+  /** 已在阶梯最大档 */
+  atMax: boolean;
+  /** 已在 100%（「恢复 100%」无事可做） */
+  atDefault: boolean;
+}
+
+/** 当前因子 → 对外状态（端点判定只在处；比较走 `ZOOM_EPSILON`，因为 1.1 会读回 1.0999999999999999） */
+export function zoomStateFrom(factor: number): ZoomState {
+  return {
+    percent: zoomPercent(factor),
+    atMin: Math.abs(factor - ZOOM_FACTORS[0]) <= ZOOM_EPSILON,
+    atMax: Math.abs(factor - ZOOM_FACTORS[ZOOM_FACTORS.length - 1]) <= ZOOM_EPSILON,
+    atDefault: Math.abs(factor - 1) <= ZOOM_EPSILON,
+  };
+}
+
 /**
  * 缩放键位判定（`50-desktop.md` §4.1）：`Ctrl/Cmd + =` 放大、`-` 缩小、`0` 回 100%。
  *

@@ -28,7 +28,7 @@ import {
 import { logFilePath, redirectConsoleToFile } from "./log.js";
 import { shouldCloseServerOnBeforeQuit, shouldSkipFlushOnClose } from "./quit-sequence.js";
 import { checkForUpdatesManually, isUpdateSupported, setupAutoUpdate } from "./updater.js";
-import { ZOOM_FACTORS, nextZoomFactor, zoomKeyIntent, zoomPercent } from "./zoom.js";
+import { nextZoomFactor, zoomKeyIntent, zoomPercent, zoomStateFrom, type ZoomIntent, type ZoomState } from "./zoom.js";
 
 const here = dirname(fileURLToPath(import.meta.url));
 
@@ -123,6 +123,21 @@ function guardCloseFlush(win: BrowserWindow): void {
 }
 
 /**
+ * 渲染层接触缩放的三个能力（`50-desktop.md` §4.1「通道」）：读状态 / 下意图（变更由 `applyZoom` 的
+ * `pushZoomState` 发，不走 handler）。**只收意图不收数字**：档位、clamp、写盘都留在主进程。
+ * ⚠ 必须在 `loadURL` 之前调用：`AppShell` 开机即订阅，晚注册会让渲染侧拿到 `No handler registered`。
+ */
+function registerZoomIpc(zoom: {
+  state: () => ZoomState;
+  intent: (intent: ZoomIntent) => void;
+}): void {
+  ipcMain.handle("desktop:get-zoom-state", () => zoom.state());
+  ipcMain.handle("desktop:set-zoom", (_event, intent: unknown) => {
+    if (intent === "in" || intent === "out" || intent === "reset") zoom.intent(intent);
+  });
+}
+
+/**
  * 最小应用菜单。**Edit 角色不是装饰**：macOS 上不设菜单 ⇒ Cmd+C/V 失效（输入框全废）。
  * 自有条目 = 「视图」（界面缩放三项）+ 两个目录入口（书库/日志）+ 「帮助」（版本可见性 + 检查更新）；
  * devtools 仅在未打包态出现。`onCheckUpdates` 为 null = 当前平台没有更新能力（菜单项不出现，
@@ -130,27 +145,24 @@ function guardCloseFlush(win: BrowserWindow): void {
  *
  * 缩放项**不挂 `accelerator`**（`50-desktop.md` §4.1）：键位由 `before-input-event` 判，两边都挂会双触发；
  * 菜单只负责可见状态（当前百分比 + 端点置灰），所以每次档位变化重建一次——`Menu.setApplicationMenu`
- * 是主进程内同步调用，零 IPC。
+ * 是主进程内同步调用，零 IPC。端点判定与设置页下发同源（`zoomStateFrom`），菜单不另算上下限。
  */
 function installMenu(
   libraryRoot: string,
   logDir: string,
   isDev: boolean,
   onCheckUpdates: (() => void) | null,
-  zoom: { percent: number; step: (direction: 1 | -1) => void; reset: () => void },
+  zoom: { state: ZoomState; intent: (intent: ZoomIntent) => void },
 ): void {
-  // 上下限从档位表派生（不在菜单里写 80 / 200 字面量）
-  const minPercent = zoomPercent(ZOOM_FACTORS[0]);
-  const maxPercent = zoomPercent(ZOOM_FACTORS[ZOOM_FACTORS.length - 1]);
   const template: MenuItemConstructorOptions[] = [
     ...(process.platform === "darwin" ? [{ role: "appMenu" as const }] : []),
     { role: "editMenu" },
     {
       label: "视图",
       submenu: [
-        { label: "放大", enabled: zoom.percent < maxPercent, click: () => zoom.step(1) },
-        { label: "缩小", enabled: zoom.percent > minPercent, click: () => zoom.step(-1) },
-        { label: `实际大小 · ${zoom.percent}%`, enabled: zoom.percent !== 100, click: () => zoom.reset() },
+        { label: "放大", enabled: !zoom.state.atMax, click: () => zoom.intent("in") },
+        { label: "缩小", enabled: !zoom.state.atMin, click: () => zoom.intent("out") },
+        { label: `实际大小 · ${zoom.state.percent}%`, enabled: !zoom.state.atDefault, click: () => zoom.intent("reset") },
       ],
     },
     {
@@ -308,7 +320,7 @@ async function openWindow(): Promise<void> {
   libraryRoot = root;
 
   // 缩放起点 = 盘上的值（`resolveLibraryRoot` 的自愈分支刚可能写过盘，所以在那之后读）。
-  // 本次会话的权威值只在内存 `currentZoom`（`preload` 零新通道：主进程自己知道当前值）。
+  // 本次会话的权威值只在内存 `currentZoom`；可见面（菜单 / 设置页卡 / toast）都读下面的 `zoomState()`。
   const configFile = desktopConfigPath(userData);
   let currentZoom = readDesktopConfig(configFile)?.zoom ?? 1;
 
@@ -335,7 +347,20 @@ async function openWindow(): Promise<void> {
     ? () => void checkForUpdatesManually({ win, closeServer, logFile })
     : null;
 
-  // 改缩放的唯一入口（键位与菜单都走这里）：值没变就直接返回，**不重复写盘**——
+  // 缩放状态的**唯一派生处**：菜单、IPC 读取、变更推送都读这个函数（客户端不重算）
+  const zoomState = (): ZoomState => zoomStateFrom(currentZoom);
+
+  // 意图 → 档位（键位、应用菜单、preload 的 `setZoom` 共用这一处；白名单校验在 IPC 入口）
+  const stepZoom = (intent: ZoomIntent): void => {
+    applyZoom(intent === "reset" ? 1 : nextZoomFactor(currentZoom, intent === "in" ? 1 : -1));
+  };
+
+  // 每次档位变化推一次给渲染层（设置页卡与全局提示的同一源）。窗口可能已销毁（关窗竞态）。
+  const pushZoomState = (): void => {
+    if (!win.isDestroyed()) win.webContents.send("desktop:zoom-changed", zoomState());
+  };
+
+  // 改缩放的唯一入口（键位、菜单、设置页三处都走这里）：值没变就直接返回，**不重复写盘**——
   // 端点连按不该把 desktop.json 翻来覆去重写（`nextZoomFactor` 已在两端夹住）
   const applyZoom = (next: number): void => {
     if (next === currentZoom) return;
@@ -351,13 +376,13 @@ async function openWindow(): Promise<void> {
       );
     }
     rebuildMenu(); // 「实际大小 · N%」与端点置灰跟着值走
+    pushZoomState();
   };
 
   const rebuildMenu = (): void => {
     installMenu(root, dirname(logFile), !app.isPackaged, onCheckUpdates, {
-      percent: zoomPercent(currentZoom),
-      step: (direction) => applyZoom(nextZoomFactor(currentZoom, direction)),
-      reset: () => applyZoom(1),
+      state: zoomState(),
+      intent: stepZoom,
     });
   };
 
@@ -375,10 +400,14 @@ async function openWindow(): Promise<void> {
     });
     if (intent === null) return;
     event.preventDefault();
-    applyZoom(intent === "reset" ? 1 : nextZoomFactor(currentZoom, intent === "in" ? 1 : -1));
+    stepZoom(intent);
   });
 
   rebuildMenu();
+
+  // 渲染层接触缩放的三个能力（`50-desktop.md` §4.1「通道」）
+  registerZoomIpc({ state: zoomState, intent: stepZoom });
+
   console.log(
     `[desktop] 菜单已就绪（视图 / 书库 / 日志目录入口；devtools 项: ${!app.isPackaged}；检查更新项: ${onCheckUpdates !== null}）；日志: ${logFile}`,
   );
