@@ -128,10 +128,12 @@ export default function Writing({ chapterId }: { chapterId?: string }) {
   const { preference: goalPreference } = useWritingGoal(projectId);
   const [progressTick, setProgressTick] = useState(0);
   // 触发点只有两个：进页一次 + 保存后过节流窗口（`shouldRefreshProgress`）；目标关闭 / 无项目不发请求
-  const { stats: progressStats, lastFetchedAt } = useWritingProgress({
+  const { stats: progressStats } = useWritingProgress({
     enabled: projectId !== null && goalPreference.enabled,
     tick: progressTick,
   });
+  // 节流基准只记「保存触发的刷新」：进页那次请求**不占**窗口，否则进页 60s 内的保存全被吞掉
+  const lastProgressRefreshAt = useRef<number | null>(null);
   // 一行文案的派生已含四种不渲染情形（未打开项目 / 拉取失败 / 目标关闭 / 无数据 ⇒ null）
   const progressMeta = writingProgressMeta(progressStats, goalPreference);
 
@@ -322,7 +324,9 @@ export default function Writing({ chapterId }: { chapterId?: string }) {
                 documentUpdatedAt: updatedAt,
               });
               // 今日目标行按节流窗口刷新（不是每保存一次就发一次请求）
-              if (shouldRefreshProgress(lastFetchedAt(), Date.now())) {
+              const now = Date.now();
+              if (shouldRefreshProgress(lastProgressRefreshAt.current, now)) {
+                lastProgressRefreshAt.current = now;
                 setProgressTick((tick) => tick + 1);
               }
             }}

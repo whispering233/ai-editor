@@ -17,8 +17,6 @@ export interface WritingProgressOptions {
 export interface WritingProgressSession {
   /** 服务端统计（未启用 / 未就绪 / 失败 = `null`） */
   stats: WritingStatsRes | null;
-  /** 最近一次发起拉取的时刻（ms）；未拉过 = `null`——页面保存后拿它做节流判定 */
-  lastFetchedAt: () => number | null;
 }
 
 export function useWritingProgress({
@@ -26,19 +24,16 @@ export function useWritingProgress({
   tick,
 }: WritingProgressOptions): WritingProgressSession {
   const [stats, setStats] = useState<WritingStatsRes | null>(null);
-  const lastFetchedAtRef = useRef<number | null>(null);
   // 关掉 / 换触发点后丢弃在途响应（不让旧结果覆盖 `null`）
   const seqRef = useRef(0);
 
+  // 依赖里没有 `projectId`：换书只发生在书架 / 首页（导航后本页重挂），页内不会换书
   useEffect(() => {
     const seq = ++seqRef.current;
     if (!enabled) {
-      lastFetchedAtRef.current = null;
       setStats(null);
       return;
     }
-    // 记在发起时刻：窗口内连续保存不再叠加请求（即使这次失败，也等窗口过去再试）
-    lastFetchedAtRef.current = Date.now();
     getWritingStats().then(
       (res) => {
         if (seqRef.current === seq) setStats(res);
@@ -49,5 +44,5 @@ export function useWritingProgress({
     );
   }, [enabled, tick]);
 
-  return { stats, lastFetchedAt: () => lastFetchedAtRef.current };
+  return { stats };
 }
