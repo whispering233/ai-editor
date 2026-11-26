@@ -119,13 +119,13 @@
 设计契约见 `docs/design/50-desktop.md`；实现侧不可省：
 
 - preload 必须 CJS（源文件 `preload.cts`，`sandbox: true` 是既定基线），主进程 ESM；服务走主进程 in-process `startServer()`（不开子进程），退出复用 `ServerHandle.close()`；窗口加载 `http://127.0.0.1:<实际端口>`，**端口分段单源 = shared `constants/ports.ts`**（server / `vite.config` / desktop 全部派生，禁止复述字面量）。
-- 应用级配置唯一载体 = `<userData>/desktop.json`；桌面包不得依赖 `process.cwd()` / 命令行参数；日志落 `<userData>/logs/ai-editor.log`；**preload 能力面 = `pickDirectory()` / `getLibraryRoot()` / `changeLibraryRoot()` + 关窗落盘的 `onFlushRequest()`**（不暴露 fs / shell / ipcRenderer 原语）。
+- 应用级配置唯一载体 = `<userData>/desktop.json`；桌面包不得依赖 `process.cwd()` / 命令行参数；日志落 `<userData>/logs/ai-editor.log`；**preload 能力面 = `pickDirectory()` / `getLibraryRoot()` / `changeLibraryRoot()` / 关窗落盘的 `onFlushRequest()` / 缩放的 `getZoomState()` + `setZoom()` + `onZoomChanged()`**（不暴露 fs / shell / ipcRenderer 原语）。
 - **退出必须经 flush 通道**：关窗先拦一次、请渲染侧落盘（`desktop:flush-request` / `desktop:flush-done`，成败判定单源 = `client/src/lib/desktop-flush.ts` 的 `flushSucceeded`），**不得在 `before-quit` 里抢跑 `closeServer()`**——落盘要打 HTTP，服务端得活到那时（菜单「退出」下 `before-quit` 先于窗口 close）；因此 `before-quit` **只在无窗口时**才关服务端，判定单源 = `quit-sequence.ts` 的 `shouldCloseServerOnBeforeQuit`。
 - 打包不可省：`pnpm deploy --prod` + `npmRebuild: false` + 显式 `linux.executableName`（scope 名里的 `@` 会被 AppImage 工具链拒收）；Electron 42+ 无 postinstall（懒下载，install 阶段不要依赖它存在）。
 - `electron-updater` 是 CJS ⇒ 必须默认导入 + 解构（具名导入在打包态直接崩、typecheck 不报）；只在 Windows 安装态、用户确认后先 `await closeServer()` 再 `quitAndInstall(true, true)`。
 - 升级路径守卫不可回退：`installer.nsh` 的 `customUnInstall` 开头保留 `${If} ${isUpdated}` / `${If} ${Silent}` 早退（漏掉会在升级时弹「清除使用数据」）。卸载清理删目录前**必须先验签名文件** `<书库>/.ai-editor/library.json`——书库目录名是通用名，按名 `RMDir /r` 会误删用户自建的同名目录；`<userData>` 存在性检查用 `desktop.json`。
 - 打包分工：本地只打 Linux 包自查，Windows 包只由 CI 出（本地交叉需 Wine）；workflow 不写 pnpm `version`（从根 `packageManager` 读）。
-- **界面缩放只在主进程**：`Ctrl/Cmd + = / - / 0` 由 `webContents` 的 `before-input-event` 判定（纯函数 `zoomKeyIntent`），档位阶梯单源 = `desktop/src/zoom.ts` 的 `ZOOM_FACTORS`（菜单项也不得写百分比字面量）；**client 禁止拦这三组键**（浏览器形态交给原生缩放，设置页清单只是 `desktopOnly` 展示）。缩放**只能在 `did-finish-load` 里设**（`loadURL` 前是空操作、每次导航都会重置），窗口 `show: false` 到那次重放之后再显示；`desktop.json` 的 `zoom` 是**必填**键——`writeDesktopConfig` 整对象覆写，任何新增写入点漏带就是「缩放静默重置回 100%」，且不报错。
+- **界面缩放的写入口只在主进程**：键位（`Ctrl/Cmd + = / - / 0`，`before-input-event` + 纯函数 `zoomKeyIntent`）、应用菜单、设置页「通用 → 界面缩放」卡三者都落到 `applyZoom`；档位阶梯单源 = `desktop/src/zoom.ts` 的 `ZOOM_FACTORS`（菜单与卡片都不得写百分比字面量）。渲染层只经三个 preload 能力接触缩放：`getZoomState()` / `setZoom("in"|"out"|"reset")`（**只收意图、不收数字**；端点由主进程下发 `atMin` / `atMax` / `atDefault`）/ `onZoomChanged(handler)`；**三个 handler 的注册点必须在 `loadURL` 之前**（`AppShell` 开机即订阅）。比例显示面**只两个**（卡片常驻 + 变化 toast，同 `key: "zoom"`；「快捷键」tab 不显示）；**client 禁止拦这三组键**（浏览器形态交给原生缩放，设置页清单只是 `desktopOnly` 展示）。缩放**只能在 `did-finish-load` 里设**（`loadURL` 前是空操作、每次导航都会重置），窗口 `show: false` 到那次重放之后再显示；`desktop.json` 的 `zoom` 是**必填**键——`writeDesktopConfig` 整对象覆写，任何新增写入点漏带就是「缩放静默重置回 100%」，且不报错。
 
 ### 测试与验证
 

@@ -720,13 +720,15 @@ components:
 **`proposal-card`（提案组卡，2026-11）** — 一轮的全部提案合并为一张组卡（单条也同形态）：头部 = 灯泡图标 + `本轮提案 · N 条（M 待处理）` + 右侧「全部确认 / 全部拒绝」（仅有 pending 时可用）；行 = 图标 + 类型中文名 + 摘要首行（truncate）+ 状态 + 行尾逐条「确认 / 拒绝」；点行展开该提案的完整预览。组卡沿用现有 1px `{colors.primary}` 25% 描边 + primary 5% 淡底；确认按钮 `button-primary`，拒绝 `button-default`。批量执行 = 客户端串行调用现有 confirm/reject 端点（无服务端批量端点），逐条记账、失败继续、成功只刷新一次数据、结束一条汇总 toast。YOLO 自动确认走同一条批量路径。
 
 **历史提案卡（2026-11）** — 每条 assistant 消息的正文之后，若该消息的 `toolCalls` 含 `propose_*`，渲染一张只读历史卡：头部 = 灯泡 + `历史提案 · N 条（只读）`；行 = 类型中文名 + 摘要首行（truncate），点行展开参数摘要；**不显示确认/拒绝状态、不提供按钮、不做名称解析**（参数里的 id 原样展示）。历史卡只从会话消息的 `toolCalls` 重建，不新增持久化；live 组卡按 `toolCallId` 去重（live 提案对应的历史行不渲染），不按消息位置猜测。消息内顺序扩展为 思考 → 工具行 → 正文 → 历史提案卡；历史卡沿用组卡的描边/淡底，不再引入新色。
-**`toast`** — 全局提示走 antd `message`（`App.useApp()`），顶部居中；`success/error/info` 对应 store 的 `ToastKind`，时长由 store 的 3s 定时器决定（`duration: 3` 对齐）。**命令式反馈的上下文入口**：`AntdProvider` 在 `ConfigProvider` 内部包 `<App component={false}>`（`component={false}` 不渲染包裹 div，不插进三栏 flex 链）——`message`/`notification`/`modal` 需经 `App.useApp()` 取实例才能继承本 Provider 的主题与 locale，不要用静态方法。**同槽位升级（2026-11）**：`showToast(text, kind?, key?)` 的 `key` 透传 `message.open({ key, type, content, duration })`——同 key 的提示**替换**而非叠加；唯一使用方 = 手动保存（保存入口弹「已保存」，存档阶段用同一 `key` 把它升级为「已保存并生成存档」/ 节流文案 / 存档错误 ⇒ 一次 `Ctrl/Cmd+S` 只有一条提示）。**自动保存不弹 toast**（1.5s 一次的噪音），它的反馈由 `save-status` 的文字承担。
+**`toast`** — 全局提示走 antd `message`（`App.useApp()`），顶部居中；`success/error/info` 对应 store 的 `ToastKind`，时长由 store 的 3s 定时器决定（`duration: 3` 对齐）。**命令式反馈的上下文入口**：`AntdProvider` 在 `ConfigProvider` 内部包 `<App component={false}>`（`component={false}` 不渲染包裹 div，不插进三栏 flex 链）——`message`/`notification`/`modal` 需经 `App.useApp()` 取实例才能继承本 Provider 的主题与 locale，不要用静态方法。**同槽位升级（2026-11）**：`showToast(text, kind?, key?)` 的 `key` 透传 `message.open({ key, type, content, duration })`——同 key 的提示**替换**而非叠加；使用方两处：手动保存（保存入口弹「已保存」，存档阶段用同一 `key` 把它升级为「已保存并生成存档」/ 节流文案 / 存档错误 ⇒ 一次 `Ctrl/Cmd+S` 只有一条提示）与界面缩放（`key: "zoom"`，每次档位变化把它升级为当前百分比，见 `zoom-panel`；连按 `Ctrl/Cmd + =` 只看到一条在跳数字）。**自动保存不弹 toast**（1.5s 一次的噪音），它的反馈由 `save-status` 的文字承担。
 
 ### 设置页「通用」区（桌面版专属）
 
 **`tab-general`（设置页二级 tab「通用」，2026-09）** — 设置页二级 tab 顺序 = **通用 → AI 模型 → 高级 → 项目规则 → 备份 → 快捷键**；**「通用」仅在桌面版渲染**（client 能力检测：无 preload 桥则整个 tab 不出现，浏览器形态的 tab 集合与行为完全不变）。「高级」与「快捷键」两形态恒在（前者是本机级配置，后者是纯说明页），「快捷键」恒在末位——详见下节。
 
-**`library-location`（通用 tab 首项，也是当前唯一项）** — 一张 `card`：`section-title`「书库位置」+ 当前路径只读文本（`caption-text` + 超宽 `truncate` + `title` 给全文）+ 行尾 `button-default`「更改…」；卡片底部一行 `caption-text` 说明（更改后应用会重启）。点击「更改…」→ 原生目录框（preload `pickDirectory`）→ 确认后写应用级配置并重启应用。**不新增视觉语言**（全部复用 `card` / `section-title` / `caption-text` / `button-default`）。
+**`zoom-panel`（通用 tab 首项，2026-12）** — 一张 `card`：`section-title`「界面缩放」+ 一行 `caption-text` 说明（作用于整个界面；正文视觉字号另由写作设置决定）+ 行内控件 = `button-default` 图标按钮「−」（`aria-label` 缩小界面）+ 当前百分比文本（`text-sm`、`tabular-nums`、`aria-live="polite"`）+ 图标按钮「+」（`aria-label` 放大界面），到端点时对应按钮置灰；其后「恢复 100%」（`button-default`，已在 100% 时置灰）。**控件形态与主进程「视图」菜单同形**（逐档步进，不铺 8 档 Segmented），避免两套交互词汇；比例与端点来自 preload `getZoomState()` 下发的 `percent / atMin / atMax / atDefault`，本页**不持档位表**（不出现 80 / 200 字面量）。每次档位变化另弹一条全局 `toast`（`key: "zoom"`，见 `toast`）。**不新增视觉语言**（复用 `card` / `section-title` / `caption-text` / `button-default`）。
+
+**`library-location`（通用 tab 第二项，2026-09）** — 一张 `card`：`section-title`「书库位置」+ 当前路径只读文本（`caption-text` + 超宽 `truncate` + `title` 给全文）+ 行尾 `button-default`「更改…」；卡片底部一行 `caption-text` 说明（更改后应用会重启）。点击「更改…」→ 原生目录框（preload `pickDirectory`）→ 确认后写应用级配置并重启应用。**不新增视觉语言**（全部复用 `card` / `section-title` / `caption-text` / `button-default`）。
 
 **`dashboard-open-path`（书架页「打开其他路径」行，2026-09）** — 原有手输路径 `input` 保留；在其右侧追加 `button-default`「浏览…」（**仅桌面版渲染**，同能力检测）→ 原生目录框 → 选中后直接以该路径打开项目。手输框与按钮同行：**输入框外包一个 `flex-1` 容器**（不给 antd `Input` 挂布局类——`antd-root-override` 守卫禁止在 antd 组件根元素上挂会被无层 CSS 压掉的类；按钮不挂类，自然尺寸）；浏览器形态只有输入框（现有布局不变）。
 
@@ -746,7 +748,7 @@ components:
 
 **组合键文案按当前系统平台化**（Apple = `⌘ + S`，Windows / Linux = `Ctrl + S`），判定与展示的单一来源 = `lib/shortcuts.ts`（纯函数 + 清单常量），**不复用 `@blocknote/core` 的 `formatKeyboardShortcut`**（那会把整块编辑器库拖进设置页 chunk；两者口径一致：Apple → ⌘，其余 → Ctrl）。**清单里的键位引用真实绑定用的常量**（`save-shortcut.ts` 的 `SAVE_SHORTCUT_KEY`、`panel-shortcuts.ts` 的 `PANEL_SHORTCUT_KEY`），不允许清单与绑定各写一份字面量；带 Shift 的条目（右栏 `Ctrl + Shift + B`）由 `ShortcutEntry.shift` 表达。
 
-**界面缩放（仅桌面形态，2026-11）** — 清单追加三条：`Ctrl + =` 放大界面 / `Ctrl + -` 缩小界面 / `Ctrl + 0` 恢复 100%。条目带 `desktopOnly` 标记，渲染时按 `desktopBridge()` 非空过滤——浏览器形态不出现（免得用户以为键坏了），与「通用」tab 只在桌面形态出现的口径一致。**键位判定不在渲染层**（主进程 `before-input-event`，不挂菜单 accelerator）；档位阶梯、持久化与窄屏翻档口径见 `../design/50-desktop.md` §4.1，本文件只管清单文案与可见性。
+**界面缩放（仅桌面形态，2026-11）** — 清单追加三条：`Ctrl + =` 放大界面 / `Ctrl + -` 缩小界面 / `Ctrl + 0` 恢复 100%。条目带 `desktopOnly` 标记，渲染时按 `desktopBridge()` 非空过滤——浏览器形态不出现（免得用户以为键坏了），与「通用」tab 只在桌面形态出现的口径一致。**键位判定不在渲染层**（主进程 `before-input-event`，不挂菜单 accelerator）；档位阶梯、持久化与窄屏翻档口径见 `../design/50-desktop.md` §4.1，本文件只管清单文案与可见性。**本页不显示当前比例**（纯说明页仍是纯说明页）：比例的显示面只有「通用 → `zoom-panel`」卡片与缩放变化时的 toast。
 
 **Ctrl/Cmd + S（全站「保存 + 本地存档」，2026-09）** — 任意页面按 Ctrl/Cmd + S = 先执行当前页面的保存动作（正文页 = 用最新内容立即 PUT，不等自动保存计时器；行内编辑态 = 先提交该行；本页无保存动作 = 直接进入下一步），**保存成功后再**生成一份手动备份（与设置页「立即备份」同管道，落 `.backups/`；开云端自动推送时随之推送）。四条边界：
 
