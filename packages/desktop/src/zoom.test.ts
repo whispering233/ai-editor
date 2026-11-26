@@ -1,7 +1,7 @@
 // 界面缩放档位单测：钉住 `50-desktop.md` §4.1 那张表的字面值，以及主进程接线依赖的三条判定
 // （读回容差、严格跨档、端点夹住）。改档位先改文档那张表，再改这里。
 import { describe, expect, it } from "vitest";
-import { ZOOM_EPSILON, ZOOM_FACTORS, isZoomFactor, nextZoomFactor, zoomKeyIntent, zoomPercent } from "./zoom.js";
+import { ZOOM_EPSILON, ZOOM_FACTORS, isZoomFactor, nextZoomFactor, zoomKeyIntent, zoomPercent, zoomStateFrom } from "./zoom.js";
 
 describe("ZOOM_FACTORS", () => {
   it("与 50-desktop.md §4.1 的档位表逐项同值（80/90/100/110/125/150/175/200 %）", () => {
@@ -140,5 +140,31 @@ describe("zoomKeyIntent", () => {
   it("其它按键不吃（Ctrl+C 等必须照常传到渲染层）", () => {
     expect(zoomKeyIntent(keyInput({ key: "c", code: "KeyC", control: true }))).toBeNull();
     expect(zoomKeyIntent(keyInput({ key: "?", code: "Slash", control: true }))).toBeNull();
+  });
+});
+
+describe("zoomStateFrom", () => {
+  it("100%：既不到端点也不可重置（atDefault = true 才是「恢复 100%」置灰的依据）", () => {
+    expect(zoomStateFrom(1)).toEqual({ percent: 100, atMin: false, atMax: false, atDefault: true });
+  });
+
+  it("两端端点从档位表派生（不在断言里另写 80 / 200）", () => {
+    expect(zoomStateFrom(ZOOM_FACTORS[0])).toEqual({ percent: 80, atMin: true, atMax: false, atDefault: false });
+    expect(zoomStateFrom(ZOOM_FACTORS[ZOOM_FACTORS.length - 1])).toEqual({
+      percent: 200,
+      atMin: false,
+      atMax: true,
+      atDefault: false,
+    });
+  });
+
+  it("中间档三个端点都 false", () => {
+    expect(zoomStateFrom(1.25)).toEqual({ percent: 125, atMin: false, atMax: false, atDefault: false });
+  });
+
+  it("浮点反算值按容差归位（1.0999999999999999 不因严格相等而丢掉端点判定）", () => {
+    expect(zoomStateFrom(1.0999999999999999).percent).toBe(110);
+    expect(zoomStateFrom(0.7999999999999999).atMin).toBe(true);
+    expect(zoomStateFrom(1.0000000001).atDefault).toBe(true);
   });
 });
