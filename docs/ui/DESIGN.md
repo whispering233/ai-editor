@@ -727,7 +727,7 @@ components:
 
 **`tab-general`（设置页二级 tab「通用」，2026-09）** — 设置页二级 tab 顺序 = **通用 → AI 模型 → 高级 → 项目规则 → 备份 → 快捷键**；**「通用」仅在桌面版渲染**（client 能力检测：无 preload 桥则整个 tab 不出现，浏览器形态的 tab 集合与行为完全不变）。「高级」与「快捷键」两形态恒在（前者是本机级配置，后者是纯说明页），「快捷键」恒在末位——详见下节。
 
-**`zoom-panel`（通用 tab 首项，2026-12）** — 一张 `card`：`section-title`「界面缩放」+ 一行 `caption-text` 说明（作用于整个界面；正文视觉字号另由写作设置决定）+ 行内控件 = `button-default` 图标按钮「−」（`aria-label` 缩小界面）+ 当前百分比文本（`text-sm`、`tabular-nums`、`aria-live="polite"`）+ 图标按钮「+」（`aria-label` 放大界面），到端点时对应按钮置灰；其后「恢复 100%」（`button-default`，已在 100% 时置灰）。**控件形态与主进程「视图」菜单同形**（逐档步进，不铺 8 档 Segmented），避免两套交互词汇；比例与端点来自 preload `getZoomState()` 下发的 `percent / atMin / atMax / atDefault`，本页**不持档位表**（不出现 80 / 200 字面量）。每次档位变化另弹一条全局 `toast`（`key: "zoom"`，见 `toast`）。**不新增视觉语言**（复用 `card` / `section-title` / `caption-text` / `button-default`）。
+**`zoom-panel`（通用 tab 首项，2026-11）** — 一张 `card`：`section-title`「界面缩放」+ 一行 `caption-text` 说明（作用于整个界面；正文视觉字号另由写作设置决定）+ 行内控件 = `button-default` 图标按钮「−」（`aria-label` 缩小界面）+ 当前百分比文本（`text-sm`、`tabular-nums`、`aria-live="polite"`）+ 图标按钮「+」（`aria-label` 放大界面），到端点时对应按钮置灰；其后「恢复 100%」（`button-default`，已在 100% 时置灰）。**控件形态与主进程「视图」菜单同形**（逐档步进，不铺 8 档 Segmented），避免两套交互词汇；比例与端点来自 preload `getZoomState()` 下发的 `percent / atMin / atMax / atDefault`，本页**不持档位表**（不出现 80 / 200 字面量）。每次档位变化另弹一条全局 `toast`（`key: "zoom"`，见 `toast`）。**不新增视觉语言**（复用 `card` / `section-title` / `caption-text` / `button-default`）。
 
 **`library-location`（通用 tab 第二项，2026-09）** — 一张 `card`：`section-title`「书库位置」+ 当前路径只读文本（`caption-text` + 超宽 `truncate` + `title` 给全文）+ 行尾 `button-default`「更改…」；卡片底部一行 `caption-text` 说明（更改后应用会重启）。点击「更改…」→ 原生目录框（preload `pickDirectory`）→ 确认后写应用级配置并重启应用。**不新增视觉语言**（全部复用 `card` / `section-title` / `caption-text` / `button-default`）。
 
