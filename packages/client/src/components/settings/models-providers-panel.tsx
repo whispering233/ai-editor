@@ -195,7 +195,7 @@ function ProviderDialog({
   return (
     // 保存中不允许关闭（Esc / 遮罩 / X 都走 onOpenChange）：同 cloud-conflict-dialog 的 busy 守卫
     <Dialog open onOpenChange={(open) => !open && !saving && onCancel()}>
-      <DialogContent className="sm:max-w-2xl">
+      <DialogContent width="2xl">
         <DialogHeader>
           <DialogTitle>{isNew ? "添加自定义 provider" : `编辑 ${draft.id}`}</DialogTitle>
           <DialogDescription>

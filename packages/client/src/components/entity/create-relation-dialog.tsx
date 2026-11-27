@@ -228,7 +228,7 @@ export function CreateRelationDialog({
 
   return (
     <Dialog open onOpenChange={(v) => !v && onClose()}>
-      <DialogContent className="sm:max-w-2xl">
+      <DialogContent width="2xl">
         <DialogHeader>
           <DialogTitle>新增关联</DialogTitle>
         </DialogHeader>

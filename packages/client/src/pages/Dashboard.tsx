@@ -997,7 +997,7 @@ export default function Dashboard({ mode }: { mode: DashboardMode }) {
           open={importOpen}
           onOpenChange={(v) => (v ? setImportOpen(true) : closeImportDialog())}
         >
-          <DialogContent className="sm:max-w-sm">
+          <DialogContent width="sm">
             <DialogHeader>
               <DialogTitle>导入书籍</DialogTitle>
               <DialogDescription>

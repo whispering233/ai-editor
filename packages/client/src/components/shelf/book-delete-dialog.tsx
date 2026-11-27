@@ -127,7 +127,7 @@ export function BookDeleteDialog({
         if (!open) close();
       }}
     >
-      <DialogContent className="sm:max-w-md">
+      <DialogContent width="md">
         <DialogHeader>
           <DialogTitle>删除《{book?.name}》</DialogTitle>
           <DialogDescription>删除不可恢复。这次删除会做三件事：</DialogDescription>

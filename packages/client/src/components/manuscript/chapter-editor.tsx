@@ -645,7 +645,7 @@ export function ChapterEditor({
 
       {/* 409 冲突（仅携带 base_updated_at 保存时可能）：二选一，不自动决定 */}
       <Dialog open={conflictOpen} onOpenChange={(open) => !open && setConflictOpen(false)}>
-        <DialogContent className="sm:max-w-md">
+        <DialogContent width="md">
           <DialogHeader>
             <DialogTitle>正文已被其他窗口修改</DialogTitle>
           </DialogHeader>

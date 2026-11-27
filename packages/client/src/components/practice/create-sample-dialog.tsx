@@ -259,7 +259,7 @@ export function CreateSampleDialog({
 
   return (
     <Dialog open onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-lg">
+      <DialogContent width="lg">
         <DialogHeader>
           <DialogTitle>新建样本</DialogTitle>
         </DialogHeader>

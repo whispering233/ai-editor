@@ -647,7 +647,7 @@ export default function Timeline() {
 
       {/* 新建时间点对话框（G2：name = 时间标签文本 → POST /entity/timepoint） */}
       <Dialog open={tpCreateOpen} onOpenChange={(v) => !v && setTpCreateOpen(false)}>
-        <DialogContent className="sm:max-w-md">
+        <DialogContent width="md">
           <DialogHeader>
             <DialogTitle>新建时间点</DialogTitle>
           </DialogHeader>
@@ -687,7 +687,7 @@ export default function Timeline() {
       {/* 新建事件对话框（G2：移除 time_label 字段——时间标签由挂载表达；
           标题区分双入口：组尾挂载 vs 顶部不挂载） */}
       <Dialog open={createOpen} onOpenChange={(v) => !v && setCreateOpen(false)}>
-        <DialogContent className="sm:max-w-md">
+        <DialogContent width="md">
           <DialogHeader>
             <DialogTitle>
               {createTimepointId !== null

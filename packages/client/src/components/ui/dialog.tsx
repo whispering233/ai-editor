@@ -1,12 +1,35 @@
-// 受控模态对话框（自绘换芯：Base UI Dialog → createPortal 原生实现）
-// API 面不变：<Dialog open onOpenChange> <DialogContent …> <DialogHeader/> <DialogTitle/>
-// <DialogDescription/> … <DialogFooter/> </DialogContent> </Dialog>
-// 行为：Esc 关闭 / 遮罩点击关闭 / body 滚动锁定 / aria-modal 语义；关闭按钮可选（showCloseButton）
+// 受控弹窗（DESIGN.md §Components `dialog`）。**换芯 antd Modal（2026-11）**，API 面不变：
+// <Dialog open onOpenChange> <DialogContent …> <DialogHeader/> <DialogTitle/> <DialogDescription/> <DialogFooter/>
+//
+// 为什么换：自绘实现里焦点管理一样都没有——无初始聚焦、无 Tab 陷阱、关闭后焦点回 body；
+// 且 dialog / popover / context-menu 三处各挂一个 window keydown，叠层按一次 Esc 会全关。
+// antd Modal（rc-dialog）的 portal 栈天然「只关最顶层」，并自带 focusable.trap / focusTriggerAfterClose。
+//
+// 几何钉子（不钉就是静默错位，改之前先看 DESIGN.md `dialog`）：
+// - container 的 padding 必须是 16：DialogFooter 用 `-mx-4 -mb-4` 抵到这个内边距；antd 默认 contentPadding
+//   是 20/24（`antd/es/modal/style/index.js`）⇒ 不钉会让页脚缩进 4~8px。
+// - 原来 DialogContent 那串 `grid gap-4` 是所有弹窗的槽间距来源（全局确认框的三段靠它），antd 的 body
+//   没有 gap ⇒ 搬到 styles.body，否则标题与说明贴死。
+// - 色值一律走 index.css 的变量（`--modal-mask` / `--float-shadow`）：design-discipline 的 hardcoded-color
+//   守卫只放行 AntdProvider，写在 tsx 里必红。
+// - 宽度只能用 `width` prop（档位见 DIALOG_WIDTHS），Tailwind `max-w-*` 会被 `.ant-modal` 的无层
+//   `max-width: calc(100vw - 32px)` 压掉。
 import * as React from "react";
-import { createPortal } from "react-dom";
+import { Modal } from "antd";
 import { CloseOutlined } from "@ant-design/icons";
 
 import { cn } from "@/lib/utils";
+
+/** 弹窗宽度档位（唯一来源）；调用点只给档位名，不给像素 */
+export const DIALOG_WIDTHS = {
+  sm: 384,
+  md: 448,
+  lg: 512,
+  xl: 576,
+  "2xl": 672,
+} as const;
+
+type DialogWidth = keyof typeof DIALOG_WIDTHS;
 
 interface DialogContextValue {
   open: boolean;
@@ -14,7 +37,7 @@ interface DialogContextValue {
 }
 const DialogContext = React.createContext<DialogContextValue | null>(null);
 
-/** 受控根（不渲染 DOM；提供 close 上下文） */
+/** 受控根（不渲染 DOM；提供 open / close 上下文） */
 function Dialog({
   open,
   onOpenChange,
@@ -28,32 +51,11 @@ function Dialog({
     () => ({ open, close: () => onOpenChange(false) }),
     [open, onOpenChange],
   );
-  // 打开时锁定 body 滚动（遮罩滚动穿透防御）
-  React.useEffect(() => {
-    if (!open) return;
-    const prev = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
-    return () => {
-      document.body.style.overflow = prev;
-    };
-  }, [open]);
   return <DialogContext.Provider value={value}>{children}</DialogContext.Provider>;
 }
 
-function DialogTrigger({ ...props }: React.ComponentProps<"button">) {
-  return <button type="button" data-slot="dialog-trigger" {...props} />;
-}
-
-/** portal 容器（保持导出兼容；Content 内部即 portal） */
-function DialogPortal({ children }: { children: React.ReactNode }) {
-  return createPortal(children, document.body);
-}
-
-/** 关闭按钮（Content 内/Footer 用；点击回调上下文 close） */
-function DialogClose({
-  children,
-  ...props
-}: React.ComponentProps<"button"> & { asChild?: boolean }) {
+/** 关闭钮（内部用：Content 右上 + Footer 的 showCloseButton；不对外导出） */
+function DialogClose({ children, ...props }: React.ComponentProps<"button">) {
   const ctx = React.useContext(DialogContext);
   return (
     <button type="button" data-slot="dialog-close" onClick={() => ctx?.close()} {...props}>
@@ -62,67 +64,61 @@ function DialogClose({
   );
 }
 
-function DialogOverlay({
-  className,
-  ...props
-}: React.ComponentProps<"div"> & { className?: string }) {
-  const ctx = React.useContext(DialogContext);
-  if (ctx && !ctx.open) return null;
-  return (
-    <div
-      data-slot="dialog-overlay"
-      aria-hidden
-      onClick={() => ctx?.close()}
-      className={cn("fixed inset-0 z-50 bg-black/10 backdrop-blur-[2px]", className)}
-      {...props}
-    />
-  );
-}
+// 模块级常量：styles 对象每渲染都新建会让 antd 反复算样式
+const CONTAINER_STYLE: React.CSSProperties = {
+  padding: 16,
+  border: "1px solid var(--ant-color-border-secondary)",
+  boxShadow: "var(--float-shadow)",
+};
+const BODY_STYLE: React.CSSProperties = {
+  display: "grid",
+  gap: 16,
+  maxHeight: "calc(100vh - 4rem)",
+  overflowY: "auto",
+  padding: 0,
+};
+const MASK_STYLE: React.CSSProperties = {
+  backgroundColor: "var(--modal-mask)",
+  backdropFilter: "blur(2px)",
+};
 
 function DialogContent({
-  className,
   children,
   showCloseButton = true,
-  ...props
-}: React.ComponentProps<"div"> & {
+  width = "md",
+}: {
+  children?: React.ReactNode;
   showCloseButton?: boolean;
-  className?: string;
+  width?: DialogWidth;
 }) {
   const ctx = React.useContext(DialogContext);
-  // Esc 关闭（面板挂载期监听；关闭态 close 为 no-op）
-  React.useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") ctx?.close();
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [ctx]);
-  // 关闭态不渲染（受控守卫：取消/Esc/遮罩关闭 = set open false → 卸载 portal）
-  if (ctx === null || !ctx.open) return null;
-
-  return createPortal(
-    <div role="dialog" aria-modal="true" data-slot="dialog-root">
-      <DialogOverlay />
-      <div
-        data-slot="dialog-content"
-        className={cn(
-          "fixed top-1/2 left-1/2 z-50 grid max-h-[calc(100vh-4rem)] w-full max-w-lg -translate-x-1/2 -translate-y-1/2 gap-4 overflow-y-auto rounded-lg bg-popover p-4 text-sm text-popover-foreground shadow-lg ring-1 ring-foreground/10",
-          className,
-        )}
-        {...props}
-      >
-        {children}
-        {showCloseButton && (
-          <DialogClose
-            className="absolute top-2 right-2 rounded-md p-1 text-muted-foreground hover:bg-muted hover:text-foreground"
-            aria-label="关闭"
-          >
-            <CloseOutlined className="text-base" />
-          </DialogClose>
-        )}
-      </div>
-    </div>,
-    document.body,
+  if (ctx === null) return null;
+  return (
+    <Modal
+      open={ctx.open}
+      onCancel={ctx.close}
+      footer={null}
+      closable={false}
+      centered
+      // 关闭即卸载子树：与换芯前「关闭态不渲染」同语义，也保证表单草稿不跨次残留
+      destroyOnHidden
+      keyboard
+      // v6：maskClosable 已弃用，遮罩行为走 mask 配置
+      mask={{ closable: true }}
+      focusable={{ trap: true, focusTriggerAfterClose: true }}
+      width={DIALOG_WIDTHS[width]}
+      styles={{ container: CONTAINER_STYLE, body: BODY_STYLE, mask: MASK_STYLE }}
+    >
+      {children}
+      {showCloseButton && (
+        <DialogClose
+          className="absolute top-2 right-2 rounded-md p-1 text-muted-foreground hover:bg-muted hover:text-foreground"
+          aria-label="关闭"
+        >
+          <CloseOutlined className="text-base" />
+        </DialogClose>
+      )}
+    </Modal>
   );
 }
 
@@ -143,6 +139,7 @@ function DialogFooter({
   ...props
 }: React.ComponentProps<"div"> & {
   showCloseButton?: boolean;
+  className?: string;
 }) {
   return (
     <div
@@ -186,15 +183,4 @@ function DialogDescription({ className, ...props }: React.ComponentProps<"p">) {
   );
 }
 
-export {
-  Dialog,
-  DialogClose,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogOverlay,
-  DialogPortal,
-  DialogTitle,
-  DialogTrigger,
-};
+export { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle };

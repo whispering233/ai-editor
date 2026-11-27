@@ -92,6 +92,11 @@
      不进项目文件 / 备份 / 云同步（偏好本体只落 localStorage）*/
   --paper-cream: #fbf7ee;
   --paper-warm: #f2f0eb;
+  /* 浮层遮罩与阴影（DESIGN.md §Elevation 登记值）——定义在 CSS 而不是组件里：
+     design-discipline 的 hardcoded-color 守卫只放行 AntdProvider，dialog.tsx 只能写 var()。
+     `--float-shadow` 与 dropdown-panel / toast 同值；遮罩两态同值（不随主题加深） */
+  --modal-mask: rgb(0 0 0 / 0.1);
+  --float-shadow: 0 8px 24px rgb(15 15 15 / 0.1);
 }
 
 .dark {

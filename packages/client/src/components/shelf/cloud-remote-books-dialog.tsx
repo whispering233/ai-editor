@@ -221,7 +221,7 @@ export function CloudRemoteBooksDialog({
         onOpenChange(next);
       }}
     >
-      <DialogContent className="sm:max-w-lg">
+      <DialogContent width="lg">
         <CloudRemoteBooksView
           books={books}
           loadError={loadError}

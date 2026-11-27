@@ -65,7 +65,7 @@ export function CloudConflictDialog() {
 
   return (
     <Dialog open onOpenChange={(v) => !v && busy === null && closeConflict()}>
-      <DialogContent className="sm:max-w-lg">
+      <DialogContent width="lg">
         <DialogHeader>
           <DialogTitle>两边都有改动</DialogTitle>
         </DialogHeader>

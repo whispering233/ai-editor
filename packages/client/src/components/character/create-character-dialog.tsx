@@ -74,7 +74,7 @@ export interface CreateCharacterFormViewProps {
 export function CreateCharacterFormView(props: CreateCharacterFormViewProps) {
   return (
     <Dialog open onOpenChange={(v) => !v && props.onCancel()}>
-      <DialogContent className="sm:max-w-2xl">
+      <DialogContent width="2xl">
         <DialogHeader>
           <DialogTitle>新建人物</DialogTitle>
         </DialogHeader>

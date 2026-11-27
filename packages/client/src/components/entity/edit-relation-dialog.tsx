@@ -67,7 +67,7 @@ export function EditRelationDialog({
 
   return (
     <Dialog open onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="sm:max-w-lg">
+      <DialogContent width="lg">
         <DialogHeader>
           <DialogTitle>编辑关系说明</DialogTitle>
           <DialogDescription>

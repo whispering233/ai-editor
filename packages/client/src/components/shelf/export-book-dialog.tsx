@@ -187,7 +187,7 @@ export function ExportBookDialog({
         if (!next) close();
       }}
     >
-      <DialogContent className="sm:max-w-md">
+      <DialogContent width="md">
         <ExportBookFormBody
           name={name}
           workspaceKind={workspaceKind}

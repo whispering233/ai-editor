@@ -279,7 +279,7 @@ export function LlmSection() {
 
       {/* 添加弹窗：选择步（搜索 + 未配置列表）→ 配置步（凭证 + key）；取消/X/Esc/遮罩关闭都不落状态 */}
       <Dialog open={addOpen} onOpenChange={(open) => (open ? setAddOpen(true) : resetAddDialog())}>
-        <DialogContent className="sm:max-w-md">
+        <DialogContent width="md">
           {addTarget === null ? (
             <>
               <DialogHeader>

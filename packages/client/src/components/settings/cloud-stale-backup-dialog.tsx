@@ -42,7 +42,7 @@ export function CloudStaleBackupDialog() {
 
   return (
     <Dialog open onOpenChange={(v) => !v && busy === null && closeStaleDialog()}>
-      <DialogContent className="sm:max-w-md">
+      <DialogContent width="md">
         <DialogHeader>
           <DialogTitle>有改动还没进备份</DialogTitle>
         </DialogHeader>

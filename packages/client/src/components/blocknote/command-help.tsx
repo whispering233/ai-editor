@@ -150,7 +150,7 @@ export interface CommandHelpDialogProps {
 export function CommandHelpDialog({ open, onOpenChange }: CommandHelpDialogProps) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-xl">
+      <DialogContent width="xl">
         <DialogHeader>
           <DialogTitle>命令帮助</DialogTitle>
           <DialogDescription>

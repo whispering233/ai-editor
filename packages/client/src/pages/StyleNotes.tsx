@@ -347,7 +347,7 @@ export default function StyleNotes() {
           if (!open) closePending();
         }}
       >
-        <DialogContent className="sm:max-w-sm">
+        <DialogContent width="sm">
           <DialogHeader>
             <DialogTitle>{pending === "import" ? "导入风格说明" : "恢复预置风格说明"}</DialogTitle>
             <DialogDescription>

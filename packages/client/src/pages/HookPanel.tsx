@@ -591,7 +591,7 @@ export default function HookPanel() {
 
       {/* 新建伏笔对话框：name + data 表单 + 埋点节点选择（新建交互） */}
       <Dialog open={createOpen} onOpenChange={(v) => !v && setCreateOpen(false)}>
-        <DialogContent className="sm:max-w-md">
+        <DialogContent width="md">
           <DialogHeader>
             <DialogTitle>新建伏笔</DialogTitle>
           </DialogHeader>
@@ -642,7 +642,7 @@ export default function HookPanel() {
         open={detailTarget !== null || detailLoading}
         onOpenChange={(v) => !v && setDetailTarget(null)}
       >
-        <DialogContent className="sm:max-w-lg">
+        <DialogContent width="lg">
           <DialogHeader>
             <DialogTitle>伏笔详情</DialogTitle>
           </DialogHeader>
@@ -658,7 +658,7 @@ export default function HookPanel() {
       {/* 推进/回收/废弃复合写确认面板（提案式确认交互） */}
       {lifecycleTarget && (
         <Dialog open onOpenChange={(v) => !v && !lifecycleSubmitting && setLifecycleTarget(null)}>
-          <DialogContent className="sm:max-w-md">
+          <DialogContent width="md">
             <DialogHeader>
               <DialogTitle>
                 {LIFECYCLE_LABEL[lifecycleKind]}伏笔《{lifecycleTarget.name}》
@@ -731,7 +731,7 @@ export default function HookPanel() {
       {/* 编辑对话框：data 表单（同 EntityDetail，含 status 受控枚举） */}
       {editTarget && editForm && (
         <Dialog open onOpenChange={(v) => !v && !editSaving && setEditTarget(null)}>
-          <DialogContent className="sm:max-w-md">
+          <DialogContent width="md">
             <DialogHeader>
               <DialogTitle>编辑伏笔《{editTarget.name}》</DialogTitle>
             </DialogHeader>

@@ -150,7 +150,7 @@ export function CreatePieceDialog({ onOpenChange, onCreated }: CreatePieceDialog
 
   return (
     <Dialog open onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-lg">
+      <DialogContent width="lg">
         <DialogHeader>
           <DialogTitle>新建题目</DialogTitle>
         </DialogHeader>
