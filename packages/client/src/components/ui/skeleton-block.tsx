@@ -4,16 +4,14 @@
 // 用同样的描边卡 + N 行灰条。行内 / 列表 / 文字骨架（`h-4`~`h-20`、带宽度、`bg-muted/60` 的那几十处）
 // 形状各异，继续直接用 `lib/styles.ts` 的 `skeletonClass` 拼，**不进本组件**——不参数化成「什么都能配」。
 //
-// ⚠ 圆角与「它模拟的真实卡」绑死，不能独立决定：
-// - 现在那 4 处真实卡是手写的 6px（`rounded-md`）⇒ 本组件也用 6px，加载完成瞬间不跳档；
-// - 那批手写卡将来迁到 `SectionCard`（antd Card = 8px）时，**必须与本组件同卡改**，
-//   否则加载完成瞬间圆角跳一档，而且只有肉眼看得到（测试与类型都绿）。
-// 依据与登记见 `backlog.md`「4 处手写分区卡应改回 SectionCard」。
+// ⚠ 圆角与「它模拟的真实卡」绑死：那 4 处真实卡已是 `SectionCard`（antd Card = `{rounded.md}` 8px）
+// ⇒ 本组件也用 8px，加载完成瞬间不跳档。将来换卡的圆角档位，**必须与本组件同卡改**
+// （两处不同改的后果是加载完成瞬间圆角跳一档，而且只有肉眼看得到：测试与类型都绿）。
 import { cn } from "@/lib/utils";
 import { skeletonClass } from "@/lib/styles";
 
 /** 壳串：`design-discipline.test.ts` 的 `skeleton-block-shell` 守卫锁住复制 */
-const SHELL_CLASS = "space-y-3 rounded-md border border-border p-4";
+const SHELL_CLASS = "space-y-3 rounded-lg border border-border p-4";
 
 /** 行高档固定 9（= 一行控件高），**不参数化**：换行高就是另一种占位形态，不该走本组件 */
 const ROW_CLASS = "h-9";

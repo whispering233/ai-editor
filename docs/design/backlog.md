@@ -208,10 +208,6 @@
 
 ## 前端 / UI
 
-- **4 处手写分区卡应改回 `SectionCard`（2026-11 样式治理时登记）** — 现状：`EntityDetail.tsx` / `TimelineDetail.tsx` 各有 2 处自己写 `rounded-md border border-border p-4` + `<h2 class="text-sm font-semibold">` 的块（基础信息 / 关联），而同语义的 `SectionCard`（antd `Card`）已被用 111 处。两者与 `DESIGN.md` 契约的偏离是可量化的：圆角 6px vs `card` 的 8px、块标题 14px vs `section-title` 的 16px。**与 `skeleton-block` 硬耦合**：那 6 处骨架占位用的是同一个 6px，卡改成 8px 时骨架必须同卡改（否则加载完成瞬间圆角跳一档）。
-  - 触发条件：做下一轮样式治理，或有人反馈这两个页面的块边界比别处细。
-  - 最小修法：4 处换成 `<SectionCard>`，同时把 `components/ui/skeleton-block.tsx` 的圆角改 `rounded-lg`；**必须浏览器核一次像素**（6→8px、14→16px 都是可见变）。
-
 - **6 处正文链接用的是墨色（与 `colorLink` 契约冲突，2026-11 登记）** — 现状：`character-detail.tsx` ×3、`Dashboard.tsx`、`ReferenceDetail.tsx`、`ReferenceList.tsx` 写的是 `<a className="text-primary hover:underline">`；而 `DESIGN.md` §Colors 明确「Link `#0075de` … **链接是蓝的，按钮是墨的**」，`AntdProvider.tsx` 也确实配了 `colorLink`（浅 `#0075de` / 深 `#529cca`）——`text-primary` 取到的是深墨 `#37352f`。
   - 触发条件：做链接 / 焦点口径收口时，或有用户反馈「分不清哪句是可点的」。
   - 最小修法：先在 `index.css` 的 `@theme inline` 补一行 `--color-link: var(--ant-color-link)`（当前没有 `text-link` 这个类），再把 6 处换成 `text-link`；`dead-token` 守卫会验证新变量有消费者。

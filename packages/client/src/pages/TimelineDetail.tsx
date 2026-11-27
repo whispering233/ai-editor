@@ -28,6 +28,7 @@ import { PageHeader } from "@/components/ui/page-header";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { RefChip } from "@/components/ui/ref-chip";
+import { SectionCard } from "@/components/ui/section-card";
 import { SkeletonBlock } from "@/components/ui/skeleton-block";
 import { skeletonClass } from "@/lib/styles";
 import { cn } from "@/lib/utils";
@@ -371,8 +372,7 @@ export default function TimelineDetail({ id }: { id: string }) {
       {detail && form && (
         <div className="flex flex-col gap-4">
           {/* 信息区：基础信息表单（name + data 两字段，G2 无 time_label——时间标签 = 挂载，详情页字段编辑 + 挂载时间点选择器） */}
-          <div className="rounded-md border border-border p-4">
-            <h2 className="mb-3 text-sm font-semibold text-foreground">基础信息</h2>
+          <SectionCard title="基础信息">
             <div className="flex flex-col gap-3">
               <div>
                 <p className="mb-1 text-sm font-medium text-foreground">名称（必填）</p>
@@ -437,16 +437,13 @@ export default function TimelineDetail({ id }: { id: string }) {
               </div>
               {saveError && <p className="text-sm text-destructive">{saveError}</p>}
             </div>
-          </div>
+          </SectionCard>
 
           {/* 关联区：occurs_in 关联节点管理（详情页核心交互；UX3：选择器为 Popover 轻量弹层） */}
-          <div className="rounded-md border border-border p-4">
-            <div className="mb-3 flex items-center justify-between">
-              {/* 标题不再暴露内部关系键（`occurs_in` 是 `relation_records.relation_type` 的取值，
-                  中文名唯一来源 = shared `RELATION_TYPE_META`，经 `relationTypeLabel` 取——与关联页同口径） */}
-              <h2 className="text-sm font-semibold text-foreground">
-                关联节点（{relationTypeLabel("occurs_in")}）
-              </h2>
+          <SectionCard
+            title={<>关联节点（{relationTypeLabel("occurs_in")}）</>}
+            action={
+
               <Popover
                 open={relationOpen}
                 onOpenChange={(v) => {
@@ -487,7 +484,8 @@ export default function TimelineDetail({ id }: { id: string }) {
                   </div>
                 </PopoverContent>
               </Popover>
-            </div>
+            }
+          >
             {occurring.length === 0 ? (
               <p className="py-6 text-center text-sm text-muted-foreground">
                 暂无关联节点，新增一个
@@ -515,7 +513,7 @@ export default function TimelineDetail({ id }: { id: string }) {
                 ))}
               </ul>
             )}
-          </div>
+          </SectionCard>
         </div>
       )}
 

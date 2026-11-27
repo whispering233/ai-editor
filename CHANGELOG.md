@@ -20,6 +20,7 @@
 
 ### Changed
 
+- **详情页分区卡回到 `SectionCard`**：设定详情与时间轴详情各 2 块此前自己写「描边卡 + 14px 块标题」，圆角比 `card` 少一档（6px vs 8px）、块标题比 `section-title` 小一档（14px vs 16px）；现统一走 `SectionCard`（antd Card），加载骨架 `SkeletonBlock` 的圆角同步抬到 8px——否则加载完成瞬间会跳档。守卫 `skeleton-block-shell` 的正则改为与圆角无关，换档后新抄的骨架仍会被拦住。
 - **可点内联引用收口**：8 处手写的「描边小按钮」（设定详情的上级 / 子设定与变更记录入口、时间轴挂载节点、伏笔依赖链、标签快捷追加、描述展开 / 收起）统一走 `RefChip`。可见变化：圆角 6px → 4px（`{rounded.xs}` 小内衬档，与文字同体量）；伏笔的「依赖: …」不再撑满整行；引用型 chip 从 `button` 变 `a`，多了中键 / `⌘` 新标签页。
 - **空态的第二动作回归 `Button href`**：5 处「去回收站」原是手写 `<a className="rounded-md border …">`，与旁边真正的 antd `Button` 高度 / hover / 焦点环全不一致；现与「返回列表」同高同表。
 - **受控弹窗换芯 antd `Modal`**：焦点陷阱与「`Esc` 只关最顶层」改由 antd 提供（此前 `Tab` 会跑到弹窗背后的页面，详情抽屉 + 确认框叠层时按一次 `Esc` 会把两层一起关掉）；关闭后焦点回到打开它的控件（antd 的 `focusTriggerAfterClose` 在本仓取不到触发器，改由 `components/ui/dialog.tsx` 自己记录）。外观、调用点 API 与四条关闭路径（右上角 / `Esc` / 遮罩 / 取消）不变；**弹窗宽度改走 `DialogContent` 的 `width` 档位**（`sm` 384 / `md` 448 / `lg` 512 / `xl` 576 / `2xl` 672）。

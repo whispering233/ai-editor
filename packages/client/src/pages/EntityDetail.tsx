@@ -45,6 +45,7 @@ import {
 import { chapterNodeOptions } from "../lib/outline-tree";
 import { useSaveShortcut } from "../lib/save-shortcut";
 import { EmptyState } from "@/components/ui/empty-state";
+import { SectionCard } from "@/components/ui/section-card";
 import { SkeletonBlock } from "../components/ui/skeleton-block";
 import { navigate } from "../hooks/use-route";
 import { useDataRefresh } from "../hooks/use-data-refresh";
@@ -527,8 +528,7 @@ export default function EntityDetail({
       {detail && form && (
         <div className="flex flex-col gap-4">
           {/* 信息区：data 表单（按类型差异化渲染） */}
-          <div className="rounded-md border border-border p-4">
-            <h2 className="mb-3 text-sm font-semibold text-foreground">基础信息</h2>
+          <SectionCard title="基础信息">
             <div className="flex flex-col gap-3">
               {fields.map((f) => (
                 <div key={f.key}>
@@ -553,16 +553,14 @@ export default function EntityDetail({
               )}
             </div>
             {saveError && <p className="mt-3 text-sm text-destructive">{saveError}</p>}
-          </div>
+          </SectionCard>
 
           {/* 关联区：关联（1 跳双向）——setting 类型前置「层级」区块（父子边独自分区，
               下方关联列表过滤掉层级边，避免同一条边两处重复展示） */}
-          <div className="rounded-md border border-border p-4">
-            <div className="mb-3 flex items-center justify-between">
-              <h2 className="text-sm font-semibold text-foreground">关联</h2>
-              <Button onClick={() => setRelationDialogOpen(true)}>+ 新增关联</Button>
-            </div>
-
+          <SectionCard
+            title="关联"
+            action={<Button onClick={() => setRelationDialogOpen(true)}>+ 新增关联</Button>}
+          >
             {/* 层级区块（仅 setting）：父/子分区展示 + 设置/修改/清除上级 */}
             {entityType === "setting" &&
               (() => {
@@ -680,7 +678,7 @@ export default function EntityDetail({
                 </ul>
               );
             })()}
-          </div>
+          </SectionCard>
         </div>
       )}
 

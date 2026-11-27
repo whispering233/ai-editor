@@ -20,15 +20,15 @@ describe("SkeletonBlock · 行数与壳串", () => {
     expect(rowCount(renderToString(<SkeletonBlock rows={1} />))).toBe(1);
   });
 
-  it("壳串 = 描边卡 + 16px 内边距 + 行距 12px，圆角 6px（与手写真实卡同值）", () => {
+  it("壳串 = 描边卡 + 16px 内边距 + 行距 12px，圆角 8px（与 `card` 同值）", () => {
     const html = renderToString(<SkeletonBlock />);
-    // 逐字比对：这串与被替换掉的 4 处手写壳完全相同 ⇒ 迁移零像素漂移
-    expect(html).toContain("space-y-3 rounded-md border border-border p-4");
-    for (const cls of ["space-y-3", "rounded-md", "border-border", "p-4"]) {
+    // 逐字比对：这串与被替换掉的 4 处手写壳除圆角外完全相同 ⇒ 迁移零像素漂移
+    expect(html).toContain("space-y-3 rounded-lg border border-border p-4");
+    for (const cls of ["space-y-3", "rounded-lg", "border-border", "p-4"]) {
       expect(html).toContain(cls);
     }
-    // 8px 档属于 `card`；本组件跟的是手写卡（6px），改这里必须与那批手写卡迁移同卡做
-    expect(html).not.toContain("rounded-lg");
+    // 6px（`rounded-md`）是迁前的旧值：骨架与它模拟的卡必须同档，回到 6px 就是跳档
+    expect(html).not.toContain("rounded-md");
   });
 
   it("行样式单源 = `skeletonClass`（不复制 animate-pulse / rounded / bg-muted 的实现细节）", () => {
