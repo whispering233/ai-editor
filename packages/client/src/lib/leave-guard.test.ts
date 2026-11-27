@@ -1,4 +1,4 @@
-// 离开守卫真值表（A4）：无守卫放行 / 有守卫转发答案 / 在途确认不重入 / 注销后放行。
+// 离开守卫真值表：无守卫放行 / 有守卫转发答案 / 在途确认不重入 / 注销后放行。
 // 守卫是模块级单槽 ⇒ 每例后必须注销，否则会污染后续用例（含其它文件的同进程运行）。
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { confirmLeave, setLeaveGuard } from "./leave-guard";

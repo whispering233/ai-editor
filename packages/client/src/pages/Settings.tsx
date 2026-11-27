@@ -6,7 +6,7 @@
 // 「通用」tab 仅桌面版渲染（能力检测 `desktopBridge`；浏览器形态 tab 集合与行为完全不变）
 // 跨页意图（卡 6）：左栏「同步云端」在未配置时会置 `pendingSettingsPane`——本页负责切到「备份」tab，
 // 再由 `BackupSection` 消费并清空（二级 tab 选中态仍不进 URL）
-// 离开守卫（A4）：七个二级 tab 里的草稿源各自 `useRegisterDirty(dirty)` 报到，这里聚合「任一脏」；
+// 离开守卫：七个二级 tab 里的草稿源各自 `useRegisterDirty(dirty)` 报到，这里聚合「任一脏」；
 // 左栏导航与浏览器后退共用同一个 `confirmLeave`（同一次点击 / 后退只弹一次框），见 DESIGN.md `settings-leave-guard`
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Tabs } from "antd";

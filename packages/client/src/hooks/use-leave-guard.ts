@@ -1,4 +1,4 @@
-// 离开守卫接线（A4）：纯逻辑在 `lib/leave-guard.ts`，这里只做 React 接线，三件事：
+// 离开守卫接线：纯逻辑在 `lib/leave-guard.ts`，这里只做 React 接线，三件事：
 // 1. `useLeaveGuard`：设置页把「任一草稿脏」映射成模块级注册（dirty 时注册、变干净 / 卸载注销），
 //    每次渲染刷新确认闭包（同 `use-back-guard` 的 ref 写法：effect 不因闭包身份重挂）；
 // 2. `LeaveGuardContext`：设置页内的草稿源报到通道（值 = 报到函数）；

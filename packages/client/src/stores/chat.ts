@@ -24,6 +24,8 @@
 // 2. 「中止在途 SSE」：重发/切会话/切项目前调 abortCurrentStream（旧流事件不得污染新视图）
 // 3. 流身份守卫（streamMsgId）：旧流的 onTimeout/onEnd 不得复位新流的 streaming
 // 4. 发送中禁止并发发送（streaming / messagesLoading 期间 sendMessage 直接返回）
+// 5. 主动停止（stopStreaming）**先**折叠思考块**再**作废流身份：顺序反了 patch 会被自己的身份守卫挡掉，
+//    思考块永久停在展开态；本轮不会再收到 agent_end（流已关），收尾全在客户端做完
 import { create } from "zustand";
 import type {
   ChatContextUsage,
