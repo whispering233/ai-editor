@@ -762,6 +762,7 @@ function OutlineRail({
       return;
     }
     setBusy(true);
+    setError(null); // 每次写操作开始就清页级错误条：成功后不得残留（DESIGN.md `outline-page`「页级错误条的生命周期」）
     try {
       // summary 显式提交空串（S13.1 oracle S2：`|| undefined` 会被 JSON.stringify 丢弃导致清空不生效；
       // 服务端 patch.summary !== undefined 即写入，空串真正清除——与 S12.2 详情页语义一致）
@@ -841,6 +842,7 @@ function OutlineRail({
       return;
     }
     cancelCreate();
+    setError(null);
     try {
       const res = await createOutlineNode({ type, title, parent_id: parentId });
       useUiStore.getState().showToast(`已创建${TYPE_LABEL[type]}《${title}》`);
@@ -975,6 +977,7 @@ function OutlineRail({
       return;
     }
     setBusy(true);
+    setError(null);
     try {
       await moveOutlineNode(dragNode.id, { parent_id: plan.parentId, order });
       useUiStore.getState().showToast(`已移动《${dragNode.title}》`);
@@ -1019,6 +1022,7 @@ function OutlineRail({
       return;
     }
     setBusy(true);
+    setError(null);
     try {
       await moveOutlineNode(dragNode.id, { parent_id: ROOT_NODE_ID, order });
       useUiStore.getState().showToast(`已移动《${dragNode.title}》`);
@@ -1054,12 +1058,13 @@ function OutlineRail({
   }
 
   /** 软删直接执行（H2：不再弹二次确认）；删除的是**当前 URL** 指向的节点或其祖先 → 重拉树后回 `#/outline`
-   * （不留死详情）；OUTLINE_NODE_NOT_FOUND（已被 purge）→ 横幅 + 刷新树；其余错误 toast。
+   * （不留死详情）；OUTLINE_NODE_NOT_FOUND（已被 purge）→ toast + 刷新树；其余错误 toast。
    * 在途交互（删除请求 / 重拉树）期间用户可能已切到别的节点 ⇒ 收尾时按 `nodeIdRef`（当前 URL）
    * 而非点击时的闭包重算，不误清刚切过去的新选中。 */
   async function handleDelete(node: OutlineNode) {
     // 先快照删除前的树：删除成功后该子树已不在树上，无法再判断「URL 节点是否在被打掉的子树里」
     const treeBefore = outline?.children ?? [];
+    setError(null);
     try {
       const res = await deleteOutlineNode(node.id);
       const { children, relations, deltas } = res.cascaded;
@@ -1080,7 +1085,8 @@ function OutlineRail({
       }
     } catch (err) {
       if (err instanceof ApiError && err.code === "OUTLINE_NODE_NOT_FOUND") {
-        setError(describeOutlineError("OUTLINE_NODE_NOT_FOUND"));
+        // 终态错误（节点已被并发删除）：错误条无重试也无关闭钮，挂到下一次写操作只会污染视图 → toast
+        useUiStore.getState().showToast(describeOutlineError("OUTLINE_NODE_NOT_FOUND"), "error");
         await afterTreeChanged();
         return;
       }
