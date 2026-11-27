@@ -25,6 +25,7 @@ import {
   type DirtyReporter,
 } from "../hooks/use-leave-guard";
 import { useBackGuard } from "../hooks/use-back-guard";
+import { confirmLeave } from "../lib/leave-guard";
 import { useCloudStore } from "../stores/cloud";
 import { useUiStore } from "../stores/ui";
 
@@ -48,15 +49,16 @@ export default function Settings() {
     setAnyDirty(sources.size > 0);
   }, []);
 
-  /** 离开设置页前问一句（左栏四处出口与浏览器后退共用 ⇒ 只弹一次框） */
-  async function confirmLeave(): Promise<boolean> {
+  /** 真正去问用户那一句（由 lib `confirmLeave` 转发过来，不直接被多个出口调用） */
+  async function askBeforeLeave(): Promise<boolean> {
     if (!anyDirty) return true;
     return useUiStore.getState().confirm({
       title: "放弃未保存的修改？",
       description: "设置页有尚未保存的修改，离开后将丢失",
     });
   }
-  useLeaveGuard(anyDirty, confirmLeave);
+  useLeaveGuard(anyDirty, askBeforeLeave);
+  // 后退走 lib 的 confirmLeave（不是本地那份）：两个出口共用一个在途确认，并发时只弹一个框
   useBackGuard(anyDirty, confirmLeave);
 
   useEffect(() => {
