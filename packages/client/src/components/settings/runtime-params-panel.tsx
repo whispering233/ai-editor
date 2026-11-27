@@ -19,6 +19,7 @@ import {
   type RuntimeParams,
 } from "../../lib/runtime-params";
 import { useUiStore } from "../../stores/ui";
+import { useRegisterDirty } from "../../hooks/use-leave-guard";
 import { SectionCard } from "../ui/section-card";
 
 /** 表单侧的读取态（loading / ready / 两种失败都只能重读） */
@@ -70,6 +71,21 @@ function triStateFrom(value: string): boolean | undefined {
   return value === "default" ? undefined : value === "true";
 }
 
+/** 草稿是否脏（三个控件任一与已加载参数不同）：展示层的「保存」置灰与容器（离开守卫）共用这一处判定 */
+export function runtimeParamsDirty(
+  state: RuntimeParamsState,
+  draft: RuntimeParamsDraft,
+): boolean {
+  if (state.status !== "ready") return false;
+  const next = paramsFrom(draft);
+  const loaded = state.params;
+  return (
+    next.retryEnabled !== loaded.retryEnabled ||
+    next.compactionEnabled !== loaded.compactionEnabled ||
+    next.httpIdleTimeoutMs !== loaded.httpIdleTimeoutMs
+  );
+}
+
 export interface RuntimeParamsFormProps {
   state: RuntimeParamsState;
   draft: RuntimeParamsDraft;
@@ -95,13 +111,7 @@ export function RuntimeParamsForm({
   onReload,
 }: RuntimeParamsFormProps) {
   const editable = state.status === "ready";
-  const next = paramsFrom(draft);
-  const loaded = state.status === "ready" ? state.params : null;
-  const dirty =
-    loaded !== null &&
-    (next.retryEnabled !== loaded.retryEnabled ||
-      next.compactionEnabled !== loaded.compactionEnabled ||
-      next.httpIdleTimeoutMs !== loaded.httpIdleTimeoutMs);
+  const dirty = runtimeParamsDirty(state, draft);
 
   return (
     <SectionCard
@@ -195,6 +205,9 @@ export function RuntimeParamsPanel() {
   const [saving, setSaving] = useState(false);
   /** 每次「重新读取」自增（effect 依赖它，避免把拉取写进事件处理器） */
   const [attempt, setAttempt] = useState(0);
+
+  // 离开守卫：hook 放容器（展示层只按 props 渲染，不自己报到）
+  useRegisterDirty(runtimeParamsDirty(state, draft));
 
   useEffect(() => {
     let cancelled = false;

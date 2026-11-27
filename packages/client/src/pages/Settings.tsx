@@ -6,7 +6,9 @@
 // 「通用」tab 仅桌面版渲染（能力检测 `desktopBridge`；浏览器形态 tab 集合与行为完全不变）
 // 跨页意图（卡 6）：左栏「同步云端」在未配置时会置 `pendingSettingsPane`——本页负责切到「备份」tab，
 // 再由 `BackupSection` 消费并清空（二级 tab 选中态仍不进 URL）
-import { useEffect, useState } from "react";
+// 离开守卫（A4）：七个二级 tab 里的草稿源各自 `useRegisterDirty(dirty)` 报到，这里聚合「任一脏」；
+// 左栏导航与浏览器后退共用同一个 `confirmLeave`（同一次点击 / 后退只弹一次框），见 DESIGN.md `settings-leave-guard`
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Tabs } from "antd";
 import { PageHeader } from "@/components/ui/page-header";
 import { BackupSection } from "../components/settings/backup-section";
@@ -17,7 +19,14 @@ import { ProjectRulesSection } from "../components/settings/project-rules-sectio
 import { ShortcutsSection } from "../components/settings/shortcuts-section";
 import { ZoomPanel } from "../components/settings/zoom-panel";
 import { desktopBridge } from "../lib/desktop";
+import {
+  LeaveGuardContext,
+  useLeaveGuard,
+  type DirtyReporter,
+} from "../hooks/use-leave-guard";
+import { useBackGuard } from "../hooks/use-back-guard";
 import { useCloudStore } from "../stores/cloud";
+import { useUiStore } from "../stores/ui";
 
 /** 二级 tab 键（顺序 = 应用级配置 → 配置 AI → 配置项目 → 数据安全 → 快捷键说明） */
 type TabKey = "general" | "llm" | "advanced" | "rules" | "backup" | "shortcuts";
@@ -28,41 +37,65 @@ export default function Settings() {
   const pendingPane = useCloudStore((s) => s.pendingSettingsPane);
   const bridge = desktopBridge();
 
+  /** 报到的草稿源（symbol → dirty）；任一存在 = 有未保存修改 */
+  const dirtySourcesRef = useRef(new Set<symbol>());
+  const [anyDirty, setAnyDirty] = useState(false);
+  const reportDirty = useCallback<DirtyReporter>((token, dirty) => {
+    const sources = dirtySourcesRef.current;
+    if (dirty === sources.has(token)) return; // 重复报到不触发重渲染
+    if (dirty) sources.add(token);
+    else sources.delete(token);
+    setAnyDirty(sources.size > 0);
+  }, []);
+
+  /** 离开设置页前问一句（左栏四处出口与浏览器后退共用 ⇒ 只弹一次框） */
+  async function confirmLeave(): Promise<boolean> {
+    if (!anyDirty) return true;
+    return useUiStore.getState().confirm({
+      title: "放弃未保存的修改？",
+      description: "设置页有尚未保存的修改，离开后将丢失",
+    });
+  }
+  useLeaveGuard(anyDirty, confirmLeave);
+  useBackGuard(anyDirty, confirmLeave);
+
   useEffect(() => {
     if (pendingPane === "cloud") setTab("backup");
   }, [pendingPane]);
 
   return (
-    <section>
-      <PageHeader title="设置" divider={false} className="mb-3" />
-      <Tabs
-        activeKey={tab}
-        onChange={(key) => setTab(key as TabKey)}
-        items={[
-          ...(bridge !== null
-            ? [
-                {
-                  key: "general",
-                  label: "通用",
-                  // 两张卡：界面缩放（高频、轻量）在前，书库位置（重操作、会重启）在后
-                  children: (
-                    <div className="flex flex-col gap-3">
-                      <ZoomPanel />
-                      <LibraryLocationPanel />
-                    </div>
-                  ),
-                },
-              ]
-            : []),
-          { key: "llm", label: "AI 模型", children: <LlmSection /> },
-          // 「高级」两种形态都渲染：本机级配置五张卡（pi 目录 / 联网搜索 / 自定义模型 / 运行参数 / 配置文件编辑器）
-          { key: "advanced", label: "高级", children: <PiConfigSection /> },
-          { key: "rules", label: "项目规则", children: <ProjectRulesSection /> },
-          { key: "backup", label: "备份", children: <BackupSection /> },
-          // 「快捷键」恒在末位：纯说明页（无可交互控件），浏览器与桌面版都渲染
-          { key: "shortcuts", label: "快捷键", children: <ShortcutsSection /> },
-        ]}
-      />
-    </section>
+    <LeaveGuardContext.Provider value={reportDirty}>
+      <section>
+        <PageHeader title="设置" divider={false} className="mb-3" />
+        <Tabs
+          activeKey={tab}
+          onChange={(key) => setTab(key as TabKey)}
+          items={[
+            ...(bridge !== null
+              ? [
+                  {
+                    key: "general",
+                    label: "通用",
+                    // 两张卡：界面缩放（高频、轻量）在前，书库位置（重操作、会重启）在后
+                    children: (
+                      <div className="flex flex-col gap-3">
+                        <ZoomPanel />
+                        <LibraryLocationPanel />
+                      </div>
+                    ),
+                  },
+                ]
+              : []),
+            { key: "llm", label: "AI 模型", children: <LlmSection /> },
+            // 「高级」两种形态都渲染：本机级配置五张卡（pi 目录 / 联网搜索 / 自定义模型 / 运行参数 / 配置文件编辑器）
+            { key: "advanced", label: "高级", children: <PiConfigSection /> },
+            { key: "rules", label: "项目规则", children: <ProjectRulesSection /> },
+            { key: "backup", label: "备份", children: <BackupSection /> },
+            // 「快捷键」恒在末位：纯说明页（无可交互控件），浏览器与桌面版都渲染
+            { key: "shortcuts", label: "快捷键", children: <ShortcutsSection /> },
+          ]}
+        />
+      </section>
+    </LeaveGuardContext.Provider>
   );
 }

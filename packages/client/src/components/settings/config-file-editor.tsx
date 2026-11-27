@@ -23,6 +23,7 @@ import {
   type FileStateMap,
 } from "../../lib/config-file-draft";
 import { CONFIG_FILE_ENTRIES, configFileEntry } from "../../lib/config-files";
+import { useRegisterDirty } from "../../hooks/use-leave-guard";
 import { useUiStore } from "../../stores/ui";
 import { SectionCard } from "../ui/section-card";
 
@@ -44,6 +45,8 @@ export function ConfigFileEditor() {
   const state = stateOf(files, active);
   const entry = configFileEntry(active);
   const dirty = fileDirty(state);
+  // 离开守卫看**四个槽位全休**，不是当前槽位：切到别的槽再离开，前一个槽的草稿同样会丢
+  useRegisterDirty(Object.values(files).some(fileDirty));
 
   /** 按名字更新一个槽位（函数式更新：并发保存/拉取不会互相覆盖） */
   function update(name: ConfigFileName, fn: (prev: FileState) => FileState): void {

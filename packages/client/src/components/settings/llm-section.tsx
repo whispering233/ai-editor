@@ -30,6 +30,7 @@ import {
   type SettingsProviderInfo,
 } from "../../lib/api";
 import { credentialLabel, navProviderIds, unconfiguredProviders } from "../../lib/llm-providers";
+import { useRegisterDirty } from "../../hooks/use-leave-guard";
 import {
   Dialog,
   DialogContent,
@@ -66,6 +67,9 @@ export function LlmSection() {
   const [addTargetId, setAddTargetId] = useState<string | null>(null);
   /** 选择步的搜索词（关窗即清） */
   const [query, setQuery] = useState("");
+
+  // 离开守卫：任一家 key 输入框非空 = 有未保存的 key（输完没按保存就切走同样会丢）
+  useRegisterDirty(Object.values(keyDrafts).some((draft) => draft.trim() !== ""));
 
   /** 拉取当前配置（保存/清除后刷新掩码状态） */
   async function refresh() {

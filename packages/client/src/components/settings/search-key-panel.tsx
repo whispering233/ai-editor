@@ -9,6 +9,7 @@ import { useEffect, useState } from "react";
 import { Button, Input } from "antd";
 import { ApiError, getConfigFile, saveConfigFile } from "../../lib/api";
 import { composeSearchConfigText, parseSearchKey } from "../../lib/search-key";
+import { useRegisterDirty } from "../../hooks/use-leave-guard";
 import { useUiStore } from "../../stores/ui";
 import { SectionCard } from "../ui/section-card";
 
@@ -18,6 +19,11 @@ export type SearchKeyState =
   | { status: "ready"; loadedKey: string }
   | { status: "load-failed"; reason: string }
   | { status: "parse-failed"; reason: string };
+
+/** 表单是否脏（草稿差已加载 key）：展示层与容器（离开守卫报到）共用这一处判定 */
+export function searchKeyDirty(state: SearchKeyState, draft: string): boolean {
+  return state.status === "ready" && draft.trim() !== state.loadedKey.trim();
+}
 
 export interface SearchKeyFormProps {
   state: SearchKeyState;
@@ -36,7 +42,7 @@ function messageOf(err: unknown, fallback: string): string {
 
 /** 纯展示层（容器负责请求）；导出以便 SSR 走查各态 */
 export function SearchKeyForm({ state, draft, saving, saveError, onDraftChange, onSave, onReload }: SearchKeyFormProps) {
-  const dirty = state.status === "ready" && draft.trim() !== state.loadedKey.trim();
+  const dirty = searchKeyDirty(state, draft);
   const editable = state.status === "ready";
   const canReload = state.status === "load-failed" || state.status === "parse-failed";
 
@@ -97,6 +103,9 @@ export function SearchKeyPanel() {
   const [saving, setSaving] = useState(false);
   /** 每次「重新读取」自增（effect 依赖它，避免把拉取写进事件处理器） */
   const [attempt, setAttempt] = useState(0);
+
+  // 离开守卫：hook 放容器（展示层只按 props 渲染，不自己报到）
+  useRegisterDirty(searchKeyDirty(state, draft));
 
   useEffect(() => {
     let cancelled = false;

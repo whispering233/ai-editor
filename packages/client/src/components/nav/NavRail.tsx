@@ -32,6 +32,7 @@ import { resolveWorkspaceKind } from "@whispering233/ai-editor-shared";
 import { AppMark } from "../brand/app-mark";
 import { NAV_RAIL_BY_KIND, TRASH_ITEM } from "./nav-items";
 import { ApiError, CLIENT_NETWORK_ERROR, createProjectBackup } from "../../lib/api";
+import { confirmLeave } from "../../lib/leave-guard";
 import { cn } from "../../lib/utils";
 import { cloudBadgeTone, useCloudStore } from "../../stores/cloud";
 import type { Route } from "../../hooks/use-route";
@@ -102,6 +103,14 @@ export function NavRail({
   // （导航项全禁用——用户要去根首页挑一个工作区）
   const spec = NAV_RAIL_BY_KIND[resolveWorkspaceKind(config?.kind)];
 
+  /** 离开当前页（设置页有未保存草稿时会先问一句）；已在目标页 = 没事可丢，不问
+   *  四个出口（书架标识 / 概览书名按钮 / 一级导航 / 设置）全部经这里，见 DESIGN.md `settings-leave-guard` */
+  async function leaveTo(path: string): Promise<void> {
+    if (route.path === path) return;
+    if (!(await confirmLeave())) return;
+    navigate(path);
+  }
+
   const items = spec.items.map((item) => ({
     ...item,
     disabled: noProject,
@@ -129,6 +138,12 @@ export function NavRail({
           href="#/"
           title="回到书架主页"
           className="flex min-w-0 flex-1 items-center gap-1.5 rounded-md px-2 py-1.5"
+          onClick={(e) => {
+            // 修饰键 / 中键 = 交给浏览器开新标签页（不拦，也就不问）
+            if (e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+            e.preventDefault();
+            void leaveTo("/");
+          }}
         >
           <AppMark />
           {/* 不挂 `truncate`：合成斜体的墨迹会越出字宽，`overflow: hidden` 会切掉「架」右缘
@@ -149,7 +164,7 @@ export function NavRail({
             icon={<BookOutlined />}
             disabled={noProject}
             title={noProject ? "先在书架打开一本书" : `打开《${config?.name ?? ""}》概览`}
-            onClick={() => navigate("/overview")}
+            onClick={() => void leaveTo("/overview")}
           >
             <span className="min-w-0 flex-1 truncate text-left text-sm">
               {config?.name ?? "概览"}
@@ -170,7 +185,7 @@ export function NavRail({
                 ]
               : []),
           ]}
-          onClick={({ key }) => navigate(key)}
+          onClick={({ key }) => void leaveTo(key)}
         />
       </div>
 
@@ -209,7 +224,7 @@ export function NavRail({
           color="default" variant="text"
           block
           icon={<SettingOutlined />}
-          onClick={() => navigate("/preferences")}
+          onClick={() => void leaveTo("/preferences")}
         >
           <span className="min-w-0 flex-1 truncate text-left">设置</span>
         </Button>

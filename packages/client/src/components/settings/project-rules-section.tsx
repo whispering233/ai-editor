@@ -6,6 +6,7 @@
 import { useEffect, useState } from "react";
 import { Button, Input, Typography } from "antd";
 import { ApiError, CLIENT_NETWORK_ERROR } from "../../lib/api";
+import { useRegisterDirty } from "../../hooks/use-leave-guard";
 import { useProjectStore } from "../../stores/project";
 import { useUiStore } from "../../stores/ui";
 
@@ -37,6 +38,11 @@ export function ProjectRulesSection() {
   const [agentsErrorLocal, setAgentsErrorLocal] = useState<string | null>(null);
   /** 外部修改提示：store 检测到 mtime 变化 → 展示「文件已被外部修改，请刷新/重新加载」 */
   const [externalModified, setExternalModified] = useState(false);
+
+  /** 草稿脏判：与已加载的 AGENTS.md 不同（未加载完 / 其它项目的基线不算脏） */
+  const dirty =
+    agents !== null && agentsProjectId === config?.id && agentsContent !== agents.content;
+  useRegisterDirty(dirty);
 
   // 载入：进入本分区优先用 project store 已缓存 config（AppShell 挂载时已拉取）；
   // 无缓存（store 尚未拉取）补拉一次——仅本挂载触发一次（store 内部有并发防抖），

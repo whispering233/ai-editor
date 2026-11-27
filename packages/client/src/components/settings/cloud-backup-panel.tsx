@@ -34,6 +34,7 @@ import {
 } from "../../lib/cloud-config";
 import { useUiStore } from "../../stores/ui";
 import { useProjectStore } from "../../stores/project";
+import { useRegisterDirty } from "../../hooks/use-leave-guard";
 import { SectionCard } from "../ui/section-card";
 
 /** 三态文案（`state` → 一句人话；左栏按钮的提示与动作都据此派生） */
@@ -92,6 +93,7 @@ export function CloudBackupPanel() {
   /** 自动推送最近一次失败（`status.local.lastAutoPushError`；成功即消失，只显示一行不弹窗） */
   const autoPushError = status?.local?.lastAutoPushError ?? null;
   const dirty = isCloudConfigDirty(form, status);
+  useRegisterDirty(dirty);
   const halfFilled = isCredentialHalfFilled(form);
   const pulling = busy === "pull";
   const pushing = busy === "push";

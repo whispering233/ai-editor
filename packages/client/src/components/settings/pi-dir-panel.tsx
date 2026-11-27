@@ -5,6 +5,7 @@
 import { useEffect, useState } from "react";
 import { Button, Input } from "antd";
 import { ApiError, getPiConfigDir, setPiConfigDir } from "../../lib/api";
+import { useRegisterDirty } from "../../hooks/use-leave-guard";
 import { desktopBridge } from "../../lib/desktop";
 import { useUiStore } from "../../stores/ui";
 import { SectionCard } from "../ui/section-card";
@@ -54,6 +55,7 @@ export function PiDirPanel() {
   }
 
   const dirty = dir !== null && draft.trim() !== dir;
+  useRegisterDirty(dirty);
 
   return (
     <SectionCard
