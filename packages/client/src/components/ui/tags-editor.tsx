@@ -9,6 +9,7 @@ import type { InputRef } from "antd";
 import { enterBehavior, moveArrayItem } from "@/lib/tags-editor";
 import { cn } from "@/lib/utils";
 import { SuggestionDatalist } from "./suggestion-datalist";
+import { RefChip } from "./ref-chip";
 
 const SUGGESTIONS_LIST_ID = "entity-tags-suggestions";
 
@@ -117,14 +118,9 @@ export function TagsEditor({ values, onChange, placeholder, suggestions, quickTa
           {quickTags
             .filter((t) => !values.includes(t))
             .map((t) => (
-              <button
-                key={t}
-                type="button"
-                onClick={() => onChange([...values, t])}
-                className="rounded-md border border-border px-1.5 py-0.5 text-xs text-foreground hover:bg-muted hover:text-foreground"
-              >
+              <RefChip key={t} onClick={() => onChange([...values, t])} className="text-xs">
                 {t}
-              </button>
+              </RefChip>
             ))}
         </div>
       )}

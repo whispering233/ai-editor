@@ -33,6 +33,7 @@ import { PageHeader } from "@/components/ui/page-header";
 import { EmptyState } from "@/components/ui/empty-state";
 import { skeletonClass } from "@/lib/styles";
 import { ErrorBanner } from "@/components/ui/error-banner";
+import { RefChip } from "@/components/ui/ref-chip";
 import { SuggestionDatalist } from "@/components/ui/suggestion-datalist";
 import {
   Dialog,
@@ -899,13 +900,13 @@ export function HookGroupSection({
                 </div>
                 {/* 依赖链行（行内「依赖: …」可点击展开递归链） */}
                 {deps.length > 0 && (
-                  <button
-                    type="button"
+                  <RefChip
                     onClick={() => onToggleChain(hook)}
-                    className="mt-0.5 flex items-center gap-1 rounded-md border border-border px-1.5 py-0.5 text-xs text-muted-foreground hover:bg-muted hover:text-foreground"
+                    tone="muted"
+                    className="mt-0.5 text-xs"
                   >
                     依赖: {deps.join("、")}
-                  </button>
+                  </RefChip>
                 )}
                 {chain?.status === "loading" && (
                   <p className="mt-0.5 text-xs text-muted-foreground">依赖链展开中…</p>

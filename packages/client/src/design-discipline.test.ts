@@ -149,6 +149,14 @@ const RULES: Rule[] = [
     id: "dropdown-menu-selectable",
     violationsIn: (line) => /\bselectable\b/.test(line),
   },
+  {
+    // 可点内联引用（`DESIGN.md` §Components `ref-chip`）的家族串：只允许出现在唯一实现里。
+    // ⚠ 不要写成 `rounded-*`——那是「`rounded` + 零个或多个连字符」，会漏掉全部 `rounded-md` 站点，
+    // 反而命中书架「已打开」的静态胶囊（裸 `rounded`，有意不迁移，见 `backlog.md`）。
+    id: "ref-chip-shell",
+    violationsIn: (line) => /rounded-(?:sm|md) border border-border px-1\.5 py-0\.5/.test(line),
+    allow: (file) => file === "components/ui/ref-chip.tsx",
+  },
 ];
 
 /** 动态拼接的 Tailwind 类名（`className={`bg-tag-${tint}`}`）：Tailwind 只在源码里扫**字面量**类名，
@@ -401,6 +409,7 @@ describe("守卫规则自检（规则必须能识别违规样例，否则规则�
       "ad-hoc-font-size": `className="text-[13px]"`,
       "primary-bg-token": `styles={{ content: { background: token.colorPrimaryBg } }}`,
       "dropdown-menu-selectable": `menu={{ items, selectable: true, selectedKeys: [id] }}`,
+      "ref-chip-shell": `<button className="rounded-md border border-border px-1.5 py-0.5 text-xs" />`,
     };
     for (const rule of RULES) {
       const sample = samples[rule.id];
@@ -410,6 +419,25 @@ describe("守卫规则自检（规则必须能识别违规样例，否则规则�
     expect(importantClasses(`className="mb-0 text-sm"`)).toEqual([]);
     expect(RULES[0].violationsIn(`import { Button } from "antd";`)).toBe(false);
     expect(RULES[3].violationsIn(`className="w-[calc(100%-2rem)]"`)).toBe(false);
+  });
+
+  it("ref-chip-shell 命中手写家族串、放过组件自身与静态胶囊", () => {
+    const rule = RULES.find((item) => item.id === "ref-chip-shell");
+    expect(rule).toBeDefined();
+    // 需迁移的两种圆角档都要命中
+    expect(
+      rule?.violationsIn(`className="rounded-md border border-border px-1.5 py-0.5 text-foreground"`),
+    ).toBe(true);
+    expect(
+      rule?.violationsIn(`className="rounded-sm border border-border px-1.5 py-0.5 hover:bg-muted"`),
+    ).toBe(true);
+    // 裸 `rounded`（书架「已打开」静态胶囊）有意不迁移 ⇒ 不得误报
+    expect(
+      rule?.violationsIn(`className="rounded border border-border px-1.5 py-0.5 text-xs"`),
+    ).toBe(false);
+    // 唯一实现自身豁免；调用点不豁免
+    expect(rule?.allow?.("components/ui/ref-chip.tsx")).toBe(true);
+    expect(rule?.allow?.("pages/EntityDetail.tsx")).toBe(false);
   });
 
   it("no-dynamic-class 命中拼接、放过字面量", () => {

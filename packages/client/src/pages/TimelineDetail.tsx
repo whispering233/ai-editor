@@ -27,6 +27,7 @@ import type { EntitySummary } from "@whispering233/ai-editor-shared";
 import { PageHeader } from "@/components/ui/page-header";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { RefChip } from "@/components/ui/ref-chip";
 import { skeletonClass } from "@/lib/styles";
 import { cn } from "@/lib/utils";
 import {
@@ -507,14 +508,13 @@ export default function TimelineDetail({ id }: { id: string }) {
               <ul className="divide-y divide-border/70">
                 {occurring.map((r) => (
                   <li key={r.id} className="flex items-center gap-2 py-2 text-sm">
-                    <button
-                      type="button"
-                      onClick={() => navigate(`/outline/${r.targetId}`)}
+                    <RefChip
+                      to={`/outline/${r.targetId}`}
                       title="跳转大纲定位"
-                      className="min-w-0 flex-1 truncate rounded-md border border-border px-1.5 py-0.5 text-left text-foreground hover:bg-muted hover:text-foreground"
+                      className="min-w-0 flex-1 truncate text-left"
                     >
                       {r.targetName ?? r.targetId}
-                    </button>
+                    </RefChip>
                     <Button
                       danger
                       size="small"

@@ -208,6 +208,26 @@
 
 ## 前端 / UI
 
+- **4 处手写分区卡应改回 `SectionCard`（2026-11 样式治理时登记）** — 现状：`EntityDetail.tsx` / `TimelineDetail.tsx` 各有 2 处自己写 `rounded-md border border-border p-4` + `<h2 class="text-sm font-semibold">` 的块（基础信息 / 关联），而同语义的 `SectionCard`（antd `Card`）已被用 111 处。两者与 `DESIGN.md` 契约的偏离是可量化的：圆角 6px vs `card` 的 8px、块标题 14px vs `section-title` 的 16px。**与 `skeleton-block` 硬耦合**：那 6 处骨架占位用的是同一个 6px，卡改成 8px 时骨架必须同卡改（否则加载完成瞬间圆角跳一档）。
+  - 触发条件：做下一轮样式治理，或有人反馈这两个页面的块边界比别处细。
+  - 最小修法：4 处换成 `<SectionCard>`，同时把 `components/ui/skeleton-block.tsx` 的圆角改 `rounded-lg`；**必须浏览器核一次像素**（6→8px、14→16px 都是可见变）。
+
+- **6 处正文链接用的是墨色（与 `colorLink` 契约冲突，2026-11 登记）** — 现状：`character-detail.tsx` ×3、`Dashboard.tsx`、`ReferenceDetail.tsx`、`ReferenceList.tsx` 写的是 `<a className="text-primary hover:underline">`；而 `DESIGN.md` §Colors 明确「Link `#0075de` … **链接是蓝的，按钮是墨的**」，`AntdProvider.tsx` 也确实配了 `colorLink`（浅 `#0075de` / 深 `#529cca`）——`text-primary` 取到的是深墨 `#37352f`。
+  - 触发条件：做链接 / 焦点口径收口时，或有用户反馈「分不清哪句是可点的」。
+  - 最小修法：先在 `index.css` 的 `@theme inline` 补一行 `--color-link: var(--ant-color-link)`（当前没有 `text-link` 这个类），再把 6 处换成 `text-link`；`dead-token` 守卫会验证新变量有消费者。
+
+- **另两个 chip 语义未收口（2026-11 样式治理时登记）** — 现状：① **静态状态胶囊** 2 处（`Dashboard.tsx` 的书架行 / 作家卡「已打开」：`rounded border border-border px-1.5 py-0.5 text-xs text-muted-foreground`）；② **灰底内联 token** 4 处（`change-summary.tsx`、`node-delta-list.tsx`、`HookPanel.tsx` ×2，含 1 处 `font-mono`：`rounded bg-muted px-1.5 py-0.5 text-xs`）。两者都与 `type-badge` 相邻但形态不同（前者描边 hairline + 灰字、后者灰底无描边），因此 **未** 并入 `ref-chip`。
+  - 触发条件：同类写法再增 ≥3 处，或「已打开」这类状态需要统一态语。
+  - 最小修法：① 状态胶囊先定它和 `type-badge` 的边界（描边色用 hairline 还是 `type-badge-border`），再决定给 `TypeChip` 加第三档还是新建 `status-pill`；② 灰底 token 归「内联代码 / 键名」语义，单独组件，不要与 chip 合并。
+
+- **设定详情页的两个引用 chip 绕过未保存守卫（2026-11 复核发现，存量缺陷）** — 现状：`EntityDetail.tsx` 的「上级 / 子设定」chip 直接 `navigate()`（`:619` / `:640`），而它们渲染在 `SettingWorkbench` 里、该壳持有 `confirmDiscard()`（`:69`，rail 切换 / 后退 / 收起详情都过了它）——从 chip 切到另一个设定时**不经确认就丢弃当前表单编辑**。同文件已有正确写法（`SettingWorkbench.tsx:216` 的「设定树」返回条：`<a href>` + `e.preventDefault()` + `confirmDiscard().then`）。
+  - 触发条件：用户从设定详情的上级 / 子设定 chip 跳走且表单 dirty。
+  - 最小修法：给 `EntityDetail` 加 `onNavigate?: (to: string) => void`（`SettingWorkbench` 传 `confirmDiscard` 版），chip 改成 `ref-chip` 的 `to` + `onClick` 共存形态；**不要**在 `EntityDetail` 里直接读 leave-guard 模块单槽（壳与内层两级守卫会弹两次）。
+
+- **人物页的加载骨架与加载后形态不一致（2026-11 复核发现）** — 现状：`character-detail.tsx:923` 的骨架是**两列 6px 假卡**（`grid md:grid-cols-2` + 2 个 `p-4` 盒），而加载完成后是 **tabs + 单个 `SectionCard`（antd Card = 8px）**（`:353` / `:409`）——骨架既数不对（2 vs 1），圆角也不对（6 vs 8）。这也是它**不**并入 `skeleton-block` 的原因（组件只服务 EntityDetail / TimelineDetail 那 4 处）。
+  - 触发条件：做下一轮样式治理，或有人反馈「人物页加载完会跳一下」。
+  - 最小修法：改成单个 `skeleton-block`（`rows={5}` + `className` 带上该页布局）且用 8px 圆角，同时在 `DESIGN.md` 的 `skeleton-block` 条目里把人物页从「例外」拿下。
+
 - **设置页「备份」子导航切换会丢云端账号草稿（2026-11 离开守卫落地后登记）** — 现状：离开守卫覆盖「离开设置页」（左栏四处出口 + 浏览器后退），但「备份」tab 内三级导航（自动备份 ↔ 云端备份）是条件渲染（`panel === "auto" ? <AutoBackupPanel/> : <CloudBackupPanel/>`），切走即卸载云端表单，未保存的账号 / 密码草稿仍静默丢失。同类面里 `config-file-editor` 的四个文件槽**不丢**（已按全槽判 dirty 覆盖）。触发条件：用户填完账号未保存就切到自动备份，或反向。最小修法：子导航 `onClick` 先过同一个 `confirmLeave()`（守卫已就位，只需在切 pane 的入口问一句）；或让两个面板同时挂载（代价 = 进 tab 就拉两份数据）。
 
 - **`models.json` / `settings.json` 两个写入口的旧快照覆盖（2026-11 自定义模型、运行参数两卡登记）** — 现状：两张表单卡都只持有挂载时 GET 的快照（`original` / `loadedText`），而同页下方「本机配置文件」的 JSON 编辑器能直接改同一份文件且不发任何刷新信号；不点「重新读取」就用旧快照整份回写，编辑器的改动被静默抹掉（`models.json` 写前有 `.bak` 可抢回一代；`settings.json` 无备份）。触发条件：出现真实的手编 JSON 后表单覆盖反馈，或同页两入口成为常用路径。最小修法：保存前先 GET 当前文本与快照比对，不一致就提示「文件已被其他入口修改，先重新读」并中止；不要引入 mtime/ETag 第二套真相。

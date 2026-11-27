@@ -21,6 +21,7 @@ import type { EntitySummary } from "@whispering233/ai-editor-shared";
 import { DeleteOutlined } from "@ant-design/icons";
 import { RowContextMenu } from "../entity/row-context-menu";
 import { TagChip } from "../ui/tag-chip";
+import { RefChip } from "../ui/ref-chip";
 import { DropIndicator } from "../ui/drop-indicator";
 import { eventDescription, eventTagsOf } from "../../lib/timeline";
 import { useSaveShortcut } from "../../lib/save-shortcut";
@@ -241,15 +242,15 @@ export function TimelineEvent({
               {description}
             </p>
             {(expanded || overflowing) && (
-              <button
-                type="button"
+              <RefChip
                 draggable={false}
                 onClick={() => setExpanded((v) => !v)}
-                className="mt-1 rounded-md border border-border px-1.5 py-0.5 text-xs text-primary hover:bg-muted"
-                aria-expanded={expanded}
+                tone="primary"
+                ariaExpanded={expanded}
+                className="mt-1 text-xs"
               >
                 {expanded ? "收起" : "展开"}
-              </button>
+              </RefChip>
             )}
           </div>
         )}

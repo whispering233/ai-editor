@@ -17,6 +17,7 @@ import { CreateRelationDialog } from "../components/entity/create-relation-dialo
 import { TagsEditor } from "../components/ui/tags-editor";
 import { ParentSettingSelect } from "../components/entity/parent-setting-select";
 import { TypeChip } from "../components/ui/tag-chip";
+import { RefChip } from "../components/ui/ref-chip";
 import { ComputePreview } from "../components/delta/compute-preview";
 import { entityListHost } from "../lib/entity-paths";
 import { Button, Input, Select } from "antd";
@@ -451,14 +452,14 @@ export default function EntityDetail({
                 >
                   {`创建于 ${formatMonthDay(detail.createdAt)} · 更新于 ${formatMonthDay(detail.updatedAt)}`}
                 </span>
-                <button
-                  type="button"
+                <RefChip
                   onClick={() => setDeltaOpen((v) => !v)}
                   title="展开状态预览：计算该实体在任意大纲节点处的累积状态"
-                  className="shrink-0 rounded-md border border-border px-1.5 py-0.5 text-muted-foreground hover:bg-muted hover:text-foreground"
+                  tone="muted"
+                  className="shrink-0"
                 >
                   变更记录 {detail.deltaCount} 条
-                </button>
+                </RefChip>
               </div>
             ) : undefined
           }
@@ -486,14 +487,13 @@ export default function EntityDetail({
               <p className="text-xs text-muted-foreground">
                 创建于 {formatTimestamp(detail.createdAt)} · 更新于{" "}
                 {formatTimestamp(detail.updatedAt)} ·{" "}
-                <button
-                  type="button"
+                <RefChip
                   onClick={() => setDeltaOpen((v) => !v)}
                   title="展开状态预览：计算该实体在任意大纲节点处的累积状态"
-                  className="rounded-md border border-border px-1.5 py-0.5 text-muted-foreground hover:bg-muted hover:text-foreground"
+                  tone="muted"
                 >
                   变更记录 {detail.deltaCount} 条
-                </button>
+                </RefChip>
               </p>
             ) : undefined
           }
@@ -613,14 +613,13 @@ export default function EntityDetail({
                       <span className="text-muted-foreground">
                         上级：
                         {h.parent ? (
-                          <button
-                            type="button"
+                          <RefChip
+                            className="ml-1"
                             title="打开上级设定"
-                            className="ml-1 rounded-md border border-border px-1.5 py-0.5 text-foreground hover:bg-muted hover:text-foreground"
-                            onClick={() => navigate(`/setting/${h.parent!.parentId}`)}
+                            to={`/setting/${h.parent.parentId}`}
                           >
                             {h.parent.parentName ?? h.parent.parentId}
-                          </button>
+                          </RefChip>
                         ) : (
                           <span className="ml-1 text-muted-foreground/70">
                             （独立设定——暂无上级）
@@ -633,15 +632,14 @@ export default function EntityDetail({
                           <span className="ml-1 text-muted-foreground/70">（无）</span>
                         ) : (
                           h.children.map((c) => (
-                            <button
+                            <RefChip
                               key={c.relationId}
-                              type="button"
+                              className="ml-1"
                               title="打开子设定"
-                              className="ml-1 rounded-md border border-border px-1.5 py-0.5 text-foreground hover:bg-muted hover:text-foreground"
-                              onClick={() => navigate(`/setting/${c.childId}`)}
+                              to={`/setting/${c.childId}`}
                             >
                               {c.childName ?? c.childId}
-                            </button>
+                            </RefChip>
                           ))
                         )}
                       </span>
