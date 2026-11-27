@@ -16,6 +16,7 @@ import {
 } from "../../lib/relation-metadata";
 import { useUiStore } from "../../stores/ui";
 import { RelationMetadataForm } from "../entity/relation-metadata-form";
+import { FieldError } from "@/components/ui/field-error";
 
 /** 抽屉宽度（右栏；窄屏仍按此宽贴着右边缘） */
 const DRAWER_WIDTH = 360;
@@ -84,7 +85,7 @@ export function PlotEdgeDrawer({
       <p className="mb-3 text-sm text-muted-foreground">{headline}</p>
       <form id="plot-edge-form" onSubmit={handleSubmit} className="flex flex-col gap-3">
         <RelationMetadataForm value={draft} onChange={setDraft} />
-        {error !== null && <p className="text-xs text-destructive">{error}</p>}
+        {error !== null && <FieldError>{error}</FieldError>}
       </form>
     </Drawer>
   );

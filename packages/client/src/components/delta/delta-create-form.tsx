@@ -30,6 +30,7 @@ import {
 } from "../../lib/delta-create";
 import { formatDeltaValue, targetTypeLabel } from "../../lib/delta";
 import { useUiStore } from "../../stores/ui";
+import { SaveError } from "@/components/ui/save-error";
 
 /** op → 中文标签（操作选择器；与 lib/delta DELTA_OP_LABEL 语义一致，此处仅表单选项用） */
 const OP_OPTION_LABEL: Record<DeltaOp, string> = {
@@ -337,7 +338,7 @@ export function DeltaCreateForm({
       </div>
 
       {/* ⑤ 提交区 */}
-      {submitError !== null && <p className="text-sm text-destructive">{submitError}</p>}
+      {submitError !== null && <SaveError>{submitError}</SaveError>}
       <div className="flex items-center justify-end gap-2">
         <Button onClick={onClose} disabled={submitting}>
           取消

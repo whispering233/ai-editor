@@ -44,6 +44,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { SaveError } from "@/components/ui/save-error";
 
 
 /**
@@ -353,7 +354,7 @@ export function CreateRelationDialog({
               )}
             </div>
           </div>
-          {error && <p className="text-sm text-destructive">{error}</p>}
+          {error && <SaveError>{error}</SaveError>}
         </form>
         <DialogFooter>
           <Button onClick={onClose} disabled={submitting}>

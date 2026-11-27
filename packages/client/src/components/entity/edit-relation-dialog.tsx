@@ -20,6 +20,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { RelationMetadataForm } from "./relation-metadata-form";
+import { FieldError } from "@/components/ui/field-error";
 
 /** 端点显示名（名称缺失回退 id） */
 function endpointName(r: RelationSummaryItem, side: "source" | "target"): string {
@@ -77,7 +78,7 @@ export function EditRelationDialog({
         </DialogHeader>
         <form id="edit-relation-meta-form" onSubmit={handleSubmit} className="flex flex-col gap-3">
           <RelationMetadataForm value={draft} onChange={setDraft} />
-          {error !== null && <p className="text-xs text-destructive">{error}</p>}
+          {error !== null && <FieldError>{error}</FieldError>}
           <DialogFooter>
             <Button onClick={onClose} disabled={submitting}>
               取消

@@ -79,6 +79,7 @@ import { useChatStore } from "../stores/chat";
 import { useCloudStore } from "../stores/cloud";
 import { useDataRefresh } from "../hooks/use-data-refresh";
 import { useUiStore } from "../stores/ui";
+import { SaveError } from "@/components/ui/save-error";
 
 /** 创作要素卡类型中文名（与 EntityList 本地映射一致；四卡顺序 = 统计请求顺序） */
 
@@ -774,7 +775,7 @@ export default function Dashboard({ mode }: { mode: DashboardMode }) {
               )}
             </div>
             {renaming && renameError && (
-              <p className="mt-1 text-sm text-destructive">{renameError}</p>
+              <SaveError className="mt-1">{renameError}</SaveError>
             )}
           </div>
         )}
@@ -919,7 +920,7 @@ export default function Dashboard({ mode }: { mode: DashboardMode }) {
                       打开
                     </Button>
                   </div>
-                  {pathError && <p className="text-sm text-destructive">{pathError}</p>}
+                  {pathError && <SaveError>{pathError}</SaveError>}
                 </form>
               )}
             </div>
@@ -1034,7 +1035,7 @@ export default function Dashboard({ mode }: { mode: DashboardMode }) {
                   》——可重命名导入，或保持原样（服务端自动去重）
                 </p>
               )}
-              {importError && <p className="text-sm text-destructive">{importError}</p>}
+              {importError && <SaveError>{importError}</SaveError>}
             </form>
             <DialogFooter>
               <Button onClick={closeImportDialog} disabled={importing}>

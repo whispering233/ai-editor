@@ -16,6 +16,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { SaveError } from "@/components/ui/save-error";
 
 /** 类型徽标/按钮文案（卷/章/场） */
 export const TYPE_LABEL: Record<OutlineNodeType, string> = {
@@ -75,7 +76,7 @@ export function ConfirmDialog({
           <DialogTitle>{title}</DialogTitle>
         </DialogHeader>
         <p className="text-sm text-muted-foreground">{description}</p>
-        {error && <p className="mt-2 text-sm text-destructive">{error}</p>}
+        {error && <SaveError className="mt-2">{error}</SaveError>}
         <DialogFooter>
           <Button onClick={onClose} disabled={submitting}>
             取消

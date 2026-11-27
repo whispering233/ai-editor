@@ -31,6 +31,7 @@ import { useUiStore } from "../../stores/ui";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "../ui/dialog";
 import { EmptyState } from "../ui/empty-state";
 import { SectionCard } from "../ui/section-card";
+import { FieldError } from "@/components/ui/field-error";
 
 /** 列表侧的读取态（loading / ready / 两种失败都只能重读） */
 export type ModelsProvidersState =
@@ -88,12 +89,12 @@ export function ModelsProvidersCard({
     >
       {state.status === "loading" && <p className="text-xs text-muted-foreground">读取中…</p>}
       {state.status === "load-failed" && (
-        <p className="text-xs text-destructive">读取 models.json 失败：{state.reason}</p>
+        <FieldError>读取 models.json 失败：{state.reason}</FieldError>
       )}
       {state.status === "parse-failed" && (
-        <p className="text-xs text-destructive">
+        <FieldError>
           models.json 无法读取：{state.reason} —— 请在下方「本机配置文件 → 自定义模型」里修复后再试。
-        </p>
+        </FieldError>
       )}
 
       {editable &&
@@ -155,7 +156,7 @@ function FormField({
     <div className="flex flex-col gap-1">
       <span className="text-xs text-muted-foreground">{label}</span>
       {children}
-      {error !== undefined && error !== null && <span className="text-xs text-destructive">{error}</span>}
+      {error !== undefined && error !== null && <FieldError as="span">{error}</FieldError>}
     </div>
   );
 }
@@ -300,7 +301,7 @@ function ProviderDialog({
                       aria-label="模型 id"
                     />
                     {modelErrors[index]?.id != null && (
-                      <span className="text-xs text-destructive">{modelErrors[index]?.id}</span>
+                      <FieldError as="span">{modelErrors[index]?.id}</FieldError>
                     )}
                   </div>
                   <Input
@@ -318,7 +319,7 @@ function ProviderDialog({
                       aria-label="上下文窗口"
                     />
                     {modelErrors[index]?.contextWindow != null && (
-                      <span className="text-xs text-destructive">填正整数或留空</span>
+                      <FieldError as="span">填正整数或留空</FieldError>
                     )}
                   </div>
                   <div className="flex flex-col gap-0.5">
@@ -330,7 +331,7 @@ function ProviderDialog({
                       aria-label="最大输出"
                     />
                     {modelErrors[index]?.maxTokens != null && (
-                      <span className="text-xs text-destructive">填正整数或留空</span>
+                      <FieldError as="span">填正整数或留空</FieldError>
                     )}
                   </div>
                   <Switch
@@ -354,7 +355,7 @@ function ProviderDialog({
           )}
         </div>
 
-        {saveError !== null && <p className="text-xs text-destructive">{saveError}</p>}
+        {saveError !== null && <FieldError>{saveError}</FieldError>}
 
         <DialogFooter>
           <Button onClick={onCancel} disabled={saving}>

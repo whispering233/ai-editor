@@ -26,6 +26,7 @@ import { CONFIG_FILE_ENTRIES, configFileEntry } from "../../lib/config-files";
 import { useRegisterDirty } from "../../hooks/use-leave-guard";
 import { useUiStore } from "../../stores/ui";
 import { SectionCard } from "../ui/section-card";
+import { FieldError } from "@/components/ui/field-error";
 
 /** 拉取失败 / 网络错误的统一文案 */
 function messageOf(err: unknown, fallback: string): string {
@@ -129,7 +130,7 @@ export function ConfigFileEditor() {
           aria-label={`${active} 内容`}
         />
       </div>
-      {state.error !== null && <p className="mt-1 text-xs text-destructive">{state.error}</p>}
+      {state.error !== null && <FieldError className="mt-1">{state.error}</FieldError>}
       <p className="mt-2 text-xs text-muted-foreground">
         凭据以明文存在这些文件里（只在本机回传，不进日志 / 备份 / 云端）。保存后立即生效，不需要重启。
       </p>

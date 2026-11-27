@@ -41,6 +41,7 @@ import {
 } from "../ui/dialog";
 import { ProviderIcon } from "./provider-icon";
 import { useUiStore, type ErrorBanner } from "../../stores/ui";
+import { FieldError } from "@/components/ui/field-error";
 
 /** 从任意错误提取错误码（ApiError → 服务端/客户端码；未知 → 网络错误） */
 function errorCodeOf(err: unknown): ErrorBanner["code"] {
@@ -236,9 +237,9 @@ export function LlmSection() {
                     {credentialLabel(panelProvider)}
                   </span>
                   {!panelProvider.authConfigured && (
-                    <span className="text-xs text-destructive">
+                    <FieldError as="span">
                       未配置凭证：聊天下拉已禁用此组，聊天不可用
-                    </span>
+                    </FieldError>
                   )}
                   <div className="flex gap-1.5">
                     <Input
@@ -270,9 +271,9 @@ export function LlmSection() {
                       )}
                   </div>
                   {keyErrors[panelProvider.id] && (
-                    <span className="text-xs text-destructive">
+                    <FieldError as="span">
                       {keyErrors[panelProvider.id]}
-                    </span>
+                    </FieldError>
                   )}
                 </div>
               </>
@@ -350,7 +351,7 @@ export function LlmSection() {
                   aria-label={`${addTarget.displayName} API key`}
                 />
                 {keyErrors[addTarget.id] && (
-                  <span className="text-xs text-destructive">{keyErrors[addTarget.id]}</span>
+                  <FieldError as="span">{keyErrors[addTarget.id]}</FieldError>
                 )}
               </div>
               <DialogFooter>

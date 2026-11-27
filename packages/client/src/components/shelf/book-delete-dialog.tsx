@@ -19,6 +19,7 @@ import {
 import { ApiError, deleteProject } from "@/lib/api";
 import { describeDeleteBookError } from "@/lib/error-messages";
 import { useUiStore } from "@/stores/ui";
+import { SaveError } from "@/components/ui/save-error";
 
 /** 删除目标：项目 id（调用方用它判定「是不是当前书」）+ 书名（文案）+ 书目录绝对路径（服务端入参） */
 export interface BookDeleteTarget {
@@ -144,8 +145,8 @@ export function BookDeleteDialog({
         >
           同时删除云端备份
         </Checkbox>
-        {error !== null && <p className="text-sm text-destructive">{error}</p>}
-        {view.note !== null && <p className="text-sm text-destructive">{view.note}</p>}
+        {error !== null && <SaveError>{error}</SaveError>}
+        {view.note !== null && <SaveError>{view.note}</SaveError>}
         <DialogFooter>
           <Button onClick={close} disabled={deleting}>
             取消

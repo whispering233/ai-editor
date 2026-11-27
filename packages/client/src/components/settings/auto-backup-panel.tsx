@@ -46,6 +46,7 @@ import { useProjectStore } from "../../stores/project";
 import { useUiStore } from "../../stores/ui";
 import { useChatStore } from "../../stores/chat";
 import { ConfirmDialog } from "../outline/dialogs";
+import { FieldError } from "@/components/ui/field-error";
 
 /**
  * 备份列表请求序号（模块级，仿 chat store loadSeq 模式——P2-1 代际守卫）：
@@ -430,7 +431,7 @@ export function AutoBackupPanel() {
                       </p>
                       {/* 行内错误提示（400/404 透传服务端 message / 网络失败固定文案），保持编辑态 */}
                       {editing && renaming.error !== null ? (
-                        <p className="mt-1 text-xs text-destructive">{renaming.error}</p>
+                        <FieldError className="mt-1">{renaming.error}</FieldError>
                       ) : null}
                     </li>
                   );

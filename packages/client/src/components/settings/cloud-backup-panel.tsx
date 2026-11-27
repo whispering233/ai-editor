@@ -36,6 +36,7 @@ import { useUiStore } from "../../stores/ui";
 import { useProjectStore } from "../../stores/project";
 import { useRegisterDirty } from "../../hooks/use-leave-guard";
 import { SectionCard } from "../ui/section-card";
+import { FieldError } from "@/components/ui/field-error";
 
 /** 三态文案（`state` → 一句人话；左栏按钮的提示与动作都据此派生） */
 const SYNC_STATE_LABELS: Record<CloudSyncState, string> = {
@@ -195,9 +196,9 @@ export function CloudBackupPanel() {
         </div>
 
         {halfFilled && (
-          <p className="mt-2 text-xs text-destructive">
+          <FieldError className="mt-2">
             地址与用户名要么都填、要么都清空（都清空 = 关闭云存档，密码会一并丢弃）；当前不会提交密码
-          </p>
+          </FieldError>
         )}
         {!configured && status !== null && !halfFilled && (
           <p className="mt-2 text-xs text-muted-foreground">填写地址与用户名/应用密码并保存后即可测试连接。</p>
@@ -211,7 +212,7 @@ export function CloudBackupPanel() {
             应用密码已保存（接口从不回传密码，所以这里不回显；要改就直接输入新密码，留空 = 保持不变）。
           </p>
         )}
-        {statusFailed && <p className="mt-2 text-xs text-destructive">云端配置读取失败，请刷新页面重试。</p>}
+        {statusFailed && <FieldError className="mt-2">云端配置读取失败，请刷新页面重试。</FieldError>}
 
         <div className="mt-3 flex flex-wrap items-center gap-2">
           <Button type="primary" disabled={!dirty || saving} loading={saving} onClick={() => void handleSave()}>
@@ -311,12 +312,12 @@ export function CloudBackupPanel() {
 
         {/* 自动推送失败（卡 7）：一行，不弹窗；任何一次推送成功后消失（唯一清除点 = pushBackup 成功写） */}
         {autoPushError !== null && (
-          <p className="mt-2 text-xs text-destructive">
+          <FieldError className="mt-2">
             自动推送失败（{formatBackupTime(autoPushError.at)} · {autoPushError.code}）：{autoPushError.message}
             {autoPushError.code === "CLOUD_CONFLICT"
               ? "——请用上方「推送到云端」手动裁决（冲突时可在裁决框选择用本机覆盖云端）"
               : ""}
-          </p>
+          </FieldError>
         )}
 
         {/* 云端份列表（≤5 行 = 云端保留上限；行尾标「云端最新」、行内可拉取任一份） */}
@@ -361,7 +362,7 @@ export function CloudBackupPanel() {
         </div>
 
         {/* 动作失败文案（推送/拉取）：toast 会消失，行内留一份可回看；冲突另开裁决框 */}
-        {lastError !== null && <p className="mt-2 text-xs text-destructive">{lastError}</p>}
+        {lastError !== null && <FieldError className="mt-2">{lastError}</FieldError>}
       </SectionCard>
     </div>
   );

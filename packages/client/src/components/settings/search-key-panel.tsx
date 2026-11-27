@@ -12,6 +12,7 @@ import { composeSearchConfigText, parseSearchKey } from "../../lib/search-key";
 import { useRegisterDirty } from "../../hooks/use-leave-guard";
 import { useUiStore } from "../../stores/ui";
 import { SectionCard } from "../ui/section-card";
+import { FieldError } from "@/components/ui/field-error";
 
 /** 表单侧的读取态（loading / ready / 两种失败都只能重读） */
 export type SearchKeyState =
@@ -72,14 +73,14 @@ export function SearchKeyForm({ state, draft, saving, saveError, onDraftChange, 
       </div>
 
       {state.status === "load-failed" && (
-        <p className="mt-1 text-xs text-destructive">读取 search.json 失败：{state.reason}</p>
+        <FieldError className="mt-1">读取 search.json 失败：{state.reason}</FieldError>
       )}
       {state.status === "parse-failed" && (
-        <p className="mt-1 text-xs text-destructive">
+        <FieldError className="mt-1">
           search.json 现在是 {state.reason} —— 请在下方「本机配置文件 → 搜索凭据」里修复后再试。
-        </p>
+        </FieldError>
       )}
-      {saveError !== null && <p className="mt-1 text-xs text-destructive">{saveError}</p>}
+      {saveError !== null && <FieldError className="mt-1">{saveError}</FieldError>}
       {canReload && (
         <div className="mt-2">
           <Button size="small" onClick={onReload}>

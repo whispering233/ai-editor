@@ -66,6 +66,7 @@ import {
 import { cn } from "../../lib/utils";
 import { skeletonClass } from "../../lib/styles";
 import { ConfirmDialog } from "../outline/dialogs";
+import { FieldError } from "@/components/ui/field-error";
 
 // ============ 文案映射（会话切换/提案卡/focus 小条） ============
 // 会话相对时间用 shared formatRelativeTime（Sidebar/Dashboard 同源；≥30 天回退绝对时间，非法输入原样返回）
@@ -1161,7 +1162,7 @@ export function ProposalRow({
             </pre>
           )}
           {proposal.status === "stale" && (
-            <p className="text-xs text-destructive">数据已变化，此提案已失效</p>
+            <FieldError>数据已变化，此提案已失效</FieldError>
           )}
         </div>
       )}

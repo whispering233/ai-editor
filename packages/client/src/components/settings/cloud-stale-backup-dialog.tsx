@@ -19,6 +19,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "../ui/dialog";
+import { FieldError } from "@/components/ui/field-error";
 
 export function CloudStaleBackupDialog() {
   const open = useCloudStore((s) => s.staleDialogOpen);
@@ -55,12 +56,12 @@ export function CloudStaleBackupDialog() {
           <li>· 上传旧备份：只把上面那份旧包推上去（云端内容会落后于本机）。</li>
         </ul>
 
-        {lastError !== null && <p className="text-xs text-destructive">{lastError}</p>}
+        {lastError !== null && <FieldError>{lastError}</FieldError>}
         {localLatest === null && !localUnavailable && (
           <p className="text-xs text-muted-foreground">本机还没有备份，「上传旧备份」不可用——用左边那条先生成一份。</p>
         )}
         {localUnavailable && (
-          <p className="text-xs text-destructive">本机备份列表读取失败，无法确认有没有可上传的旧备份。</p>
+          <FieldError>本机备份列表读取失败，无法确认有没有可上传的旧备份。</FieldError>
         )}
 
         <DialogFooter>

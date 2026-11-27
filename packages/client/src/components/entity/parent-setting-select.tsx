@@ -10,6 +10,7 @@ import type { EntitySummary } from "@whispering233/ai-editor-shared";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { listEntities } from "../../lib/api";
 import { cn } from "../../lib/utils";
+import { FieldError } from "@/components/ui/field-error";
 
 const CANDIDATE_LIMIT = 100;
 
@@ -102,7 +103,7 @@ export function ParentSettingSelect({
             <p className="px-2 py-3 text-center text-xs text-muted-foreground">加载中…</p>
           ) : failed ? (
             <div className="flex items-center justify-between gap-2 px-2 py-3">
-              <span className="text-xs text-destructive">列表加载失败</span>
+              <FieldError as="span">列表加载失败</FieldError>
               <Button size="small" onClick={() => void loadCandidates()}>
                 重试
               </Button>

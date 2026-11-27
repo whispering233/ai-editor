@@ -85,6 +85,7 @@ import { useDataRefresh } from "../hooks/use-data-refresh";
 import { useSaveShortcut } from "../lib/save-shortcut";
 import { useProjectStore } from "../stores/project";
 import { useUiStore } from "../stores/ui";
+import { SaveError } from "@/components/ui/save-error";
 
 /** 生命周期动作文案（确认面板标题/预览/toast） */
 const LIFECYCLE_LABEL: Record<HookLifecycleKind, string> = {
@@ -620,7 +621,7 @@ export default function HookPanel() {
                 nodeOptions={nodeOptions}
               />
             </div>
-            {createError && <p className="text-sm text-destructive">{createError}</p>}
+            {createError && <SaveError>{createError}</SaveError>}
           </form>
           <DialogFooter>
             <Button onClick={() => setCreateOpen(false)} disabled={createSubmitting}>
@@ -701,17 +702,17 @@ export default function HookPanel() {
                 </p>
                 {/* 回收依赖者提示（S3 降级：depends_on 边加载失败时无法确认依赖者，明示不可用） */}
                 {lifecycleKind === "resolve" && depEdgesFailed && (
-                  <p className="mt-2 text-sm text-destructive">依赖关系加载失败，无法确认依赖者</p>
+                  <SaveError className="mt-2">依赖关系加载失败，无法确认依赖者</SaveError>
                 )}
                 {lifecycleKind === "resolve" &&
                   !depEdgesFailed &&
                   dependentsCount(depEdges, lifecycleTarget.id) > 0 && (
-                    <p className="mt-2 text-sm text-destructive">
+                    <SaveError className="mt-2">
                       有 {dependentsCount(depEdges, lifecycleTarget.id)} 个伏笔依赖此伏笔
-                    </p>
+                    </SaveError>
                   )}
               </div>
-              {lifecycleError && <p className="text-sm text-destructive">{lifecycleError}</p>}
+              {lifecycleError && <SaveError>{lifecycleError}</SaveError>}
             </div>
             <DialogFooter>
               <Button onClick={() => setLifecycleTarget(null)} disabled={lifecycleSubmitting}>
@@ -743,7 +744,7 @@ export default function HookPanel() {
                 onChange={(next) => setEditForm((prev) => (prev ? { ...prev, ...next } : prev))}
                 nodeOptions={nodeOptions}
               />
-              {editError && <p className="text-sm text-destructive">{editError}</p>}
+              {editError && <SaveError>{editError}</SaveError>}
             </div>
             <DialogFooter>
               <Button onClick={() => setEditTarget(null)} disabled={editSaving}>

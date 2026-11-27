@@ -48,6 +48,7 @@ import {
 } from "@/components/ui/dialog";
 import { useProjectStore } from "../stores/project";
 import { useUiStore } from "../stores/ui";
+import { SaveError } from "@/components/ui/save-error";
 
 /** 编辑态文本域行数下限（内容更多时自动长高；纯布局常量，无第二处引用） */
 const EDIT_MIN_ROWS = 16;
@@ -127,7 +128,7 @@ export function StyleNotesBody({
               onChange={(e) => onDraftChange(e.target.value)}
             />
             {saveError !== null ? (
-              <p className="mt-2 text-sm text-destructive">{saveError}</p>
+              <SaveError className="mt-2">{saveError}</SaveError>
             ) : (
               // 上限提示：数字由常量插值（数值单源，不复述）
               <p className="mt-2 text-xs text-muted-foreground">
@@ -339,7 +340,7 @@ export default function StyleNotes() {
         }}
       />
       {actionError !== null && pending === null && (
-        <p className="mt-2 text-sm text-destructive">{actionError}</p>
+        <SaveError className="mt-2">{actionError}</SaveError>
       )}
       <Dialog
         open={pending !== null}
@@ -356,7 +357,7 @@ export default function StyleNotes() {
                 : "恢复预置会丢弃当前自定义版本，回到产品预置的风格说明。"}
             </DialogDescription>
           </DialogHeader>
-          {actionError !== null && <p className="mt-2 text-sm text-destructive">{actionError}</p>}
+          {actionError !== null && <SaveError className="mt-2">{actionError}</SaveError>}
           <DialogFooter>
             <Button onClick={closePending} disabled={saving}>
               取消

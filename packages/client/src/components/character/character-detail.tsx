@@ -65,6 +65,8 @@ import { useProjectStore } from "../../stores/project";
 import { useUiStore } from "../../stores/ui";
 import { cn } from "../../lib/utils";
 import { skeletonClass } from "../../lib/styles";
+import { FieldError } from "@/components/ui/field-error";
+import { SaveError } from "@/components/ui/save-error";
 
 const ENTITY_TYPE = "character";
 const LIST_ROUTE = entityListPath("character");
@@ -262,7 +264,7 @@ function ProfileField({
       ) : (
         <FieldControl field={field} value={value} onChange={onChange} />
       )}
-      {error !== null && <p className="mt-1 text-xs text-destructive">{error}</p>}
+      {error !== null && <FieldError className="mt-1">{error}</FieldError>}
       {error === null && hint !== null && (
         <p className="mt-1 text-xs text-muted-foreground">{hint}</p>
       )}
@@ -302,7 +304,7 @@ export function CharacterFieldsForm({
               value={values[f.key]}
               onChange={(v) => onChange(f.key, v)}
             />
-            {error !== null && <p className="mt-1 text-xs text-destructive">{error}</p>}
+            {error !== null && <FieldError className="mt-1">{error}</FieldError>}
             {error === null && hint !== null && (
               <p className="mt-1 text-xs text-muted-foreground">{hint}</p>
             )}
@@ -359,7 +361,7 @@ function CharacterProfile({
             <Input value={name} onChange={(e) => onNameChange(e.target.value)} />
           )}
           {basicsErrors?.name != null && (
-            <p className="mt-1 text-xs text-destructive">{basicsErrors.name}</p>
+            <FieldError className="mt-1">{basicsErrors.name}</FieldError>
           )}
         </ProfileRow>
         {fields.map((f) => (
@@ -725,7 +727,7 @@ export function CharacterDetailView({
                   showCustomFields={"custom_fields" in detail.data}
                   selfId={detail.id}
                 />
-                {saveError !== null && <p className="text-sm text-destructive">{saveError}</p>}
+                {saveError !== null && <SaveError>{saveError}</SaveError>}
               </div>
             ),
           },

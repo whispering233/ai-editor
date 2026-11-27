@@ -21,6 +21,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "../ui/dialog";
+import { FieldError } from "@/components/ui/field-error";
 
 /** 对比行（两列同一组标签：时间 / 设备 / 统计 / 大小） */
 function CompareColumn({
@@ -111,12 +112,12 @@ export function CloudConflictDialog() {
           />
         </div>
 
-        {lastError !== null && <p className="mt-1 text-xs text-destructive">{lastError}</p>}
+        {lastError !== null && <FieldError className="mt-1">{lastError}</FieldError>}
         {/* 读取失败 ≠ 没有备份（卡 C）：把故障说成事实会误导（用户会以为备份丢了） */}
         {localUnavailable && (
-          <p className="mt-1 text-xs text-destructive">
+          <FieldError className="mt-1">
             本机备份列表读取失败——无法确认本机有没有可用备份，先刷新设置页面板再裁决。
-          </p>
+          </FieldError>
         )}
         {localLatest === null && !localUnavailable && (
           <p className="mt-1 text-xs text-muted-foreground">

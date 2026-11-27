@@ -59,6 +59,8 @@ import {
   readTextFile,
 } from "../lib/document-io";
 import { referenceSaveData, referenceSource, referenceTypeLabel } from "../lib/reference";
+import { FieldError } from "@/components/ui/field-error";
+import { SaveError } from "@/components/ui/save-error";
 
 /** 新建条目的缺省分类（REST 不兜底，页面给缺省——见 docs/api/30-api-entity.md「reference 特例」） */
 const DEFAULT_TYPE = "material";
@@ -90,7 +92,10 @@ export default function ReferenceDetail({ id, draft = false }: { id?: string; dr
   // 表单（编辑态由 detail 同步填充——无异步回填竞态；新建态空表单）
   const [form, setForm] = useState<EditForm>(EMPTY_FORM);
   const [saving, setSaving] = useState(false);
+  /** 手动保存失败（服务端 / 网络）：落在页脚操作行旁——只能说明「这次没存上」 */
   const [formError, setFormError] = useState<string | null>(null);
+  /** 名称必填（字段级）：落在标题输入框下方并聚焦，不丢到页脚（DESIGN.md `field-error`） */
+  const [nameError, setNameError] = useState<string | null>(null);
   // 标题行内编辑（标题点击编辑，Enter 确认/Esc 取消）
   const [titleEditing, setTitleEditing] = useState(false);
 
@@ -245,6 +250,7 @@ export default function ReferenceDetail({ id, draft = false }: { id?: string; dr
     }
     setSaving(true);
     setFormError(null);
+    setNameError(null);
     try {
       await updateEntity("reference", detail.id, { name });
       useUiStore.getState().showToast("已保存", "success", "save");
@@ -262,9 +268,12 @@ export default function ReferenceDetail({ id, draft = false }: { id?: string; dr
     if (saving) return; // 重入门禁（快捷键可绕过「保存」按钮的 disabled）
     const name = form.name.trim();
     if (name === "") {
-      setFormError("名称必填");
+      // 字段级：就地报错 + 回到标题编辑态（autoFocus），不让用户在页脚的一句「名称必填」里找字段
+      setNameError("名称必填");
+      setTitleEditing(true);
       return false; // 保存失败：Ctrl+S 据此不生成备份
     }
+    setNameError(null);
     setSaving(true);
     setFormError(null);
     try {
@@ -405,23 +414,26 @@ export default function ReferenceDetail({ id, draft = false }: { id?: string; dr
         titleNode={
           <div className="flex min-w-0 items-center gap-2">
             {titleEditing ? (
-              <input
-                autoComplete="off"
-                autoFocus
-                value={form.name}
-                onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") {
-                    e.preventDefault();
-                    void commitTitle();
-                  } else if (e.key === "Escape") {
-                    setTitleEditing(false);
-                  }
-                }}
-                onBlur={() => void commitTitle()}
-                className="h-9 min-w-0 flex-1 rounded-md border border-border bg-card px-2 text-xl focus:border-primary focus:outline-none"
-                disabled={saving}
-              />
+              <div className="flex min-w-0 flex-1 flex-col gap-1">
+                <input
+                  autoComplete="off"
+                  autoFocus
+                  value={form.name}
+                  onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      e.preventDefault();
+                      void commitTitle();
+                    } else if (e.key === "Escape") {
+                      setTitleEditing(false);
+                    }
+                  }}
+                  onBlur={() => void commitTitle()}
+                  className="h-9 w-full min-w-0 rounded-md border border-border bg-card px-2 text-xl focus:border-primary focus:outline-none"
+                  disabled={saving}
+                />
+                {nameError !== null && <FieldError>{nameError}</FieldError>}
+              </div>
             ) : (
               <PageTitle onClick={() => setTitleEditing(true)} title="点击编辑标题">
                 {/* 标题显示 form.name 优先——新建态用户编辑后失焦退出编辑态不再丢失输入；空时回退占位文案 */}
@@ -616,7 +628,7 @@ export default function ReferenceDetail({ id, draft = false }: { id?: string; dr
             />
           </div>
         </div>
-        {formError !== null && <p className="text-xs text-destructive">{formError}</p>}
+        {formError !== null && <SaveError>{formError}</SaveError>}
         {/* 操作行**只在草稿态**渲染：草稿态的创建会跳转，不适合放工具条；
             编辑态的「保存」已移到工具条右端（与章正文页同形同位；本页与章正文页都是页头常驻，
             论据是「工具条随正文 sticky、与滚动位置无关」） */}

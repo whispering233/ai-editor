@@ -9,6 +9,7 @@ import { ApiError, CLIENT_NETWORK_ERROR } from "../../lib/api";
 import { useRegisterDirty } from "../../hooks/use-leave-guard";
 import { useProjectStore } from "../../stores/project";
 import { useUiStore } from "../../stores/ui";
+import { SaveError } from "@/components/ui/save-error";
 
 /** 从任意错误提取错误码（ApiError → 服务端码；未知 → 网络错误） */
 function errorCodeOf(err: unknown): string {
@@ -132,9 +133,9 @@ export function ProjectRulesSection() {
           <span className="text-xs text-muted-foreground">打开项目后可用</span>
         )}
       </div>
-      {agentsErrorLocal && <p className="mt-1 text-sm text-destructive">{agentsErrorLocal}</p>}
+      {agentsErrorLocal && <SaveError className="mt-1">{agentsErrorLocal}</SaveError>}
       {agentsError !== null && agentsError !== "NO_PROJECT_OPEN" && (
-        <p className="mt-1 text-sm text-destructive">规则文件加载失败，请重试</p>
+        <SaveError className="mt-1">规则文件加载失败，请重试</SaveError>
       )}
     </div>
   );

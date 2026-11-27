@@ -71,6 +71,7 @@ import { useDataRefresh } from "../hooks/use-data-refresh";
 import { useProjectStore } from "../stores/project";
 import { useChatStore } from "../stores/chat";
 import { useUiStore } from "../stores/ui";
+import { SaveError } from "@/components/ui/save-error";
 
 /** 事件表单（新建/编辑共用；G2：time_label 已移除——时间标签 = 时间点挂载；tags 为输入框字符串） */
 interface EventForm {
@@ -666,7 +667,7 @@ export default function Timeline() {
                 autoFocus
               />
             </div>
-            {tpError && <p className="text-sm text-destructive">{tpError}</p>}
+            {tpError && <SaveError>{tpError}</SaveError>}
           </form>
           <DialogFooter>
             <Button onClick={() => setTpCreateOpen(false)} disabled={tpSubmitting}>
@@ -736,7 +737,7 @@ export default function Timeline() {
                 nodeOptions={nodeOptions}
               />
             </div>
-            {createError && <p className="text-sm text-destructive">{createError}</p>}
+            {createError && <SaveError>{createError}</SaveError>}
           </form>
           <DialogFooter>
             <Button onClick={() => setCreateOpen(false)} disabled={createSubmitting}>

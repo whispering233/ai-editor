@@ -36,6 +36,8 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { CharacterFieldsForm } from "./character-detail";
+import { FieldError } from "@/components/ui/field-error";
+import { SaveError } from "@/components/ui/save-error";
 
 /** 模板下拉项：排除 `blank`（与「空白面板」模式重复） */
 const TEMPLATE_OPTIONS = PANEL_TEMPLATES.filter((t) => t.id !== "blank");
@@ -119,7 +121,7 @@ export function CreateCharacterFormBody({
         <div>
           <p className="mb-1 text-sm font-medium text-foreground">姓名</p>
           <Input value={name} onChange={(e) => onNameChange(e.target.value)} autoFocus />
-          {errors.name !== null && <p className="mt-1 text-xs text-destructive">{errors.name}</p>}
+          {errors.name !== null && <FieldError className="mt-1">{errors.name}</FieldError>}
         </div>
         <CharacterFieldsForm
           fields={basicsFields}
@@ -178,7 +180,7 @@ export function CreateCharacterFormBody({
           )}
         </div>
         <p className="text-xs text-muted-foreground">{countLabel}</p>
-        {copyError !== null && <p className="text-xs text-destructive">{copyError}</p>}
+        {copyError !== null && <FieldError>{copyError}</FieldError>}
         {copyError === null && panelHint !== null && (
           <p className="text-xs text-muted-foreground">{panelHint}</p>
         )}
@@ -188,7 +190,7 @@ export function CreateCharacterFormBody({
       {duplicateName !== null && (
         <p className="text-xs text-muted-foreground">已有同名角色：{duplicateName}（仍可创建）</p>
       )}
-      {submitError !== null && <p className="text-sm text-destructive">{submitError}</p>}
+      {submitError !== null && <SaveError>{submitError}</SaveError>}
 
       <DialogFooter>
         <Button onClick={onCancel}>取消</Button>

@@ -70,6 +70,7 @@ import { useSaveShortcut } from "../lib/save-shortcut";
 import { useDataRefresh } from "../hooks/use-data-refresh";
 import { useProjectStore } from "../stores/project";
 import { useUiStore } from "../stores/ui";
+import { SaveError } from "@/components/ui/save-error";
 
 export default function TimelineDetail({ id }: { id: string }) {
   const [detail, setDetail] = useState<EntityDetailRes | null>(null);
@@ -439,7 +440,7 @@ export default function TimelineDetail({ id }: { id: string }) {
                   />
                 )}
                 {mountSaving && <p className="mt-1 text-xs text-muted-foreground">保存中…</p>}
-                {mountError && <p className="mt-1 text-sm text-destructive">{mountError}</p>}
+                {mountError && <SaveError className="mt-1">{mountError}</SaveError>}
               </div>
               <div>
                 <p className="mb-1 text-sm font-medium text-foreground">标签</p>
@@ -455,7 +456,7 @@ export default function TimelineDetail({ id }: { id: string }) {
                   onPick={pickTag}
                 />
               </div>
-              {saveError && <p className="text-sm text-destructive">{saveError}</p>}
+              {saveError && <SaveError>{saveError}</SaveError>}
             </div>
           </SectionCard>
 
@@ -489,7 +490,7 @@ export default function TimelineDetail({ id }: { id: string }) {
                       placeholder="请选择节点"
                     />
                   </div>
-                  {relError && <p className="text-sm text-destructive">{relError}</p>}
+                  {relError && <SaveError>{relError}</SaveError>}
                   <div className="flex justify-end gap-2">
                     <Button onClick={() => setRelationOpen(false)} disabled={relSubmitting}>
                       取消

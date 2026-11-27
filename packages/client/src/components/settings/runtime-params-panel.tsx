@@ -21,6 +21,7 @@ import {
 import { useUiStore } from "../../stores/ui";
 import { useRegisterDirty } from "../../hooks/use-leave-guard";
 import { SectionCard } from "../ui/section-card";
+import { FieldError } from "@/components/ui/field-error";
 
 /** 表单侧的读取态（loading / ready / 两种失败都只能重读） */
 export type RuntimeParamsState =
@@ -135,12 +136,12 @@ export function RuntimeParamsForm({
     >
       {state.status === "loading" && <p className="text-xs text-muted-foreground">读取中…</p>}
       {state.status === "load-failed" && (
-        <p className="text-xs text-destructive">读取 settings.json 失败：{state.reason}</p>
+        <FieldError>读取 settings.json 失败：{state.reason}</FieldError>
       )}
       {state.status === "parse-failed" && (
-        <p className="text-xs text-destructive">
+        <FieldError>
           settings.json 无法读取：{state.reason} —— 请在下方「本机配置文件 → 运行参数」里修复后再试。
-        </p>
+        </FieldError>
       )}
 
       <div className="flex flex-wrap items-start gap-3">
@@ -184,8 +185,8 @@ export function RuntimeParamsForm({
         </div>
       </div>
 
-      {validationError !== null && <p className="mt-2 text-xs text-destructive">{validationError}</p>}
-      {saveError !== null && <p className="mt-2 text-xs text-destructive">{saveError}</p>}
+      {validationError !== null && <FieldError className="mt-2">{validationError}</FieldError>}
+      {saveError !== null && <FieldError className="mt-2">{saveError}</FieldError>}
 
       <p className="mt-2 text-xs text-muted-foreground">
         只覆盖这三个键（其余运行参数、出站代理、可见模型请在下方「本机配置文件 → 运行参数」里改，保存后原样保留）。
