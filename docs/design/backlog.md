@@ -258,6 +258,11 @@
   - 触发条件：做无障碍收口，或用户反馈「看不出这次调用成功没有」。
   - 最小修法：在工具行标题里给状态补充中文可访问名（`aria-label` / `sr-only` 文案），测试断可访问名而非类名。
 
+- **停止生成按钮无可访问名（2026-11 真机实测登记，低）**
+  - 现状：`Sender` 的 `loading` 态按钮由 x 内部渲染（`LoadingButton` → `ActionButton`，图标是自绘 SVG），既无 `aria-label` 也无 `title`；真机读到 `aria-label = null`，读屏只能报「按钮」。`Sender` 只认 `onCancel`、不透传该按钮的属性 ⇒ 无法从调用点补名。
+  - 触发条件：做无障碍收口，或反馈「读屏不知道那个方块是停止」。
+  - 最小修法：自绘停止按钮替掉 `loading` 态（代价 = 接管 x 的 loading 渲染），或给上游提 PR 让 `LoadingButton` 接受可访问名。**不要**把 `title` 打在容器上冒充——读屏仍读不到按钮名。
+
 - **云端恢复框的「导入路径 409 CLOUD_NOT_CONFIGURED」无去设置页入口（2026-09 云端恢复 oracle 登记，低危）**
   - 现状：`cloud-remote-books-dialog.tsx` 只在**列表拉取**失败时置 `loadNotConfigured`；若打开框后凭据被清（罕见），点「导入」得到 409，文案承诺「去设置页」但框内没有那个按钮。
   - 最小修法（~6 行）：加 `importNotConfigured` state，导入错误为 `CLOUD_NOT_CONFIGURED` 时置位并在 presenter 里与列表失败态合并渲染同一个入口。

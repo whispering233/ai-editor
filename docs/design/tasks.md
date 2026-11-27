@@ -2,25 +2,7 @@
 
 只放当前 / 进行中的任务卡，完成后清卡（历史见 `CHANGELOG.md`）；未排期项进 `backlog.md`；执行纪律见 `AGENTS.md`「协作流程」。
 
-当前批次：**A 组 · UI/UX 交互修复**（契约已进 `docs/ui/DESIGN.md` / `docs/api/80-api-chat.md`）。顺序 A1 → A3 → A2 → A4，一卡一 commit，串行单写者（本机 worktree 无 `node_modules`，不并行）。
-
----
-
-## 卡 A1 · 停止生成（聊天面板）
-
-**为什么**：`Sender` 的 `loading` 态本身就是停止按钮（x 的 `LoadingButton` = `action: "onCancel"`、`onCancelDisabled: !loading`），我们没传 `onCancel` ⇒ 可点但空转的死按钮。服务端取消链路已就绪（`routes/chat.ts` 三路断连检测 → `session.abort()`），不需要新端点。
-
-#### 改动面
-- `packages/client/src/stores/chat.ts`：新增 `stopStreaming()`，**顺序敏感**：① `currentStreamMsgId` 非空时先 patch 该消息 `thinkingStreaming: false`；② `abortCurrentStream?.()` 并置 `null`；③ `currentStreamMsgId = null`；④ `cancelProposalBatch()`；⑤ `set({ streaming: false, statusNote: "已停止生成", proposals: [], streamTools: [] })`。
-- `packages/client/src/components/chat/ChatPanel.tsx`：`<Sender onCancel={() => stopStreaming()} />`；`statusNote` 渲染条件 `statusNote !== null && streaming` → `statusNote !== null`。
-
-**完成判据（硬）**：`git log --oneline -1` 为本卡新 commit；`git status --short` 干净；`pnpm --filter @whispering233/ai-editor-client test` 绿。
-
-**验证**
-- store 单测（新增）：停止后 `streaming=false`、`statusNote` 有值、`proposals`/`streamTools` 清空、尾条消息 `thinkingStreaming=false`；停止后迟到的 `text_delta` 不再追加（流身份守卫）；`onEnd`/`onTimeout` 不再覆盖 `statusNote`。
-- 浏览器：长回答中途点停止 → 立即回到可输入态 + 显示「已停止生成」；切走再回来半截正文仍在（pi 对 aborted 轮照常落盘）。
-
-**风险 / 边界**：停止后立刻重发可能撞一次 409 `CHAT_BUSY`（文案已可读，不加客户端锁）；`statusNote` 放宽渲染条件后，`agent_end` / `sendMessage` 的清空必须仍生效，不得让旧提示跨轮残留。
+当前批次：**A 组 · UI/UX 交互修复**（契约已进 `docs/ui/DESIGN.md` / `docs/api/80-api-chat.md`）。顺序 A3 → A2 → A4（A1 已交付），一卡一 commit，串行单写者（本机 worktree 无 `node_modules`，不并行）。
 
 ---
 
