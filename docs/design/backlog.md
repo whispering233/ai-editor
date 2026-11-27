@@ -224,6 +224,10 @@
   - 触发条件：做下一轮样式治理，或有人反馈「人物页加载完会跳一下」。
   - 最小修法：改成单个 `skeleton-block`（`rows={5}` + `className` 带上该页布局）且用 8px 圆角，同时在 `DESIGN.md` 的 `skeleton-block` 条目里把人物页从「例外」拿下。
 
+- **回收站加载骨架是第三形态、且仍是 6px 盒（2026-11 样式治理收尾时登记，P3）** — 现状：`Trash.tsx` 用 antd `<Skeleton active>` 装在 `rounded-md border border-border p-4` 里（两列）。它既不在 `space-y-3` 家族（`skeleton-block-shell` 守卫抓不到），也没有对应的「加载后卡片」（回收站加载完是两列行列表）⇒ 不存在跳档，但 6px 与 `card` 的 8px 口径不一致。
+  - 触发条件：下次改回收站，或统一圆角口径时。
+  - 最小修法：圆角改 `rounded-lg`（一处字符）；若要完全收口则改 `SkeletonBlock` + `className` 带两列布局，但需先确认 antd `Skeleton` 的 title/paragraph 形态要不要保留（`SkeletonBlock` 是等宽行条，观感不同）。
+
 - **设置页「备份」子导航切换会丢云端账号草稿（2026-11 离开守卫落地后登记）** — 现状：离开守卫覆盖「离开设置页」（左栏四处出口 + 浏览器后退），但「备份」tab 内三级导航（自动备份 ↔ 云端备份）是条件渲染（`panel === "auto" ? <AutoBackupPanel/> : <CloudBackupPanel/>`），切走即卸载云端表单，未保存的账号 / 密码草稿仍静默丢失。同类面里 `config-file-editor` 的四个文件槽**不丢**（已按全槽判 dirty 覆盖）。触发条件：用户填完账号未保存就切到自动备份，或反向。最小修法：子导航 `onClick` 先过同一个 `confirmLeave()`（守卫已就位，只需在切 pane 的入口问一句）；或让两个面板同时挂载（代价 = 进 tab 就拉两份数据）。
 
 - **`models.json` / `settings.json` 两个写入口的旧快照覆盖（2026-11 自定义模型、运行参数两卡登记）** — 现状：两张表单卡都只持有挂载时 GET 的快照（`original` / `loadedText`），而同页下方「本机配置文件」的 JSON 编辑器能直接改同一份文件且不发任何刷新信号；不点「重新读取」就用旧快照整份回写，编辑器的改动被静默抹掉（`models.json` 写前有 `.bak` 可抢回一代；`settings.json` 无备份）。触发条件：出现真实的手编 JSON 后表单覆盖反馈，或同页两入口成为常用路径。最小修法：保存前先 GET 当前文本与快照比对，不一致就提示「文件已被其他入口修改，先重新读」并中止；不要引入 mtime/ETag 第二套真相。
