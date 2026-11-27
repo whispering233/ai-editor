@@ -463,6 +463,8 @@
 
 - **两处像素核对未覆盖的分支（2026-11 登记）** — ① 长任务「已用时 N 秒」：本机测试库导出全程 ≈ 250ms，未达 `LONG_TASK_ELAPSED_HINT_MS`，该分支目前只有单测覆盖；② 详情页时间戳截断：1440×900、右栏展开时中栏 644px，时间戳 292px 未超宽，`truncate` 形态未真正触发。触发条件：核大库导出 / 拖窄中栏时。最小修法：用 CDP 节流把导出拖过阈值；把右栏拖宽到中栏 < 320px 再看说明行。
 
+- **剩余错误文案仍用 `text-destructive`（2026-11 错误文案改色后的残留）** — 现状：错误**文案**的新单源是 `text-error-text`（`--error-text`，两态 ≥4.5:1），但还有两处 12–14px 级错误文字没换：`components/ui/error-banner.tsx` 的正文（`text-destructive`，服务在 18 个错误条上）与 `components/settings/cloud-backup-panel.tsx:208` 的「测试连接失败」（`text-xs`）。两处用 `colorError #e03131` 时同样不达 WCAG AA（浅色灰底 4.14:1）。触发条件：下次改错误条 / 云端面板，或做无障碍收口。最小修法：各换一个类为 `text-error-text`；`error-banner` 改色需一次浅/深像素核对（它出现在全站 18 处）。
+
 ## AI / 产品能力
 
 - **联网检索的未做项**（2026-10 交付 `web_search` / `fetch_content` 时登记）
