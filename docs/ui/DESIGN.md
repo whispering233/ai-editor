@@ -555,7 +555,7 @@ components:
 - **描边 1px `{colors.hairline}`、阴影、遮罩全部走 CSS 变量**：`--ant-color-border-secondary` / `--float-shadow` / `--modal-mask`（后两个定义在 `index.css`，与 `--tag-*` / `--heat-*` 同口径）——**色值不得写进 `dialog.tsx`**：`design-discipline.test.ts` 的 `hardcoded-color` 守卫只放行 `AntdProvider.tsx`，写进 tsx 会红。遮罩 = `--modal-mask` + `backdrop-filter: blur(2px)`（**不是 antd 默认的 45% 黑**）。
 - **宽度只能用 `DialogContent` 的 `width` prop，Tailwind `max-w-*` 一律禁用**：antd 样式是无层注入，`.ant-modal` 自带的 `max-width: calc(100vw - 32px)` 会压掉 `@layer utilities` 里的 `max-w-*`（与 `ant-btn` 注入 `position: relative` 同一根因）。档位常量 = `DIALOG_WIDTHS`（sm 384 / md 448 / lg 512 / xl 576 / 2xl 672，纯函数可单测）。
 - **`showCloseButton` 保留**（无调用点显式传值，但关闭钮必须继续自绘、且 §设置页「AI 模型」引用该行为）；`DialogOverlay` / `DialogPortal` / `DialogTrigger` / `DialogClose` 四个导出删除（换芯前已无外部使用者，但 Content 内部仍在用 Overlay/Close 的等价物，不得连内部实现一起删）。body 滚动锁交回 antd（`scrollLock`），自绘那套删掉以免两套锁互盖。
-- 全局确认框（`ui.confirm()` → `FeedbackHost` → `outline/dialogs.tsx` 的 `ConfirmDialog`）**也走本组件** ⇒ 换芯会连带改变它的外观，核像素时必须包含它。
+- 全局确认框（`ui.confirm()` → `FeedbackHost` → `outline/dialogs.tsx` 的 `ConfirmDialog`）**也走本组件** ⇒ 换芯会连带改变它的外观，核像素时必须包含它。**在途不可关（2026-11）**：`ConfirmDialog` 在 `submitting` 期间 `onOpenChange` 早退——`Esc` / 遮罩 / 关闭钮一律不生效，与导出框（`export-book-dialog.tsx` 的 `if (exporting) return`）同一写法。在途关框会让请求与界面错位：框没了、请求还在跑、失败文案无处落。判定抽成纯函数 `canCloseConfirm`（无 jsdom 也能断言）。
 
 **`error-banner`（页内 / 栏内错误条，收口）** — **唯一实现 = `components/ui/error-banner.tsx`**。此前的形态是「常量只给壳子、几何由 14 个文件 18 处各自拼」：`gap-2` 与 `gap-3` 并存、消息 `ml-auto` 与按钮 `min-w-0 flex-1` 两种布局、按钮位置两种对齐。
 
@@ -564,6 +564,10 @@ components:
 - `onRetry` 缺省时**不渲染**重试按钮；非重试动作（「返回章节目录」/「还原上级」）走 `actions` 插槽，尺寸由调用点决定。**唯一例外 = 整页错误态**：`ReferenceDetail` 的「重试」/「返回列表」两个按钮按换芯前的形态留在条外（本批不改像素），不要照它写成通用形态。
 - **不属于本控件的三种错误面**（形态与语义都不同，不得迁入）：① `ErrorBoundary` 的整页崩溃兜底（最后一道防线，不属于页内条）；② `FeedbackHost` 的全局错误横幅（`fixed` 顶中 + 阴影，数据源是 ui store 的 `error`）；③ `compute-preview` 的「状态冲突」警示块（带图标 + 条目列表的警示列表，不是一句话 + 重试）。
 - 与 `save-status` 的分工：自动保存失败 = `save-status` 回 `idle` + 本控件（含重试），不静默。
+
+**`active-loads`（在途加载计数，2026-11）** — **唯一实现 = `hooks/use-report-loading.ts` + `stores/ui.ts` 的 `activeLoads`**。各页把**已有的** `loading` 报上来（挂载注册 / 变化更新 / 卸载注销），`MainToolbar` 的刷新按钮订阅总数 ⇒ 在途 `loading` + 禁用（修掉「点了没反应 → 连点」）。**只统计读**（拉数据）：保存 / 导出 / 备份 / 云推拉各有自己的 `saving` / `busy`，混进来会让刷新按钮在保存时也转圈。页面侧「有数据时重载」的可见线索 = `loading && data !== null` 时内容区顶部 2px `{colors.primary}` 条——**只用于列表 / 树面板**，不替换骨架（骨架仍只在首拉出现）。
+
+**`long-task`（长任务反馈，2026-11）** — 导出 / 导入 / 备份 / 云推拉四处都是**单次请求、无服务端进度**，统一三件：① 在途文案带对象与动词（「正在导出《书名》…」）；② 超过 `LONG_TASK_ELAPSED_HINT_MS` 追加已用时（`hooks/use-elapsed-seconds.ts`）；③ 在途禁连点、禁关闭，失败 toast 带对象名。**不做百分比、不做阶段动画**——客户端没有中间态可观测，造假进度第二次就会被识破；要真进度就得把端点改成任务化 + 轮询（单独立项）。
 
 ### 写作面（工具条 / 专注模式）
 
@@ -578,7 +582,7 @@ components:
 - **失焦态**：库按钮无选中时回落到光标所在块，故常显可用；**不做禁用态**（库无 `canUndo`：撤销/重做保持可点、点空即无变化——宁可无反馈也不要假禁用）。
 - **与浮动工具条并存**：选中文字时的浮动条保留（就近操作）；两者按钮集有意重叠；若日后观感重复，关浮动条 = `formattingToolbar={false}` 一处开关。
 
-**`save-status`（保存态，2026-11）** — 章正文 / 参考资料 / 练习稿 / 自由练习四处共用的保存态文案，**唯一实现 = `components/ui/save-status.tsx`**（页面只提供状态与时刻，不各写一份 span）。四态：`idle` 不渲染、`pending`「编辑中…」、`saving`「保存中…」、`saved`「已保存 · HH:MM」（时刻 = 最近一次保存**完成**的本地时间，`formatSavedAt`）。**输入即 pending**——自动保存防抖期间不得继续显示上一次「已保存」（2026-11 修正：旧实现只在保存完成时置态，打字全程都在谎报已保存）；自动保存失败回落错误条（`idle` + 页内错误 UI + 重试），不静默。手动保存页（练习 / 自由练习）的 `pending` = 有改动未保存。字号 / 字色沿用 `text-xs text-muted-foreground`（不新增视觉语言）；位置不变：常规态在页头说明行（与字数同行）、专注态在工具条右端，**两处不同时显示**。
+**`save-status`（保存态，2026-11；2026-11 扩面）** — **九处页面**共用（章正文 / 参考资料 / 练习稿 / 自由练习 + 地点 / 伏笔 / 时间点 / 事件 / 人物五类详情；`EntityDetail` 一个组件服务前三类），**唯一实现 = `components/ui/save-status.tsx`**（页面只提供状态与时刻，不各写一份 span）。四态：`idle` 不渲染、`pending`「编辑中…」、`saving`「保存中…」、`saved`「已保存 · HH:MM」（时刻 = 最近一次保存**完成**的本地时间，`formatSavedAt`）。**输入即 pending**——自动保存防抖期间不得继续显示上一次「已保存」（2026-11 修正：旧实现只在保存完成时置态，打字全程都在谎报已保存）；自动保存失败回落错误条（`idle` + 页内错误 UI + 重试），不静默。手动保存页（练习 / 自由练习）的 `pending` = 有改动未保存。字号 / 字色沿用 `text-xs text-muted-foreground`（不新增视觉语言）；位置不变：常规态在页头说明行（与字数同行）、专注态在工具条右端，**两处不同时显示**。**详情页（显式保存）的映射（2026-11）**：`pending` = 表单与基线有差异（**与未保存守卫同一份 dirty 判定**，不另算一套）、`saving` = 提交中、`saved` = **最近一次保存完成的本地时刻**；**进页恒 `idle` 不显示**——不得拿服务端 `updated_at` 冒充「刚保存过」。位置 = 详情页头说明行。
 
 **`command-help`** — 工具条「命令帮助」打开的静态弹窗（复用 `components/ui/dialog.tsx`）：`/` 斜杠菜单、块手柄、快捷键。**快捷键文案一律从 `@blocknote/core/locales` 的 `zh` 字典插值**（`formatting_toolbar.*.secondary_tooltip` + `formatKeyboardShortcut`，Mac = `⌘` / 其他 = `Ctrl`；撤销/重做字典内没有 ⇒ 由库 keymap 核实后取字面量并存出处注释），**禁止手抄**。用途 = 「不让用户猜命令」的兜底文档；与工具条按钮集**同卡维护**（加按钮就补条目；**唯一例外 = 弹窗自身的入口**——自指条目无信息量）。**已知代价**：专注态下页头承载的操作（上一章 / 下一章 / 导入 / 导出）随之不可达，要动它们先退出专注（有意的取舍：专注 = 无干扰）。
 
@@ -591,6 +595,8 @@ components:
 **`button-text`** — 无边框纯文字，只用于行内最弱操作；**不得用于页面级操作**。**antd v6 `Button` 的 `variant` 必须与 `color` 同时给**（`antd/es/button/Button.js`：`if (color && variant)`”——否则静默回落到 `['default','outlined']`，`variant="text"` 会变成**带边框**按钮（右侧图标按钮一半有边框一半没有的根因）；合法写法：`color="default" variant="text"`，或遗留 `type="text"`；`design-discipline.test.ts` 有 `button-variant-color` 守卫。
 **`icon-button`（统一约定）** — 全站图标型操作按钮**只有一种实现**：antd `Button color="default" variant="text" size="small"` + 图标（**导航型也用它**：给 `Button` 传 `href`，antd 渲染成 `<a>`（`Button.js` 的 `linkButtonRestProps`）——同一个表皮、同一个 `icon-button` 几何，但保住链接语义与「本视图无操作按钮」这类否定契约；自绘图标型 `<a>` 仍禁）（⚠ `variant` 必须与 `color` 同时给，见下行 `button-text` 的坑）（图标尺寸随字号类：行内 14px = `text-sm`、工具条 16px = `text-base`；**`PanelToggleIcon` 是登记例外，固定 16px**），颜色继承 antd 的 text 变体（`{colors.primary}`），hover/disabled/loading 由 antd 派发；**不再并存自绘 `<button>` 图标按钮**（两套并存会让同一角色出现灰/墨/红三种观感）。**不可恢复操作**（彻底删除 purge、物理删关系、删书）用 **`color="danger" variant="text"`**（`{colors.error}`）——**不能写成 `color="default" variant="text" danger`：antd 6 的 `Button.js` 在 `color && variant` 同时给出时直接返回这对值，`danger` 糖被静默忽略**（实测：渲染出常规墨色；规则 7 `danger-color-variant` 已可执行断言）；**软删**（移入回收站）保持常规色——危险色的语义是「不可撤销」，不是「删除」。图标一律 `@ant-design/icons`（**唯一功能性自绘例外 = `PanelToggleIcon`**，见下；品牌标记 `app-mark` 见「导航与外壳」）；状态用 Filled、操作与导航用 Outlined。**整栏收起/展开 = 视口顶带两角的静态面板图标**（外壳常驻 `ShellPanelToggles`，坐标与栏宽解耦、不随收起态位移，见 §Layout「三栏」；图形来自 `components/ui/panel-toggle-icon.tsx` 的 `PanelToggleIcon`：圆角矩形 + 内侧竖线、`currentColor`、24 viewBox / 显示 16px；左栏竖线靠左、右栏靠右镜像）——图标**不随收起态换向**，状态由动态 `aria-label` / `title` / `aria-expanded` 表达；toggle 是瞬时动作，**不加常驻选中面**（不用 `variant="filled"`）。**面板内子栏（写作卷章栏 / 大纲树 / 设定树，以及三页右侧详情）= `PanelToggleButton`**（内部同一枚 `PanelToggleIcon`；`side` 由栏位决定，状态仍只走动态 `aria-label` / `title` / `aria-expanded`；普通 `icon-button` 表皮，**不是圆钮**；放置 = 最左可见列 `leading` / 最右可见列 `actions` 末尾，见 §Layout「工作台子栏页头」）。整栏与子栏**共用同一面板图形**（同形 = 同一语义「收 / 展一整栏」），靠位置区分控制哪一栏；树行折叠仍用单箭头，**面板图标不得用于树行 / accordion / 章节导航**。旧整栏双箭头 `DoubleLeft/RightOutlined` 不再承载收起语义。**禁用**：`BorderLeft/RightOutlined`（表格边框图标，与面板折叠无关）、`MenuFold/UnfoldOutlined`（仅面向左侧，右栏无同族镜像）、`VerticalLeft/RightOutlined`（名字与朝向不一致——`VerticalLeft` = `▶|`、`VerticalRight` = `|◀`，二者区别在竖条在哪侧而非箭头指向，左右两栏配不出对称）。**panel-header 例外（2026-11）**：写作 / 大纲 / 设定三页的两列页头操作一律 24px 图标；详情页头的「保存」是唯一主操作，用 `type="primary" size="small"` 图标按钮（其余仍是 text 变体）——见 §Layout「工作台子栏页头」。
 **`input`** — 白底 + `{colors.hairline-strong}` 描边 + `{rounded.sm}` + 32px 高；聚焦 = 1px primary 描边（**无阴影、无彩环**）。行内编辑与表单用同一个 antd `Input`。
+**`field-error`（字段级错误，2026-11）** — **唯一实现 = `components/ui/field-error.tsx`**：12px（`caption-text` 档）+ `{colors.error}`、无图标，挂在**该字段控件正下方**。**落点是契约**：能指明「哪个字段错了」的错误必须就地出现并聚焦该字段，不得塞进页脚的一行汇总；服务端返回的字段级错误同理。
+**`save-error`（保存失败，2026-11）** — **唯一实现 = `components/ui/save-error.tsx`**：14px（body 档）+ `{colors.error}`，落在表单区块底部或弹窗底部（提交动作旁），**不就地挂字段**。两者只差字号档与落点、语义不得互换：能定位字段的用 `field-error`，只能说明「这次没存上」的用 `save-error`。**归并按语义、字号随落点档位**（错配的存量站点先登记、不随卡改）。
 **`search-input`** — 列表/富页筛选栏的搜索框（全站**统一形态**）：antd `Input` + `prefix={<SearchOutlined />}` + 固定宽 `192px`（`w-48`）+ `allowClear`（筛选类，清空即回到未筛）；placeholder 统一「搜索{对象}…」。位置固定在页面控件行的**最左**（见「中栏页头结构」）。
 **`drag-indicator`** — 拖拽插入线：**实线** `{colors.primary}` 3px + 两端 8px 圆点（`h-[3px]` + `size-2 rounded-full`），横跨被拖行所在层级的内容宽度；`pointer-events-none` 不拦拖拽事件。
 **拖拽目标行与临时高亮（prose 承载，色值不登记）** — 「拖到行中段 = 成为其子级」的拖拽目标行、以及「新建即聚焦 / 定位到节点」的临时高亮，统一用 **primary 10% 淡染面 + 1px primary 30% 描边**（`bg-primary/10 ring-1 ring-primary/30 ring-inset`，与选中态同一语言，**不用** `{colors.surface-muted}`：近白面在白底上不可见）。被拖行本体用 `opacity-50`。**非法落点**（防环/跨层级非法）：不显插入线、不显高亮（无反馈即「不可放」）。
@@ -978,9 +984,29 @@ components:
 - 不用 `!` 前缀类压 antd 组件样式
 - **不要用 Tailwind 类去覆盖 antd 组件根元素上 antd 自己声明的属性**（`width` / `height` / `padding` / `margin` / `font-size` / `color` / `background` / `border` / `border-radius` / `display`）：antd 样式是运行时注入的**无层 CSS**，而 Tailwind 工具类在 `@layer utilities`——按 CSS 级联规范**无层胜出**，此类覆盖会静默失效（历史上满仓 `!` 就是这么来的）。正确做法：宽度/伸缩用**外层容器**承载；具体尺寸用组件 `size`；状态面用组件 `variant`（如 `variant="filled"` = `colorFillTertiary` = `{colors.surface-muted}`）或组件 token
 - **不要让 `:root` 的语义变量失去 `--ant-*` 来源**：`cssVar.key` 与 `index.html` 的 `<html class>` 必须同值（见 §Colors 踩坑段），否则全站语义色集体失效
+- 长任务的「进行中」只用真信号（在途禁用 + 已用时），不编阶段进度、不做假进度条
 - 不用阴影、渐变、彩色 focus 环、卡片 hover 抬升
 - 不引入第二套组件系统（图标只有 `@ant-design/icons`、提示只有 antd `message`、按钮/输入只有 antd）；自绘只限 antd 无对应语义的浮层（右键菜单 / 轻量 Popover）、业务组件与 `app-mark` / `panel-toggle-icon`（品牌标记与面板开关图标；后者只服务面板开关，不扩散到树行 / accordion / 章节导航）。**弹窗不再是自绘例外**：受控弹窗已换芯 antd `Modal`（见 §Components `dialog`）
 - 不用胶囊形按钮；不把彩色用于大面背景或正文（**唯一例外 = 用户自选的写作面纸张**：2 档低饱和纸色，默认仍为 `{colors.canvas}`）
+- 不在页面里另起一套「刷新中」布尔（单源 = §Components `active-loads`）；也不把写操作的 `saving` / `busy` 混进它
+
+## Rejected（能力否决登记，2026-11）
+
+**为什么单列一节**：否决理由原先散落在组件描述、`../design/backlog.md` 与代码注释里，结果每换一轮审计者就把同一批能力重提一遍（antd `Tooltip`、`Tree`、`Splitter`、`Tour` 都被重提过）。**新能力 / 新依赖提案必须先在本节落一行**（能力 | 否决理由 | 触发重评条件），没落行的提案不予评审；重评 = 触发条件成立后改这一行，不另起评估文档。
+
+| 能力 | 否决理由 | 触发重评 |
+|---|---|---|
+| antd `Tooltip` | 全站 hover 提示 = 原生 `title`（`ref-chip.test.tsx` 有断言守着）；`Tooltip` 会引入第二套浮层与延迟语义 | 需要展示多行 / 富内容提示 |
+| antd `Progress` | 长任务只有起止两点，进度只能造假（见 §Components `long-task`） | 服务端提供任务化进度 |
+| antd `Statistic` / `Timeline` / `Calendar` | 统计与故事时间线是自绘语义（热力档位单源 `lib/writing-stats.ts`；`Timeline` 页是**故事**时间线，与 antd 展示型同名不同义） | 出现 antd 能力面内、且不自建的新展示需求 |
+| antd `Tree` / `TreeSelect` | 大纲 / 设定树要就地编辑、自定义拖拽落点与行尾控件，rc-tree 承载不了（完整评估见 `../design/backlog.md`「有意保留」） | 单书节点数百且展开卡顿，或明确要键盘树导航 |
+| antd `Splitter` | 三栏与 rail 宽度已有 `resize-handle.tsx` + 持久化 key；换受控 `size` 等于重写高度链与存储时序 | 需要「双击复位 / 折叠动画」之外的能力 |
+| antd `Form` | 表单状态已有单一模式（每页 `form` + `diffData` 判 dirty），`Form.Item` 会引入第二套校验 / dirty 真相 | 出现跨字段联动校验、手写成本明显更高 |
+| antd `Tour` / `Result` / `Watermark` / `Transfer` / `Descriptions` / `Collapse` / `Popconfirm` | 分别撞「不做新手引导」「错误面已由 `error-banner` 收口」「无防泄漏需求」「无穿梭场景」「详情页是单列手排」「折叠头必须 `<button aria-expanded>`」「确认面单源 = `ui.confirm()`」 | 各自场景首次出现时单独提案 |
+| `@ant-design/x` `Prompts` / `Welcome` / `Suggestion` / `Think` / `Sources` | 空会话 / 折叠头 / 来源卡都已自研且带本项目语义（异步全文拉取、http(s) 白名单解析、恒显不折叠）；库内折叠头是 `div onClick`，无键盘语义 | 自研件出现维护负担 |
+| 第三方 design system（shadcn / Radix 整套）、`@lobehub/icons` | 与「antd token 单源」「`@ant-design/icons` 单源」冲突 | 不重评 |
+| `PurgeCSS` / `stylelint-config-standard` / `eslint-plugin-tailwindcss` / `cva` / `tailwind-variants` | Tailwind v4 已按用量生成（产物探针：未用类 0 命中）；`standard` 撞 v4 的 `@theme`/`@utility` at-rule；类序已由 `prettier-plugin-tailwindcss` 负责；变体复杂度集中在 antd token 而非类串分支 | 手写 CSS 超过 ~2000 行，或出现三轴以上变体组件 |
+| `knip` | 唯一有增量（未用文件 / 导出 / 依赖），但查不到 CSS 自定义属性，且 Tailwind v4 CSS-first 有已知假阳性 | 需要一次性清未用导出 / 依赖 |
 
 ## Known Gaps
 
