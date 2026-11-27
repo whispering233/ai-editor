@@ -31,7 +31,7 @@ import { Button, Input, Select } from "antd";
 import { TypeChip } from "@/components/ui/tag-chip";
 import { PageHeader } from "@/components/ui/page-header";
 import { EmptyState } from "@/components/ui/empty-state";
-import { errorBannerClass } from "@/lib/styles";
+import { errorBannerClass, skeletonClass } from "@/lib/styles";
 import { SuggestionDatalist } from "@/components/ui/suggestion-datalist";
 import {
   Dialog,
@@ -493,15 +493,15 @@ export default function HookPanel() {
         <div className="space-y-4">
           {Array.from({ length: 3 }, (_, gi) => (
             <div key={gi} className="rounded-md border border-border">
-              <div className="h-4 w-20 animate-pulse rounded bg-muted px-3 py-1.5" />
+              <div className={cn(skeletonClass, "h-4 w-20 px-3 py-1.5")} />
               {Array.from({ length: gi === 0 ? 3 : 1 }, (_, ri) => (
                 <div
                   key={ri}
                   className="flex items-center gap-3 border-t border-border/70 px-3 py-2.5"
                 >
-                  <div className="h-4 w-1/3 animate-pulse rounded bg-muted" />
-                  <div className="h-3 w-16 animate-pulse rounded bg-muted" />
-                  <div className="ml-auto h-6 w-6 animate-pulse rounded bg-muted" />
+                  <div className={cn(skeletonClass, "h-4 w-1/3")} />
+                  <div className={cn(skeletonClass, "h-3 w-16")} />
+                  <div className={cn(skeletonClass, "ml-auto h-6 w-6")} />
                 </div>
               ))}
             </div>

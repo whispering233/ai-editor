@@ -27,6 +27,8 @@ import type { EntitySummary } from "@whispering233/ai-editor-shared";
 import { PageHeader } from "@/components/ui/page-header";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { skeletonClass } from "@/lib/styles";
+import { cn } from "@/lib/utils";
 import {
   ApiError,
   CLIENT_NETWORK_ERROR,
@@ -354,12 +356,12 @@ export default function TimelineDetail({ id }: { id: string }) {
         <div className="flex flex-col gap-4">
           <div className="space-y-3 rounded-md border border-border p-4">
             {Array.from({ length: 5 }, (_, i) => (
-              <div key={i} className="h-9 animate-pulse rounded bg-muted" />
+              <div key={i} className={cn(skeletonClass, "h-9")} />
             ))}
           </div>
           <div className="space-y-3 rounded-md border border-border p-4">
             {Array.from({ length: 3 }, (_, i) => (
-              <div key={i} className="h-9 animate-pulse rounded bg-muted" />
+              <div key={i} className={cn(skeletonClass, "h-9")} />
             ))}
           </div>
         </div>
@@ -413,7 +415,7 @@ export default function TimelineDetail({ id }: { id: string }) {
                       </Button>
                     </div>
                   ) : (
-                    <div className="h-9 animate-pulse rounded bg-muted" />
+                    <div className={cn(skeletonClass, "h-9")} />
                   )
                 ) : (
                   <Select

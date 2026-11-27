@@ -30,7 +30,7 @@ import { MAX_ENTITY_LIST_LIMIT } from "@whispering233/ai-editor-shared";
 import type { EntitySummary } from "@whispering233/ai-editor-shared";
 import { PageHeader } from "@/components/ui/page-header";
 import { EmptyState } from "@/components/ui/empty-state";
-import { errorBannerClass } from "@/lib/styles";
+import { errorBannerClass, skeletonClass } from "@/lib/styles";
 import {
   Dialog,
   DialogContent,
@@ -575,10 +575,10 @@ export default function Timeline() {
                 key={i}
                 className="flex items-center gap-3 rounded-md border border-border px-3 py-2.5"
               >
-                <div className="h-4 w-4 animate-pulse rounded bg-muted" />
-                <div className="h-4 w-1/3 animate-pulse rounded bg-muted" />
-                <div className="h-3 w-20 animate-pulse rounded bg-muted" />
-                <div className="ml-auto h-6 w-6 animate-pulse rounded bg-muted" />
+                <div className={cn(skeletonClass, "h-4 w-4")} />
+                <div className={cn(skeletonClass, "h-4 w-1/3")} />
+                <div className={cn(skeletonClass, "h-3 w-20")} />
+                <div className={cn(skeletonClass, "ml-auto h-6 w-6")} />
               </div>
             ))}
           </div>

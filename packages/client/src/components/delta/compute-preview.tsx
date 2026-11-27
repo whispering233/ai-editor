@@ -12,6 +12,8 @@ import type { ComputeStateResult, DeltaChange } from "@whispering233/ai-editor-s
 import { ApiError, computeDeltaState } from "../../lib/api";
 import { diffStateFields, formatDeltaValue } from "../../lib/delta";
 import { chapterNodeOptions } from "../../lib/outline-tree";
+import { skeletonClass } from "../../lib/styles";
+import { cn } from "../../lib/utils";
 import { useProjectStore } from "../../stores/project";
 import { ChangeSummary } from "./change-summary";
 
@@ -144,9 +146,9 @@ export function ComputePreview({
           {/* 计算中骨架 */}
           {computing && (
             <div className="mt-3 space-y-2">
-              <div className="h-4 w-2/3 animate-pulse rounded bg-muted" />
-              <div className="h-4 w-1/2 animate-pulse rounded bg-muted" />
-              <div className="h-16 animate-pulse rounded bg-muted/60" />
+              <div className={cn(skeletonClass, "h-4 w-2/3")} />
+              <div className={cn(skeletonClass, "h-4 w-1/2")} />
+              <div className={cn(skeletonClass, "h-16 bg-muted/60")} />
             </div>
           )}
 
