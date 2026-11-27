@@ -29,7 +29,10 @@ import { useMediaQuery } from "../../hooks/use-media-query";
 import { useYoloPreference } from "../../hooks/use-yolo";
 import { CHAT_MIN_WIDTH } from "../../hooks/use-panels";
 import { useProjectStore } from "../../stores/project";
+import { useUiStore } from "../../stores/ui";
+import { rollbackLlmConfig } from "../../lib/llm-config";
 import {
+  ApiError,
   getSessionThinking,
   getSettingsLlm,
   resolveNames,
@@ -207,19 +210,49 @@ function ComposerConfigRow() {
   /** 激活 provider 无有效 key → 整条工具条禁用（提示去设置页配 key） */
   const activeKeyless = settings !== null && (activeProvider === null || !activeProvider.authConfigured);
 
+  /** 配置写入的请求序号（每字段一条）：回读落地前比对，旧请求的失败不得盖回用户新选的值 */
+  const llmSeq = useRef({ model: 0, thinking: 0 });
+
+  /** 写入失败收尾：**每次都 toast**（静默失败 = 用户以为已切换，下一轮仍用旧配置）
+   *  + **只写回本次请求的字段**（整份 setSettings 会盖掉另一字段在途的成功值）；
+   *  该字段已有更新的请求（序号变了）则放弃回写。
+   *  回读失败（断网）→ 退回本次写入前的本地快照，不留一个假的“已切换”值。 */
+  async function recoverLlm(
+    kind: "model" | "thinking",
+    mine: number,
+    prev: SettingsLlmConfig,
+    err: unknown,
+  ): Promise<void> {
+    const detail = err instanceof ApiError ? err.message : "";
+    useUiStore
+      .getState()
+      .showToast(detail === "" ? "切换失败，已恢复原设置" : `切换失败，已恢复原设置：${detail}`, "error");
+    const fresh = await getSettingsLlm().catch(() => null);
+    if (llmSeq.current[kind] !== mine) return;
+    const source = fresh ?? prev;
+    setSettings((s) => (s === null ? s : rollbackLlmConfig(kind, s, source)));
+  }
+
   /** 切换模型（选中即激活 provider+model 一对——跨 provider 选择时 key 来源同步切换） */
   function changeModel(composite: string): void {
     const sep = composite.indexOf("::");
-    if (sep <= 0) return;
+    if (sep <= 0 || settings === null) return;
     const provider = composite.slice(0, sep);
     const id = composite.slice(sep + 2);
-    setSettings((s) => (s ? { ...s, provider, model: id } : s)); // 乐观更新（失败静默，下拉回后端实际值）
-    void updateSettingsLlm({ provider, model: id }).catch(() => {});
+    const prev = settings;
+    const mine = ++llmSeq.current.model;
+    setSettings((s) => (s ? { ...s, provider, model: id } : s)); // 乐观更新
+    void updateSettingsLlm({ provider, model: id }).catch((err) => recoverLlm("model", mine, prev, err));
   }
 
   function changeThinking(level: ThinkingLevel): void {
+    if (settings === null) return;
+    const prev = settings;
+    const mine = ++llmSeq.current.thinking;
     setSettings((s) => (s ? { ...s, thinkingLevel: level } : s));
-    void updateSettingsLlm({ thinking_level: level }).catch(() => {});
+    void updateSettingsLlm({ thinking_level: level }).catch((err) =>
+      recoverLlm("thinking", mine, prev, err),
+    );
   }
 
   if (settings === null) return null; // 设置未拉取：不阻塞聊天
