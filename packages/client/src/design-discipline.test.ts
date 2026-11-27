@@ -177,6 +177,116 @@ function sourceFiles(dir: string = SRC): { path: string; text: string }[] {
 
 const FILES = sourceFiles();
 
+/** 采集 src 下所有 `.css`（dead-token 守卫要扫真 CSS 消费者；`sourceFiles()` 只收 ts/tsx） */
+function cssFiles(dir: string = SRC): { path: string; text: string }[] {
+  const out: { path: string; text: string }[] = [];
+  for (const entry of readdirSync(dir)) {
+    const full = join(dir, entry);
+    if (statSync(full).isDirectory()) {
+      out.push(...cssFiles(full));
+      continue;
+    }
+    if (!/\.css$/.test(entry)) continue;
+    out.push({ path: relative(SRC, full).split(sep).join("/"), text: readFileSync(full, "utf8") });
+  }
+  return out;
+}
+
+/** Tailwind 主题命名空间 → 可用工具类前缀。`color` 漏前缀会把暗色/热力色误杀；
+ * `radius` / `font` 必须显式列出——它们不是 `--color-*`，没有这一项 `--radius-sm` / `--font-sans` 会被判死 */
+const UTILITY_PREFIX_BY_NAMESPACE: Record<string, string[]> = {
+  color: [
+    "bg",
+    "text",
+    "border",
+    "ring",
+    "fill",
+    "stroke",
+    "from",
+    "to",
+    "via",
+    "divide",
+    "outline",
+    "accent",
+    "caret",
+    "decoration",
+    "shadow",
+  ],
+  radius: ["rounded"],
+  font: ["font"],
+};
+
+interface CssVarDecl {
+  name: string;
+  value: string;
+  path: string;
+  line: number;
+}
+
+/** 单行声明的 CSS 变量（本仓 `index.css` 的变量全是一行一条，多行值不在守卫范围内） */
+function cssVarDecls(files: { path: string; text: string }[]): CssVarDecl[] {
+  const out: CssVarDecl[] = [];
+  for (const file of files) {
+    file.text.split("\n").forEach((text, index) => {
+      const m = /^\s*(--[a-z0-9-]+)\s*:\s*([^;]+);/.exec(text);
+      if (m) out.push({ name: m[1], value: m[2], path: file.path, line: index + 1 });
+    });
+  }
+  return out;
+}
+
+/** 剥掉「声明行」，只留选择器 / `@apply` / 其他规则——
+ * 不剥的话 `--color-tag-sky: var(--tag-sky)` 这种成对映射会让每条变量自匹配，
+ * 对要防的「抄 shadcn 变量块」场景恒绿；而 `@apply outline-ring/50` 这类真用法必须留下 */
+function stripVarDeclarations(text: string): string {
+  return text.replace(/^\s*--[a-z0-9-]+\s*:[^;]*;.*$/gm, "");
+}
+
+/** 纯函数：给定声明与「可消费面」，返回无人消费的变量（自检用） */
+function findDeadVars(decls: CssVarDecl[], haystack: string): string[] {
+  // 门面映射：`--color-<k>: var(--x)` ⇒ `--x` 的消费可以经由 `*-<k>` 工具类完成
+  const facade = new Map<string, string>();
+  for (const decl of decls) {
+    const asColor = /^--color-([a-z0-9-]+)$/.exec(decl.name);
+    const asVar = /^var\((--[a-z0-9-]+)\)$/.exec(decl.value.trim());
+    if (asColor && asVar) facade.set(asVar[1], asColor[1]);
+  }
+  const escapes = (s: string) => s.replace(/[-/\\^$*+?.()|[\]{}]/g, "\\$&");
+  const usesUtility = (key: string, prefixes: string[]) =>
+    prefixes.some((prefix) => new RegExp(`(?<![\\w-])${prefix}-${escapes(key)}(?![\\w-])`).test(haystack));
+
+  const dead: string[] = [];
+  const seen = new Set<string>();
+  for (const decl of decls) {
+    if (seen.has(decl.name)) continue;
+    seen.add(decl.name);
+    if (haystack.includes(`var(${decl.name})`)) continue;
+    const [, namespace, rest] = /^--(color|radius|font)-([a-z0-9-]+)$/.exec(decl.name) ?? [];
+    const facadeKey = facade.get(decl.name);
+    const consumed =
+      (rest !== undefined && usesUtility(rest, UTILITY_PREFIX_BY_NAMESPACE[namespace])) ||
+      (facadeKey !== undefined && usesUtility(facadeKey, UTILITY_PREFIX_BY_NAMESPACE.color));
+    if (!consumed) dead.push(`${decl.path}:${decl.line}  ${decl.name}`);
+  }
+  return dead;
+}
+
+/** 为什么要它：`index.css` 是从 shadcn 模板搬来的，`--color-sidebar-*` / `--secondary` /
+ * `--card-foreground` 靠「同名前缀的无关标识符」（`sidebarCollapsed`）躲过了一轮轮 grep，
+ * 一直躺到 2026-11。规则：**声明了没人用 = 红**（白名单需要先改 DESIGN.md 并写理由）。 */
+function deadCssVars(): string[] {
+  const css = cssFiles();
+  const index = css.find((file) => file.path === "index.css");
+  if (!index) return [];
+  const haystack = [
+    ...FILES.map((file) => file.text),
+    ...css.map((file) =>
+      file.path === "index.css" ? stripVarDeclarations(file.text) : file.text,
+    ),
+  ].join("\n");
+  return findDeadVars(cssVarDecls([index]), haystack);
+}
+
 /** 注释行豁免：规则扫的是「真正生效的代码」。注释里写清「为什么禁某个 token / 某个色值实测是多少」
  * 是文档职责（DESIGN.md 同款内容），不能因此把守卫变成「禁写注释里的关键词」。 */
 function isCommentLine(text: string): boolean {
@@ -228,6 +338,10 @@ describe("视觉纪律守卫（源码扫描）", () => {
   it("danger-color-variant：color+variant 同时给出时不得再用 danger 糖（会被静默忽略）", () => {
     const hits = FILES.filter((file) => dangerIgnoredByColorVariant(file.text)).map((f) => f.path);
     expect(hits).toEqual([]);
+  });
+
+  it("dead-token：index.css 的变量都有 index.css 声明之外的可达消费", () => {
+    expect(deadCssVars()).toEqual([]);
   });
 });
 
@@ -284,6 +398,24 @@ describe("守卫规则自检（规则必须能识别违规样例，否则规则�
     // 合法类：外边距/伸缩/非 antd 组件
     expect(antdRootOverrides(`<Button className="mb-1" block />`)).toBe(false);
     expect(antdRootOverrides(`<div className="w-52 text-sm" />`)).toBe(false);
+  });
+
+  it("dead-token 命中「只声明不消费」、放过门面映射 / 字面量 / 半径与字体", () => {
+    const decls: CssVarDecl[] = [
+      { name: "--dead-one", value: "var(--nope)", path: "index.css", line: 7 },
+      { name: "--color-live", value: "var(--live)", path: "index.css", line: 8 },
+      { name: "--live", value: "#fff", path: "index.css", line: 9 },
+      { name: "--radius-sm", value: "4px", path: "index.css", line: 10 },
+      { name: "--font-sans", value: "system-ui", path: "index.css", line: 11 },
+      { name: "--paper-cream", value: "#fbf7ee", path: "index.css", line: 12 },
+    ];
+    const haystack = [
+      'className="bg-live rounded-sm font-sans"',
+      'style={{ background: "var(--paper-cream)" }}',
+    ].join("\n");
+    expect(findDeadVars(decls, haystack)).toEqual(["index.css:7  --dead-one"]);
+    // 剥声明行后，成对映射不能再自证存活
+    expect(stripVarDeclarations("--color-live: var(--live);")).toBe("");
   });
 });
 

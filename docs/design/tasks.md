@@ -78,8 +78,8 @@
 
 **判据**：
 
-- `grep -c 'sidebar' packages/client/src/index.css` = 0（该文件里不存在 `sidebarCollapsed` 一类标识符，不会误伤）。
-- 构建产物 CSS 里 `--sidebar` / `--secondary` / `--card-foreground` **零命中**（`pnpm --filter @whispering233/ai-editor-client build` 后 grep `dist/assets/*.css`；**比内容不比文件名**——产物文件名带 hash）。实测可省 ≈ 484 B。
+- 声明行口径（不含注释里的变量名——`index.css` 里留了一条注释点名这三组变量、说明为什么删）：`grep -cE '^\s*--(sidebar|secondary|card-foreground)' packages/client/src/index.css` = 0。
+- 构建产物 CSS 里 `--sidebar` / `--secondary` / `--card-foreground` **零命中**（`pnpm --filter @whispering233/ai-editor-client build` 后 grep `dist/assets/*.css`；**比内容不比文件名**——产物文件名带 hash）。实测两个构建对比：122,453 B → 121,963 B（**-490 B**）。
 - 新断言在「手工加回一个 `--foo: var(--bar)` 且无消费」时**会红**（提交前验一次再删掉）。
 
 ---
