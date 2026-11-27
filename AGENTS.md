@@ -14,7 +14,7 @@
 - 任务以 `docs/design/tasks.md` 为清单：垂直切片、一次一张、一卡一 commit、独立验证；卡内不做卡外顺手改动，完成后清卡并汇报。
 - 每卡「实现 fixer + 独立验证 oracle」双代理；并行卡片用临时分支 + `git worktree`，验证后合回 main 并清理。
 - 并行派工硬要求：子代理必须显式 `context: "fresh"`（默认 fork 会把父会话的编排叙事当成自己的进度）；任务卡必须带硬完成判据（`git log` 含新 commit + `git status` 干净，无 commit 不许报 PASS），并要求汇报附 commit hash / 命令输出。
-- 验证命令：`pnpm typecheck` / `pnpm lint` / `pnpm -r test`。**单包测试的 filter 必须与 package.json 的 `name` 逐字一致**（桌面包名无 scope = `ai-editor-desktop`），写错会打印 `Scope: 0 of 8 workspace projects` 并静默空跑；fresh clone 先 `pnpm -r build` 再 typecheck；UI 改动额外用浏览器核一次像素；改桌面版主进程（依赖 / import）后必须跑打包态启动冒烟 `node packages/desktop/scripts/smoke.mjs`（先 `pack.mjs`）。**Windows 本机这两步当前不可用**（Electron 二进制懒下载需镜像、本地出包会撞文件锁），等价走法见 `backlog.md`「开发环境」。
+- 验证命令：`pnpm typecheck` / `pnpm lint` / `pnpm -r test`。**单包测试的 filter 必须与 package.json 的 `name` 逐字一致**（桌面包名无 scope = `ai-editor-desktop`），写错会打印 `Scope: 0 of 8 workspace projects` 并静默空跑；fresh clone 先 `pnpm -r build` 再 typecheck；UI 改动额外用浏览器核一次像素（**核前必须整页重载**：`#/` 之间的 `goto` 是同文档导航，不会重新拉 bundle，曾因此得出一轮「功能没生效」的假阴性）；改桌面版主进程（依赖 / import）后必须跑打包态启动冒烟 `node packages/desktop/scripts/smoke.mjs`（先 `pack.mjs`）。**Windows 本机这两步当前不可用**（Electron 二进制懒下载需镜像、本地出包会撞文件锁），等价走法见 `backlog.md`「开发环境」。
 - 提交信息用中文、遵循 conventional commits；文档里的日期用真实日期（`date +%F`）。**合同文档（`docs/api` / `docs/db` / `docs/ui` / `docs/design` 正文）不写任务卡编号**——卡清空后编号即成悬空引用；`backlog.md` 保留登记来源，代码注释里的历史阶段编号按 provenance 保留。**冲突合并的提交要带 `GIT_MERGE_AUTOEDIT=no`**（或 `--no-edit`）：merge 状态下 `git commit` 会为了编辑 `MERGE_MSG` 开编辑器，自动化会直接挂住。
 - 日常不 push、不建 PR、不新增 CI；远端与 CI 只服务发布链路（push `v*` tag 触发 `.github/workflows/`）。
 
