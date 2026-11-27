@@ -313,6 +313,10 @@ interface ChatState {
   sendMessage: (text: string, context?: FocusContext) => void;
  /** 断连横幅 [重新发送]：移除断连残留的重复消息后重发上一条用户消息 */
   resendLast: () => void;
+ /** 用户主动停止生成（`Sender` 的 loading 态停止按钮）：abort 在途请求 ⇒ 服务端走同一条断连取消链路，
+ * 本轮不会再收到 `agent_end` ⇒ 收尾（复位流式态 / 折叠思考块 / 清空运行态提案与工具表）全在这里做完，
+ * **保留已生成的半截正文**；`statusNote` 置「已停止生成」 */
+  stopStreaming: () => void;
 
  // ---- 提案确认/拒绝（真实调用 confirm/reject 端点） ----
  /**
@@ -1066,6 +1070,26 @@ export const useChatStore = create<ChatState>((set, get) => {
       if (lastUser?.role === "user" && lastUser.content === lastSentText) next = next.slice(0, -1);
       set({ messages: next });
       get().sendMessage(lastSentText);
+    },
+
+    stopStreaming: () => {
+ // 顺序敏感（DESIGN.md `chat-stop`）：
+ // ① 折叠思考块必须排在 ③ 之前——清掉 `currentStreamMsgId` 后身份守卫会挡掉自己这次 patch，
+ //    `thinkingStreaming` 就永久停在 true（思考块常驻展开态）
+ // ② 中止在途请求（服务端经断开检测走 `AgentSession.abort()`）并摘掉引用，新流才能重新挂
+ // ③ 作废流身份：此后迟到帧 / onEnd / onTimeout 全被现有身份守卫挡掉，不再改写收尾后的状态
+ // ④ 作废在途批量动作（服务端收尾会 `store.clear()`，本轮提案已作废）
+ // ⑤ 复位运行态 + 保留 messages（半截正文不丢；重载历史以服务端落盘为准）
+      if (currentStreamMsgId !== null) {
+        patchStreamMessage(currentStreamMsgId, (m) =>
+          m.thinkingStreaming === true ? { ...m, thinkingStreaming: false } : m,
+        );
+      }
+      abortCurrentStream?.();
+      abortCurrentStream = null;
+      currentStreamMsgId = null;
+      cancelProposalBatch();
+      set({ streaming: false, statusNote: "已停止生成", proposals: [], streamTools: [] });
     },
 
     confirmProposal: async (proposalId) => {

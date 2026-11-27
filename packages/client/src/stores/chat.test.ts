@@ -1350,6 +1350,83 @@ describe("sendMessage（POST /chat + SSE 事件映射，契约 = docs/api/80-api
     }
   });
 });
+describe("stopStreaming（chat-stop：主动停止 = 客户端本地收尾，DESIGN.md `chat-stop`）", () => {
+  it("停止 → abort 在途请求 + streaming=false + statusNote「已停止生成」+ 清空提案/运行态工具表（正文保留）", () => {
+    const abort = vi.fn();
+    mocked.fetchSSE.mockReturnValueOnce(abort);
+    useChatStore.getState().sendMessage("你好");
+    const { onEvent } = sseOptions();
+    onEvent("message_update", { assistantMessageEvent: { type: "text_delta", contentIndex: 0, delta: "半截" } });
+    onEvent("tool_execution_start", { toolCallId: "call-1", toolName: "get_outline", args: {} });
+    useChatStore.setState({ proposals: [makeProposal({ proposalId: "prop-1" })] });
+
+    useChatStore.getState().stopStreaming();
+
+    const s = useChatStore.getState();
+    // abort = 触发服务端断开检测 → AgentSession.abort()（本轮不会再有 agent_end 帧）
+    expect(abort).toHaveBeenCalledTimes(1);
+    expect(s.streaming).toBe(false);
+    expect(s.statusNote).toBe("已停止生成");
+    // 对齐服务端 store.clear()：未确认提案与运行态工具表一并作废
+    expect(s.proposals).toEqual([]);
+    expect(s.streamTools).toEqual([]);
+    // 已生成的半截正文保留（不丢用户已经看到的内容）
+    expect(s.messages[1]).toMatchObject({ role: "assistant", content: "半截" });
+  });
+
+  it("停止 → 尾条 assistant 的 thinkingStreaming 复位（否则思考块永久停在展开态）", () => {
+    useChatStore.getState().sendMessage("你好");
+    sseOptions().onEvent("message_update", {
+      assistantMessageEvent: { type: "thinking_delta", contentIndex: 0, delta: "推理" },
+    });
+    expect(useChatStore.getState().messages[1]).toMatchObject({ thinkingText: "推理", thinkingStreaming: true });
+
+    useChatStore.getState().stopStreaming();
+
+    // 顺序敏感：折叠必须发生在 currentStreamMsgId 置 null 之前（之后身份守卫会挡掉自己这次 patch）
+    expect(useChatStore.getState().messages[1]).toMatchObject({
+      thinkingText: "推理",
+      thinkingStreaming: false,
+    });
+  });
+
+  it("停止后迟到的帧 / onEnd / onTimeout 被流身份守卫挡掉（不改正文，不覆盖「已停止生成」）", () => {
+    useChatStore.getState().sendMessage("你好");
+    const stale = sseOptions();
+    useChatStore.getState().stopStreaming();
+
+    stale.onEvent("message_update", { assistantMessageEvent: { type: "text_delta", contentIndex: 0, delta: "迟到" } });
+    stale.onEvent("compaction_start", { reason: "threshold" });
+    stale.onEvent("agent_end", {});
+    stale.onEnd();
+    stale.onTimeout();
+
+    const s = useChatStore.getState();
+    expect(s.messages[1].content).toBe("");
+    expect(s.streaming).toBe(false);
+    expect(s.statusNote).toBe("已停止生成");
+    expect(s.disconnected).toBe(false);
+  });
+
+  it("停止后再 sendMessage 能正常开新流（abort 引用已摘除，旧流的 abort 不被重复调用；旧提示不跨轮残留）", () => {
+    const abort = vi.fn();
+    mocked.fetchSSE.mockReturnValueOnce(abort);
+    useChatStore.getState().sendMessage("第一轮");
+    useChatStore.getState().stopStreaming();
+
+    useChatStore.getState().sendMessage("第二轮");
+
+    // sendMessage 的防御性 abortCurrentStream?.() 证明引用已置 null（否则会二次调用旧 abort）
+    expect(abort).toHaveBeenCalledTimes(1);
+    const s = useChatStore.getState();
+    expect(s.streaming).toBe(true);
+    expect(s.statusNote).toBeNull();
+    // 新流的增量照常落到新占位消息上
+    sseOptions().onEvent("message_update", { assistantMessageEvent: { type: "text_delta", contentIndex: 0, delta: "新" } });
+    expect(useChatStore.getState().messages.at(-1)).toMatchObject({ role: "assistant", content: "新" });
+  });
+});
+
 describe("confirmProposal / rejectProposal（S8.2：提案卡接入 S7.5 confirm/reject 真实调用）", () => {
   it("confirm 成功 → status=confirmed + processing 复位（终态，按钮禁用由 status 驱动）", async () => {
     mocked.confirmProposal.mockResolvedValue({ confirmed: true, result: "char-9" });

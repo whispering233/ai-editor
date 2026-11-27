@@ -1282,6 +1282,7 @@ function InputArea() {
   const [text, setText] = useState("");
   const streaming = useChatStore((s) => s.streaming);
   const sendMessage = useChatStore((s) => s.sendMessage);
+  const stopStreaming = useChatStore((s) => s.stopStreaming);
   const focusInputSeq = useChatStore((s) => s.focusInputSeq);
   const senderRef = useRef<ComponentRef<typeof Sender> | null>(null);
   // 中栏右下「问 AI」悬浮按钮点击触发聚焦（SenderRef.inputElement = 原生 textarea）
@@ -1303,6 +1304,9 @@ function InputArea() {
         }}
         placeholder={streaming ? "AI 思考中…" : "输入消息…"}
         loading={streaming}
+        // 停止按钮 = `loading` 态的 x `LoadingButton`（action 固定 onCancel、未传时是空转的死按钮）：
+        // 客户端 abort ⇒ 服务端走断连取消链路（DESIGN.md `chat-stop` / api 80「取消语义」）
+        onCancel={() => stopStreaming()}
       />
       {/* 配置行：输入框下方（模型在左端、思考强度在右端）；状态栏另起一行（只读观测层） */}
       <ComposerConfigRow />
@@ -1443,8 +1447,10 @@ function MessageList({ disabled }: { disabled: boolean }) {
             />
           ))}
           {showThinking && <Bubble loading content="" />}
-          {/* 状态提示（上下文压缩 / 自动重试）：caption 字色，不占视觉重心 */}
-          {statusNote !== null && streaming && (
+          {/* 状态提示（上下文压缩 / 自动重试 / 主动停止）：caption 字色，不占视觉重心。
+              **不看 `streaming`**：主动停止后已回到非流式态，提示仍要显示（否则点完停止没有任何反馈）；
+              清空由 agent_end / sendMessage 负责，旧提示不得跨轮残留 */}
+          {statusNote !== null && (
             <p className="text-xs text-muted-foreground">{statusNote}</p>
           )}
           {/* 运行时工具行**不在此处**：已并入尾条 assistant 消息的 toolCalls（渲染位置 = 消息内
