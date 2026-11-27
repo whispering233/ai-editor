@@ -65,6 +65,7 @@ import {
   ProposalCardView,
   ProposalRow,
   STICK_BOTTOM_THRESHOLD_PX,
+  StatusNote,
   ThinkingBlock,
   MENU_KEY_DELETE_SESSION,
   sessionItemMenu,
@@ -318,6 +319,22 @@ describe("thinking-block 契约（默认折叠摘要 / 展开正文 / 流式自�
       hasNextChunk: false,
       incompleteMarkdown: "complete",
     });
+  });
+});
+
+describe("状态提示行（statusNote：主动停止后已非流式，提示仍须显示）", () => {
+  // SSR 只能观测叶子组件（zustand getServerSnapshot = 初始态，看不到 setState 后的 streaming/statusNote 组合），
+  // 所以护栏是「组件签名里没有流式标记」+ stores/chat.test.ts 的「stopStreaming 后 statusNote 保留」：
+  // 要重现「&& streaming」那个 bug，必须主动给这个叶子加一个 prop。
+  it("有提示就渲染（caption 字号 + 弱化字色），不依赖流式态", () => {
+    const out = renderToString(<StatusNote note="已停止生成" />);
+    expect(out).toContain("已停止生成");
+    expect(out).toContain("text-xs");
+    expect(out).toContain("text-muted-foreground");
+  });
+
+  it("无提示 → 不渲染任何节点（不白占消息区高度）", () => {
+    expect(renderToString(<StatusNote note={null} />)).toBe("");
   });
 });
 

@@ -1329,6 +1329,13 @@ export function isNearBottom(el: {
   return el.scrollHeight - el.scrollTop - el.clientHeight <= STICK_BOTTOM_THRESHOLD_PX;
 }
 
+/** 状态提示行（上下文压缩 / 自动重试 / 主动停止）：caption 字色，不占视觉重心。
+ *  **不接受流式标记**：主动停止后已回到非流式态，提示仍要显示（否则点完停止没有任何反馈）；
+ *  清空由 agent_end / sendMessage 负责，旧提示不得跨轮残留。导出供 SSR 走查（本仓无 jsdom）。 */
+export function StatusNote({ note }: { note: string | null }) {
+  return note === null ? null : <p className="text-xs text-muted-foreground">{note}</p>;
+}
+
 function MessageList({ disabled }: { disabled: boolean }) {
   const messages = useChatStore((s) => s.messages);
   const messagesLoading = useChatStore((s) => s.messagesLoading);
@@ -1447,12 +1454,7 @@ function MessageList({ disabled }: { disabled: boolean }) {
             />
           ))}
           {showThinking && <Bubble loading content="" />}
-          {/* 状态提示（上下文压缩 / 自动重试 / 主动停止）：caption 字色，不占视觉重心。
-              **不看 `streaming`**：主动停止后已回到非流式态，提示仍要显示（否则点完停止没有任何反馈）；
-              清空由 agent_end / sendMessage 负责，旧提示不得跨轮残留 */}
-          {statusNote !== null && (
-            <p className="text-xs text-muted-foreground">{statusNote}</p>
-          )}
+          <StatusNote note={statusNote} />
           {/* 运行时工具行**不在此处**：已并入尾条 assistant 消息的 toolCalls（渲染位置 = 消息内
               思考之后、正文之前，与重载后同序，见 DESIGN.md `chat-message-stream`） */}
           {/* live 提案组卡（tool_execution_end 的 result.details 填充；一轮合并一张，瞬态；历史回看由消息内只读卡承载） */}
