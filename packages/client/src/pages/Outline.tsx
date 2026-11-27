@@ -369,12 +369,9 @@ export default function Outline({ nodeId }: { nodeId?: string }) {
             action={
               // 同 OutlineDetail 的 notFound 文案与目标（DESIGN.md `outline-page` 坏 id 空态）
               <div className="flex flex-wrap justify-center gap-2">
-                <a
-                  href="#/trash"
-                  className="whitespace-nowrap rounded-md border border-border px-4 py-1.5 text-sm text-muted-foreground hover:bg-muted"
-                >
+                <Button href="#/trash" className="whitespace-nowrap">
                   去回收站
-                </a>
+                </Button>
                 <Button href="#/outline" className="whitespace-nowrap">
                   返回大纲
                 </Button>

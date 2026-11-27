@@ -903,12 +903,7 @@ export function CharacterDetail({ id, onSaved }: { id: string; onSaved?: () => v
         padding="lg"
         action={
           <div className="flex justify-center gap-2">
-            <a
-              href="#/trash"
-              className="rounded-md border border-border px-4 py-1.5 text-sm text-muted-foreground hover:bg-muted"
-            >
-              去回收站
-            </a>
+            <Button href="#/trash">去回收站</Button>
             <Button onClick={() => navigate(LIST_ROUTE)}>返回列表</Button>
           </div>
         }

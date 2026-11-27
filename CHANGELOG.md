@@ -11,12 +11,17 @@
 
 ### Added
 
+- **两个样式 pattern 组件**：`components/ui/ref-chip.tsx`（可点的内联引用——第三种 chip，与 `TagChip`（用户数据）/ `TypeChip`（枚举结构）三分法；`to` 渲染 `<a href>` 保住中键 / `⌘` 新标签页，`onClick` 渲染 `<button>`，两者可共存以表达「先过未保存守卫再跳转」）与 `components/ui/skeleton-block.tsx`（区块卡的加载占位，只有 `rows` 一个参数，行样式仍走 `skeletonClass`）。
+- **两条源码守卫**：`ref-chip-shell` / `skeleton-block-shell`（两个 pattern 的家族类串只允许出现在各自的唯一实现里，防第 N 份手写复制）。
+
 - **三条源码守卫**：`dead-token`（`index.css` 里声明了却没人消费的样式变量直接失败）、`error-banner-shell`（禁止第二份手写错误条）、`dialog-width-prop`（`DialogContent` 不得用 `max-w-*`——antd 的无层样式会把它压掉）。
 - **聊天「停止生成」**：输入区的 loading 态按钮此前可点但空转（`@ant-design/x` 的 `LoadingButton` 靠 `onCancel` 才接上），现与「断连」共用同一条取消链路（客户端 abort → 服务端 `AgentSession.abort()`）；停止后**保留已生成的半截正文**，思考块折回摘要，运行态工具行与未确认提案清空，并给一行「已停止生成」提示（不新增视觉语言、不加消息角标）。
 - **设置页离开前确认未保存的草稿**：七处手写保存的草稿（项目规则 / 配置文件编辑器四个文件槽 / 联网搜索 key / pi 配置目录 / 运行参数 / 云端账号 / 各家 API key）任一未保存时，左栏四处出口（书架标识 / 概览 / 一级导航 / 设置）与浏览器后退都先问一句；后退与点击并发时只弹一个框。关窗 / 刷新与「更改书库位置」（直接重启）不在范围内。
 
 ### Changed
 
+- **可点内联引用收口**：8 处手写的「描边小按钮」（设定详情的上级 / 子设定与变更记录入口、时间轴挂载节点、伏笔依赖链、标签快捷追加、描述展开 / 收起）统一走 `RefChip`。可见变化：圆角 6px → 4px（`{rounded.xs}` 小内衬档，与文字同体量）；伏笔的「依赖: …」不再撑满整行；引用型 chip 从 `button` 变 `a`，多了中键 / `⌘` 新标签页。
+- **空态的第二动作回归 `Button href`**：5 处「去回收站」原是手写 `<a className="rounded-md border …">`，与旁边真正的 antd `Button` 高度 / hover / 焦点环全不一致；现与「返回列表」同高同表。
 - **受控弹窗换芯 antd `Modal`**：焦点陷阱与「`Esc` 只关最顶层」改由 antd 提供（此前 `Tab` 会跑到弹窗背后的页面，详情抽屉 + 确认框叠层时按一次 `Esc` 会把两层一起关掉）；关闭后焦点回到打开它的控件（antd 的 `focusTriggerAfterClose` 在本仓取不到触发器，改由 `components/ui/dialog.tsx` 自己记录）。外观、调用点 API 与四条关闭路径（右上角 / `Esc` / 遮罩 / 取消）不变；**弹窗宽度改走 `DialogContent` 的 `width` 档位**（`sm` 384 / `md` 448 / `lg` 512 / `xl` 576 / `2xl` 672）。
 - **错误条收口**：页内 / 栏内的「错误说明 + 重试 / 动作」统一走 `components/ui/error-banner.tsx`（`row` / `stack` 两布局，外边距仍由调用点给），不再各页自拼几何。人物 rail 与写作页卷章栏的重试按钮随之从 32px 移到条内并降为 24px。
 - **骨架占位收口**：手写的 `animate-pulse rounded bg-muted` 统一改用 `lib/styles.ts` 的 `skeletonClass`。

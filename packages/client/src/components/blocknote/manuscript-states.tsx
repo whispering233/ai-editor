@@ -13,12 +13,7 @@ export function ManuscriptMissing() {
         padding="lg"
         action={
           <div className="flex justify-center gap-2">
-            <a
-              href="#/trash"
-              className="rounded-md border border-border px-4 py-1.5 text-sm text-muted-foreground hover:bg-muted"
-            >
-              去回收站
-            </a>
+            <Button href="#/trash">去回收站</Button>
             <Button onClick={() => navigate("/outline")}>返回大纲</Button>
           </div>
         }
