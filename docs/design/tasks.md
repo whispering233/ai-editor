@@ -2,24 +2,7 @@
 
 只放当前 / 进行中的任务卡，完成后清卡（历史见 `CHANGELOG.md`）；未排期项进 `backlog.md`；执行纪律见 `AGENTS.md`「协作流程」。
 
-当前批次：**A 组 · UI/UX 交互修复**（契约已进 `docs/ui/DESIGN.md` / `docs/api/80-api-chat.md`）。顺序 A2 → A4（A1 / A3 已交付），一卡一 commit，串行单写者（本机 worktree 无 `node_modules`，不并行）。
-
----
-
-## 卡 A2 · 切模型 / 思考强度失败回滚
-
-**为什么**：`ChatPanel.tsx` 的 `changeModel` / `changeThinking` 乐观更新后 `.catch(() => {})`；注释自称「下拉回后端实际值」，但 `getSettingsLlm` 只在挂载时跑一次 ⇒ 失败后永不回读，用户以为换了模型，下一轮仍用旧配置。
-
-**改动面**：`ChatPanel.tsx` 的 `ComposerConfigRow` 内合并为 `persistLlm(patch, field)`：
-- 乐观 `setSettings` → `updateSettingsLlm(patch)`；
-- 失败：**每次都 toast**（`showToast(msg, "error")`）+ `getSettingsLlm()` 回读，**只写回该次失败请求的字段**（`model` 变更写回 `provider` + `model`；`thinking` 变更写回 `thinkingLevel`）；
-- `useRef` 记每字段最新请求序号，回读落地前比对：该字段已有更新请求则放弃写回（不得盖掉用户新选择）。
-
-**完成判据（硬）**：本卡新 commit + `git status` 干净 + `pnpm --filter @whispering233/ai-editor-client test` 绿（若抽出纯函数则须有单测）。
-
-**验证**：浏览器拦截 `PUT /settings/llm` 返回 500 → 下拉回弹到旧值 + 错误 toast；连点两次（先失败后成功）→ 终态 = 成功那次的值，不因失败回滚被覆盖。本仓无 jsdom，异步点击无法入库为测试 ⇒ 浏览器实测记录贴进汇报。
-
-**风险 / 边界**：成功路径不加 toast（下拉本身就是反馈）；不要把回读结果整体 `setSettings`（会盖掉另一字段在途的成功值）。
+当前批次：**A 组 · UI/UX 交互修复**（契约已进 `docs/ui/DESIGN.md` / `docs/api/80-api-chat.md`）。顺序 A4（A1 / A3 / A2 已交付），一卡一 commit，串行单写者（本机 worktree 无 `node_modules`，不并行）。
 
 ---
 
