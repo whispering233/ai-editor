@@ -11,6 +11,23 @@
 
 ### Added
 
+- **离开闸门单一入口**：`hooks/use-unsaved-guard.ts` 的 `useUnsavedGuard(dirty, confirm)` 内部同时注册「模块级单槽」与「浏览器后退哨兵」，后退 handler **恒走** `confirmLeave()`——此前由调用点自己决定第二个参数传 raw `confirmDiscard` 还是 `confirmLeave`，参数名看不出差别，三处调用点错了两个（传错就绕过在途单槽，并发时弹两个框）。旧 `useLeaveGuard` / `useBackGuard` 降为内部接线层，新增源码守卫 `unsaved-guard-shell`。
+- **两个错误文案 primitive**：`components/ui/field-error.tsx`（12px，挂在字段控件正下方）与 `save-error.tsx`（14px，表单区块 / 弹窗底部）。两者只差字号档与落点、语义不得互换；62 处手写 `text-xs|text-sm text-destructive` 错误行迁入。
+- **在途读计数**：`lib/inflight.ts` 的 `beginRead` / `endRead`，生产方唯一 = `apiFetch`（**只数 GET**），消费方唯一 = 中栏刷新按钮 ⇒ 刷新按钮改为真实 loading 并在途不可点（修掉「点了没反应 → 连点」），一并覆盖搜索 / 翻页 / 切筛选的重载。
+- **长任务「已用时」**：`hooks/use-elapsed-seconds.ts`（阈值常量只定义一处）+ 导出 / 导入 / 备份 / 云同步四处；只给「还在跑 + 跑了多久」，**不做百分比与阶段动画**（单次请求，客户端只有起止两点）。
+
+### Changed
+
+- **未保存守卫覆盖面**：大纲 / 设定 + 地点 / 伏笔 / 时间点 / 事件五类详情，**页内切换 / 左栏导航 / 浏览器后退三路**都先确认（此前大纲 / 设定只拦后退与页内切换，点左栏直接丢；五类详情页完全无守卫）。**注册者恒为持有脏表单的叶子组件**（壳不得代注册），三路共用同一个在途确认。
+- **`SaveStatus` 扩到五类详情页**：地点 / 伏笔 / 时间点（`EntityDetail` 一组件三路由）、事件、人物页头说明行接上保存态；`pending` 复用守卫那一份 dirty，`saved` 只记本地保存完成时刻，**进页恒 `idle`**。
+- **事件详情撤销「未保存离开守卫不做（避免过度设计）」的旧决定**：机制已就位、接线成本几行，丢稿代价远高于它；dirty 直接复用保存谓词（`buildEventDetailPatch(...) !== null`），两端口径不可能分叉。
+
+### Fixed
+
+- **大纲 / 设定详情改一半点左栏导航静默丢稿**：左栏四个出口走 `confirmLeave()`，但这两页只注册了后退哨兵、没注册模块槽 ⇒ 无守卫即放行。
+- **地点 / 伏笔 / 时间点 / 事件详情完全没有未保存守卫**：改完字段不点保存就切页（左栏 / 后退 / 深链）时静默丢弃。
+- **确认框在途可被关掉**：`Esc` / 遮罩 / 关闭钮此前在提交中不设防，框消失而请求还在跑，失败文案无处落；判定收进纯函数 `canCloseConfirm`。
+- **参考资料详情的「名称必填」落在页脚**：现就地显示在标题输入框下并回到编辑态聚焦；手动保存失败仍走页脚 `SaveError`，与自动保存的 `ErrorBanner` 分开。
 - **两个样式 pattern 组件**：`components/ui/ref-chip.tsx`（可点的内联引用——第三种 chip，与 `TagChip`（用户数据）/ `TypeChip`（枚举结构）三分法；`to` 渲染 `<a href>` 保住中键 / `⌘` 新标签页，`onClick` 渲染 `<button>`，两者可共存以表达「先过未保存守卫再跳转」）与 `components/ui/skeleton-block.tsx`（区块卡的加载占位，只有 `rows` 一个参数，行样式仍走 `skeletonClass`）。
 - **两条源码守卫**：`ref-chip-shell` / `skeleton-block-shell`（两个 pattern 的家族类串只允许出现在各自的唯一实现里，防第 N 份手写复制）。
 - **三条源码守卫**：`dead-token`（`index.css` 里声明了却没人消费的样式变量直接失败）、`error-banner-shell`（禁止第二份手写错误条）、`dialog-width-prop`（`DialogContent` 不得用 `max-w-*`——antd 的无层样式会把它压掉）。
