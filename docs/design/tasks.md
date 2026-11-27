@@ -6,45 +6,12 @@
 
 ## 并行 / 串行判定
 
-- **两张卡可以并行**（文件不重叠：卡 A 只碰 `index.css` / `DESIGN.md` / 6 个链接站点；卡 B 只碰 `EntityDetail` / `TimelineDetail` 的卡片块 + `skeleton-block`）。
-- 但按本机纪律（worktree 无 `node_modules` / `dist`，`pnpm -r exec` 拒跑）**仍在 main 串行执行**，一卡一 commit。若卡 A 定色为「蓝」，它会同时改 `character-detail.tsx` / `Dashboard.tsx`，与卡 B 无交集，顺序无关。
+- **只剩一张卡**（`EntityDetail` / `TimelineDetail` 的卡片块 + `skeleton-block` + 守卫正则）。
+- 本机 worktree 无 `node_modules` / `dist`（`pnpm -r exec` 拒跑）⇒ 在 main 单写者执行，一卡一 commit。
 
 ---
 
-## 卡 A · 「行内链接」口径登记（文档 + 6 处对齐）
-
-**目标**：`DESIGN.md` 只登记了 `Link (#0075de)`「**正文**链接专用」，而 UI 里 6 处**行内可点文本**（不是正文、也不是按钮）没有口径，各写各的。本卡把这条口径补上，让 6 处与文档一致。
-
-**现状（已核实）**
-
-| 站点 | 语义 | 当前写法 |
-| :--- | :--- | :--- |
-| `character-detail.tsx:558` / `:567` / `:704` | 说明句里的逃生链接（「未设置阅读进度……去大纲设进度」） | `text-primary hover:underline` |
-| `pages/Dashboard.tsx:1143` | 概览页「阅读进度」的**值**（跳到该章） | `text-primary hover:underline` |
-| `pages/ReferenceDetail.tsx:504` | 参考资料「来源」的**外部 URL** | `inline-flex items-center gap-1 text-primary hover:underline` + `ExportOutlined` |
-| `pages/ReferenceList.tsx:497` | 列表行里的外部 URL | `inline-flex max-w-full items-center gap-1 text-xs text-primary hover:underline` + `truncate` |
-
-**关键事实**
-
-- `text-primary` = `--primary` = `--ant-color-primary` = **深墨 `#37352f`**（浅色）；`AntdProvider` 另配了 `colorLink` = `#0075de`（深色 `#529cca`），但**全站没有一处用到它**（`Button href` 走按钮表皮，`Typography.Link` 无消费点）。
-- `index.css` 的 `@theme inline` **没有 `--color-link`** ⇒ 现在写不出 `text-link` 这个类。
-- 6 处都是 2~3 个 token 的短类串；按 `lib/styles.ts` 的既有规则（≥3 处 **且** 稳定纯样式才提取、短类不提取），**不建组件**，只登记口径 + 对齐 class。
-
-**两种改法（取决于定色，见本卡末尾）**
-
-- **墨（保持现状色）**：`DESIGN.md` §Colors 把 `Link` 口径收窄为「**正文 / 富文本**内链接（由块编辑器渲染）」，并在 §Components 新增 **`inline-link`** 条目 = *UI 内行内可点文本*：`{colors.primary}` 墨字 + `hover:underline`，**不新增色值、不建组件**；6 处不动色，只把 `text-xs` 那处的语境写进条目（紧凑列表行可用 12px）。
-- **蓝（严格执行「链接是蓝的」）**：`index.css` 的 `@theme inline` 补 `--color-link: var(--ant-color-link)`，6 处改 `text-link`；`DESIGN.md` 把 `Link` 的适用范围从「正文」扩到「所有行内链接」；`dead-token` 守卫会自动验证新变量有消费者。
-
-**验收（两种改法共用）**
-
-- [ ] `pnpm typecheck` / `pnpm lint` / `pnpm --filter @whispering233/ai-editor-client test` 全绿
-- [ ] 若改蓝：浏览器量 `#/overview`（阅读进度值）与 `#/reference/<id>`（来源 URL）的 computed `color`，浅 / 深两态各一次（**核前整页重载**）
-- [ ] 若保持墨：`DESIGN.md` 的两处口径（`Link` 收窄 + `inline-link` 新增）互相不矛盾，且 `colorLink` 在文里仍登记（它是 antd token，未来 antd 组件会用到）
-- [ ] `git status` 干净 + `git log` 含本卡 commit
-
----
-
-## 卡 B · 4 处手写分区卡 → `SectionCard`（骨架同卡改 8px）
+## 卡 · 4 处手写分区卡 → `SectionCard`（骨架同卡改 8px）
 
 **目标**：`EntityDetail` / `TimelineDetail` 各 2 处自己写的「描边卡 + `<h2 class="text-sm font-semibold">`」改回 `SectionCard`（antd Card），让圆角与块标题回到 `DESIGN.md` 契约；**同时**把 `SkeletonBlock` 的圆角与它一起改到 8px（否则加载完成瞬间跳档）。
 
