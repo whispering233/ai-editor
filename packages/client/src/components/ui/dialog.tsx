@@ -58,7 +58,11 @@ function Dialog({
 // effect 跑之前就已获得焦点，它存进 ref 的是模态内元素，关闭后焦点落回 body。这里改记
 // 「最后一个在弹窗外获得焦点的元素」（document 级 focusin，一次注册，与弹窗数量无关）。
 let lastFocusOutsideDialog: HTMLElement | null = null;
-if (typeof document !== "undefined") {
+// 单例注册：Vite HMR 每次重载本模块都会再执行一遍顶层代码，没有这道闸会累积监听
+const FOCUS_TRACKER_KEY = "__aiEditorDialogFocusTracker";
+const globals = globalThis as typeof globalThis & { [FOCUS_TRACKER_KEY]?: boolean };
+if (typeof document !== "undefined" && globals[FOCUS_TRACKER_KEY] !== true) {
+  globals[FOCUS_TRACKER_KEY] = true;
   document.addEventListener(
     "focusin",
     (event) => {
@@ -116,9 +120,21 @@ function DialogContent({
   width?: DialogWidth;
 }) {
   const ctx = React.useContext(DialogContext);
+  const open = ctx?.open ?? false;
   // 调用点有两种形态：`<Dialog open>` 常挂（关闭走 open=false）与 `{open && <Dialog open>}`
   // （关闭=整棵子树卸载）。后者不会触发 Modal 的 afterClose ⇒ 卸载也要归还一次焦点。
-  React.useEffect(() => () => restoreFocusOutsideDialog(), []);
+  // `wasOpenRef` 是必要条件：常挂形态在 `<StrictMode>` 下会被挂载→卸载→再挂载跑一遍，
+  // 不加这道闸会在 dev 里每次挂载都抢一次焦点（生产下页面卸载也会把焦点挪回壳里的导航）。
+  const wasOpenRef = React.useRef(false);
+  React.useEffect(() => {
+    if (open) wasOpenRef.current = true;
+  }, [open]);
+  React.useEffect(
+    () => () => {
+      if (wasOpenRef.current) restoreFocusOutsideDialog();
+    },
+    [],
+  );
   if (ctx === null) return null;
   return (
     <Modal
@@ -128,12 +144,13 @@ function DialogContent({
       footer={null}
       closable={false}
       centered
-      // 关闭即卸载子树：与换芯前「关闭态不渲染」同语义，也保证表单草稿不跨次残留
+      // 关闭即卸载子树：与换芯前「关闭态不渲染」同语义。
+      // 注意它**不**负责页面级 state 里的草稿复位（HookPanel 的 createName 那样，关窗只置 open=false）
       destroyOnHidden
       keyboard
       // v6：maskClosable 已弃用，遮罩行为走 mask 配置
       mask={{ closable: true }}
-      focusable={{ trap: true, focusTriggerAfterClose: true }}
+            focusable={{ trap: true, focusTriggerAfterClose: false }}
       width={DIALOG_WIDTHS[width]}
       styles={{ container: CONTAINER_STYLE, body: BODY_STYLE, mask: MASK_STYLE }}
     >

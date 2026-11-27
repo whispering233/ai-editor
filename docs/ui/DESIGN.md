@@ -199,7 +199,6 @@ components:
   # 默认档边框 #d94a4a 两态同值（vs 浅底 3.61:1 / vs 深底 3.34:1）；底与字随主题翻转（浅 10.59:1 / 深 8.96:1）
   type-badge:
     backgroundColor: "{colors.surface-muted}"
-    borderColor: "{colors.type-badge-border}"
     textColor: "{colors.primary}"
     typography: "{typography.caption}"
     rounded: "{rounded.xs}"
@@ -544,7 +543,7 @@ components:
 换芯买到的三件事与它们的**适用范围**：
 
 - **焦点陷阱**（`focusable.trap`）：浏览器实测 30 次 `Tab` 不出 `.ant-modal-wrap`（折返边界会有一帧落在 `body`，是 antd lock-focus 哨兵的正常行为）。
-- **关闭后焦点归还**在 antd 侧**不生效**：模态内容的聚焦早于它保存 `activeElement` 的 effect ⇒ 它存进 ref 的是模态内元素，关闭后焦点落回 `body`。因此本组件自己记——document 级 `focusin` 记住「最后一个在弹窗外获得焦点的元素」，在 `afterClose` **与卸载时各归还一次**（调用点有 `<Dialog open>` 常挂 与 `{open && <Dialog open>}` 两种形态，后者关闭 = 整棵子树卸载，不会触发 `afterClose`）。
+- **关闭后焦点归还**在 antd 侧**不生效**：模态内容的聚焦早于它保存 `activeElement` 的 effect ⇒ 它存进 ref 的是模态内元素，关闭后焦点落回 `body`。因此本组件自己记——document 级 `focusin` 记住「最后一个在弹窗外获得焦点的元素」，在 `afterClose` **与卸载时各归还一次**（调用点有 `<Dialog open>` 常挂 与 `{open && <Dialog open>}` 两种形态，后者关闭 = 整棵子树卸载，不会触发 `afterClose`）。卸载路径带一道「本次实例真的打开过」的闸（`wasOpenRef`）：`<StrictMode>` 下常挂实例会挂载→卸载→再挂载跑一遍，没这道闸会在 dev 里每次挂载抢一次焦点；生产下切路由也会把焦点挪回壳里的导航。
 - **`Esc` 只关最顶层 —— 仅限 antd portal 栈内的浮层**（rc-dialog 的 `onEsc({ top })`：`@rc-component/dialog/es/DialogWrap.js` 把 `top` 交给 `@rc-component/portal` 的栈）。**自绘 `popover` / 右键菜单仍是各自的 `window` `keydown`**，而 `stopPropagation` 拦不住同一 target 上的其他监听 ⇒ **弹窗 + Popover（或右键菜单）同时打开时，按一次 `Esc` 仍会关掉两个**。这是已知残留，收口前不得把本条目当成全局承诺。
 
 **几何与内容层的钉子**（不钉就是静默错位）：
@@ -558,9 +557,9 @@ components:
 
 **`error-banner`（页内 / 栏内错误条，收口）** — **唯一实现 = `components/ui/error-banner.tsx`**。此前的形态是「常量只给壳子、几何由 12 个文件各自拼」：`gap-2` 与 `gap-3` 并存、消息 `ml-auto` 与按钮 `min-w-0 flex-1` 两种布局、按钮位置两种对齐。
 
-- 两种布局：`row`（默认，一行说明 + 右端 24px 小按钮——内联保存失败 / rail 刷新失败）与 `stack`（说明 + 垂直排列的 `block` 按钮——rail 与整页错误态）。
+- 两种布局：`row`（默认，一行说明 + 右端 24px 按钮——内联保存失败，以及 `ReferenceDetail` 那种整页错误态）与 `stack`（说明 + 垂直排列的 `block` 按钮——两个 rail 的列表刷新失败：人物 rail、写作页卷章栏）。
 - **外边距不进组件**：`mb-*` / `mt-*` / `m-*` 由调用点 `className` 传（同 `lib/styles.ts` 已定的「易变属性由调用点决定」——常量一旦含间距类，调用点无法用排序更早的类覆盖）。
-- `onRetry` 缺省时**不渲染**重试按钮；额外动作（「返回列表」/「返回章节目录」/「还原上级」）走 `actions` 插槽。
+- `onRetry` 缺省时**不渲染**重试按钮；非重试动作（「返回章节目录」/「还原上级」）走 `actions` 插槽，尺寸由调用点决定。**唯一例外 = 整页错误态**：`ReferenceDetail` 的「重试」/「返回列表」两个按钮按换芯前的形态留在条外（本批不改像素），不要照它写成通用形态。
 - **不属于本控件的三种错误面**（形态与语义都不同，不得迁入）：① `ErrorBoundary` 的整页崩溃兜底（最后一道防线，不属于页内条）；② `FeedbackHost` 的全局错误横幅（`fixed` 顶中 + 阴影，数据源是 ui store 的 `error`）；③ `compute-preview` 的「状态冲突」警示块（带图标 + 条目列表的警示列表，不是一句话 + 重试）。
 - 与 `save-status` 的分工：自动保存失败 = `save-status` 回 `idle` + 本控件（含重试），不静默。
 

@@ -42,4 +42,25 @@ describe("ErrorBanner", () => {
     expect(html).toContain("mb-3");
     expect(html.match(/border-destructive\/30/g)).toHaveLength(1);
   });
+
+  it("row 的几何：消息可伸缩 + gap-3（不允许各调用点再拼 gap-2）", () => {
+    const html = renderToString(<ErrorBanner message="x" onRetry={() => {}} />);
+    expect(html).toContain("gap-3");
+    expect(html).not.toContain("gap-2");
+    expect(html).toContain("min-w-0 flex-1");
+  });
+
+  it("组件内不含外边距（外边距由调用点给）", () => {
+    const html = renderToString(<ErrorBanner message="x" />);
+    expect(html).not.toMatch(/\b(?:m|mb|mt|ml|mr|mx|my)-[0-9.]/);
+  });
+
+  it("stack 的几何：竖排 + gap-2，消息不伸缩", () => {
+    const html = renderToString(
+      <ErrorBanner layout="stack" message="x" onRetry={() => {}} />,
+    );
+    expect(html).toContain("flex-col");
+    expect(html).toContain("gap-2");
+    expect(html).not.toContain("min-w-0 flex-1");
+  });
 });

@@ -177,6 +177,34 @@ function sourceFiles(dir: string = SRC): { path: string; text: string }[] {
 
 const FILES = sourceFiles();
 
+/** 错误条壳串（`components/ui/error-banner.tsx` 内部常量）与允许出现它的文件——
+ * 三处豁免按 DESIGN.md `error-banner` 点名：整页崩溃兜底 / 全局 fixed 横幅 / 状态冲突警示块 */
+const SHELL_CLASS = "border-destructive/30 bg-destructive/10";
+const ERROR_BANNER_ALLOW = [
+  "components/ui/error-banner.tsx",
+  "components/feedback/ErrorBoundary.tsx",
+  "components/feedback/FeedbackHost.tsx",
+  "components/delta/compute-preview.tsx",
+];
+
+/** `<DialogContent …>` 开标签里出现 Tailwind 宽度类即违规：
+ * `.ant-modal { max-width }` 是无层 CSS，会静默压掉 `@layer utilities` 的 `max-w-*` */
+function dialogMaxWidthClasses(): string[] {
+  const out: string[] = [];
+  for (const file of FILES) {
+    let index = file.text.indexOf("<DialogContent");
+    while (index !== -1) {
+      const tag = openingTagAt(file.text, index);
+      if (tag !== null && /\b(?:sm:|md:|lg:|xl:)?max-w-/.test(tag)) {
+        const line = file.text.slice(0, index).split("\n").length;
+        out.push(`${file.path}:${line}  ${tag.replace(/\s+/g, " ").slice(0, 100)}`);
+      }
+      index = file.text.indexOf("<DialogContent", index + 1);
+    }
+  }
+  return out;
+}
+
 /** 采集 src 下所有 `.css`（dead-token 守卫要扫真 CSS 消费者；`sourceFiles()` 只收 ts/tsx） */
 function cssFiles(dir: string = SRC): { path: string; text: string }[] {
   const out: { path: string; text: string }[] = [];
@@ -192,13 +220,15 @@ function cssFiles(dir: string = SRC): { path: string; text: string }[] {
   return out;
 }
 
-/** Tailwind 主题命名空间 → 可用工具类前缀。`color` 漏前缀会把暗色/热力色误杀；
- * `radius` / `font` 必须显式列出——它们不是 `--color-*`，没有这一项 `--radius-sm` / `--font-sans` 会被判死 */
+/** Tailwind 主题命名空间 → 工具类前缀**正则片段**。前缀表漏一项就是误杀活 token：
+ * - `color` 要含按边描边（`border-t-*` 等）与 `drop-shadow`；
+ * - `radius` 要允许按边/按角（`rounded-b-xl` 消费 `--radius-xl` 是真实写法，`dialog.tsx` 的页脚就是）；
+ * - `radius` / `font` 不是 `--color-*`，没有这两项 `--radius-*` / `--font-sans` 会被判死 */
 const UTILITY_PREFIX_BY_NAMESPACE: Record<string, string[]> = {
   color: [
     "bg",
     "text",
-    "border",
+    "border(?:-[tblrxy])?",
     "ring",
     "fill",
     "stroke",
@@ -211,8 +241,9 @@ const UTILITY_PREFIX_BY_NAMESPACE: Record<string, string[]> = {
     "caret",
     "decoration",
     "shadow",
+    "drop-shadow",
   ],
-  radius: ["rounded"],
+  radius: ["rounded(?:-[tblrse]{1,2})?"],
   font: ["font"],
 };
 
@@ -253,7 +284,7 @@ function findDeadVars(decls: CssVarDecl[], haystack: string): string[] {
   }
   const escapes = (s: string) => s.replace(/[-/\\^$*+?.()|[\]{}]/g, "\\$&");
   const usesUtility = (key: string, prefixes: string[]) =>
-    prefixes.some((prefix) => new RegExp(`(?<![\\w-])${prefix}-${escapes(key)}(?![\\w-])`).test(haystack));
+    new RegExp(`(?<![\\w-])(?:${prefixes.join("|")})-${escapes(key)}(?![\\w-])`).test(haystack);
 
   const dead: string[] = [];
   const seen = new Set<string>();
@@ -273,16 +304,20 @@ function findDeadVars(decls: CssVarDecl[], haystack: string): string[] {
 
 /** 为什么要它：`index.css` 是从 shadcn 模板搬来的，`--color-sidebar-*` / `--secondary` /
  * `--card-foreground` 靠「同名前缀的无关标识符」（`sidebarCollapsed`）躲过了一轮轮 grep，
- * 一直躺到 2026-11。规则：**声明了没人用 = 红**（白名单需要先改 DESIGN.md 并写理由）。 */
+ * 一直躺到 2026-11。规则：**声明了没人用 = 红**。
+ *
+ * 两个**有意的口径**（别当缺陷改）：
+ * 1. **只查 `index.css` 的声明**：`blocknote.css` 的 `--bn-*` 是给库读的主题映射，消费者在
+ *    `node_modules` 里，扫全部 css 会把它们全部误报。
+ * 2. **注释行不进消费面**：否则随便一句 `// 旧写法 var(--ghost)` 就能让死 token 恒绿。 */
 function deadCssVars(): string[] {
   const css = cssFiles();
   const index = css.find((file) => file.path === "index.css");
   if (!index) return [];
+  const codeOnly = (text: string) => text.split("\n").filter((line) => !isCommentLine(line));
   const haystack = [
-    ...FILES.map((file) => file.text),
-    ...css.map((file) =>
-      file.path === "index.css" ? stripVarDeclarations(file.text) : file.text,
-    ),
+    ...FILES.flatMap((file) => codeOnly(file.text)),
+    ...css.flatMap((file) => codeOnly(stripVarDeclarations(file.text))),
   ].join("\n");
   return findDeadVars(cssVarDecls([index]), haystack);
 }
@@ -342,6 +377,17 @@ describe("视觉纪律守卫（源码扫描）", () => {
 
   it("dead-token：index.css 的变量都有 index.css 声明之外的可达消费", () => {
     expect(deadCssVars()).toEqual([]);
+  });
+
+  it("error-banner-shell：错误条壳串只允许出现在唯一实现与三处豁免里", () => {
+    const hits = FILES.filter(
+      (file) => !ERROR_BANNER_ALLOW.includes(file.path) && file.text.includes(SHELL_CLASS),
+    ).map((file) => file.path);
+    expect(hits).toEqual([]);
+  });
+
+  it("dialog-width-prop：DialogContent 不得用 Tailwind 宽度类（会被 antd 无层 CSS 压掉）", () => {
+    expect(dialogMaxWidthClasses()).toEqual([]);
   });
 });
 
