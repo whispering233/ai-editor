@@ -19,13 +19,8 @@ import { ProjectRulesSection } from "../components/settings/project-rules-sectio
 import { ShortcutsSection } from "../components/settings/shortcuts-section";
 import { ZoomPanel } from "../components/settings/zoom-panel";
 import { desktopBridge } from "../lib/desktop";
-import {
-  LeaveGuardContext,
-  useLeaveGuard,
-  type DirtyReporter,
-} from "../hooks/use-leave-guard";
-import { useBackGuard } from "../hooks/use-back-guard";
-import { confirmLeave } from "../lib/leave-guard";
+import { LeaveGuardContext, type DirtyReporter } from "../hooks/use-leave-guard";
+import { useUnsavedGuard } from "../hooks/use-unsaved-guard";
 import { useCloudStore } from "../stores/cloud";
 import { useUiStore } from "../stores/ui";
 
@@ -57,9 +52,9 @@ export default function Settings() {
       description: "设置页有尚未保存的修改，离开后将丢失",
     });
   }
-  useLeaveGuard(anyDirty, askBeforeLeave);
-  // 后退走 lib 的 confirmLeave（不是本地那份）：两个出口共用一个在途确认，并发时只弹一个框
-  useBackGuard(anyDirty, confirmLeave);
+  // 左栏导航与浏览器后退走同一个闸门：后退内部恒走模块级 `confirmLeave`，与点击共享在途确认
+  // （并发时只弹一个框，见 `lib/leave-guard.ts`）
+  useUnsavedGuard(anyDirty, askBeforeLeave);
 
   useEffect(() => {
     if (pendingPane === "cloud") setTab("backup");

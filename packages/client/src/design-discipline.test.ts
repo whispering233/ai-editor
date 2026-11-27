@@ -205,6 +205,36 @@ const ERROR_BANNER_ALLOW = [
   "components/delta/compute-preview.tsx",
 ];
 
+/** 离开闸门的调用点白名单：闸门自身 + 两个薄接线层 + **尚未迁移**的页面壳。
+ * 后两项是收口途中的临时豁免（壳改完后必须从本表删掉，否则守卫形同废止）。 */
+const UNSAVED_GUARD_ALLOW = [
+  "hooks/use-unsaved-guard.ts",
+  "hooks/use-leave-guard.ts",
+  "hooks/use-back-guard.ts",
+  "pages/Outline.tsx",
+  "pages/SettingWorkbench.tsx",
+];
+
+/** 旧两 hook 的直接调用数（逐行扫描用；命中样例见「守卫规则自检」）。
+ * 为何禁止直接调：后退那一路的第二个参数传 raw `confirmDiscard` 会绕过 `lib/leave-guard.ts`
+ * 的在途单槽（同一时刻弹两个框），而两个参数名看不出差别——实测 3 个调用点错了 2 个。 */
+function legacyGuardHits(text: string): string[] {
+  return [...text.matchAll(/\buse(?:LeaveGuard|BackGuard)\s*\(/g)].map((m) => m[0]);
+}
+
+/** 全仓违规点（`快照 → 例外表 → 命中行号`） */
+function legacyGuardCallSites(): string[] {
+  const out: string[] = [];
+  for (const file of FILES) {
+    if (UNSAVED_GUARD_ALLOW.includes(file.path)) continue;
+    for (const match of file.text.matchAll(/\buse(?:LeaveGuard|BackGuard)\s*\(/g)) {
+      const line = file.text.slice(0, match.index).split("\n").length;
+      out.push(`${file.path}:${line}`);
+    }
+  }
+  return out;
+}
+
 /** `<DialogContent …>` 开标签里出现 Tailwind 宽度类即违规：
  * `.ant-modal { max-width }` 是无层 CSS，会静默压掉 `@layer utilities` 的 `max-w-*` */
 function dialogMaxWidthClasses(): string[] {
@@ -407,9 +437,20 @@ describe("视觉纪律守卫（源码扫描）", () => {
   it("dialog-width-prop：DialogContent 不得用 Tailwind 宽度类（会被 antd 无层 CSS 压掉）", () => {
     expect(dialogMaxWidthClasses()).toEqual([]);
   });
+
+  it("unsaved-guard-shell：离开闸门只有一个入口（调用点不得直接用旧两 hook）", () => {
+    expect(legacyGuardCallSites()).toEqual([]);
+  });
 });
 
 describe("守卫规则自检（规则必须能识别违规样例，否则规则形同虚设）", () => {
+  it("unsaved-guard-shell 命中旧两 hook、放过闸门入口", () => {
+    expect(legacyGuardHits("useBackGuard(dirty, confirm)")).toEqual(["useBackGuard("]);
+    expect(legacyGuardHits("useLeaveGuard(dirty, confirm)")).toEqual(["useLeaveGuard("]);
+    // 闸门入口、import 语句与注释里的名字命中：不属违规
+    expect(legacyGuardHits("useUnsavedGuard(dirty, confirm)")).toEqual([]);
+    expect(legacyGuardHits("import { useBackGuard } from \"./x\";")).toEqual([]);
+  });
   it("逐条命中违规样例", () => {
     const samples: Record<string, string> = {
       "lucide-import": `import { Trash2 } from "lucide-react";`,
