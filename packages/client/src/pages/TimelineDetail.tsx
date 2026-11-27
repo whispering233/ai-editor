@@ -27,6 +27,7 @@ import { Button, Input, Select } from "antd";
 import { formatTimestamp, MAX_ENTITY_LIST_LIMIT } from "@whispering233/ai-editor-shared";
 import type { EntitySummary } from "@whispering233/ai-editor-shared";
 import { PageHeader } from "@/components/ui/page-header";
+import { SaveStatus } from "@/components/ui/save-status";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { RefChip } from "@/components/ui/ref-chip";
@@ -80,6 +81,8 @@ export default function TimelineDetail({ id }: { id: string }) {
   /** 表单值（详情 data 副本；null = 未加载） */
   const [form, setForm] = useState<EventDetailForm | null>(null);
   const [saving, setSaving] = useState(false);
+  /** 最近一次保存**完成**的本地时刻（`save-status` 的 `saved` 态；进页恒 null = idle） */
+  const [savedAt, setSavedAt] = useState<Date | null>(null);
   const [saveError, setSaveError] = useState<string | null>(null);
   // 关联节点选择器 Popover（UX3 轻量弹层：非模态，不打断详情页）
   const [relationOpen, setRelationOpen] = useState(false);
@@ -197,6 +200,10 @@ export default function TimelineDetail({ id }: { id: string }) {
   }
   useUnsavedGuard(dirty, confirmDiscard);
 
+  // 保存态四态（单源 = components/ui/save-status）：进页 idle、改字段 pending、提交中 saving、
+  // 成功后 saved + 本地时刻
+  const saveState = saving ? "saving" : dirty ? "pending" : savedAt !== null ? "saved" : "idle";
+
   /** 保存：buildEventDetailPatch 只提交变更字段（partial 浅合并，与 C3 编辑对话框同语义）；成功后重拉 */
   async function handleSave() {
     if (!detail || !form || saving) return;
@@ -210,6 +217,7 @@ export default function TimelineDetail({ id }: { id: string }) {
     try {
       await updateEntity("event", id, patch);
       useUiStore.getState().showToast("已保存");
+      setSavedAt(new Date());
       await loadDetail();
     } catch (err) {
       if (err instanceof ApiError && err.code === "ENTITY_NOT_FOUND") {
@@ -363,9 +371,12 @@ export default function TimelineDetail({ id }: { id: string }) {
         description={
           /* 元信息行（事件不产生 Delta，仅展示时间，信息层级） */
           detail ? (
-            <p className="text-xs text-muted-foreground">
-              创建于 {formatTimestamp(detail.createdAt)} · 更新于 {formatTimestamp(detail.updatedAt)}
-            </p>
+            <div className="flex min-w-0 items-center gap-2 text-xs text-muted-foreground">
+              <span className="min-w-0 truncate">
+                创建于 {formatTimestamp(detail.createdAt)} · 更新于 {formatTimestamp(detail.updatedAt)}
+              </span>
+              <SaveStatus state={saveState} savedAt={savedAt} />
+            </div>
           ) : undefined
         }
       />

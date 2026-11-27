@@ -23,6 +23,7 @@ import { entityListHost } from "../lib/entity-paths";
 import { useUnsavedGuard } from "../hooks/use-unsaved-guard";
 import { Button, Input, Select } from "antd";
 import { PageHeader } from "@/components/ui/page-header";
+import { SaveStatus } from "@/components/ui/save-status";
 import { PanelHeader } from "@/components/ui/panel-header";
 import {
   ApiError,
@@ -156,6 +157,8 @@ export default function EntityDetail({
   /** 表单值（detail.data 副本；null = 未加载） */
   const [form, setForm] = useState<Record<string, unknown> | null>(null);
   const [saving, setSaving] = useState(false);
+  /** 最近一次保存**完成**的本地时刻（`save-status` 的 `saved` 态；进页恒 null = idle） */
+  const [savedAt, setSavedAt] = useState<Date | null>(null);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [relationDialogOpen, setRelationDialogOpen] = useState(false);
   const [deleteRelationTarget, setDeleteRelationTarget] = useState<RelationSummaryItem | null>(
@@ -262,6 +265,10 @@ export default function EntityDetail({
   }
   useUnsavedGuard(dirty, confirmDiscard);
 
+  // 保存态四态（单源 = components/ui/save-status）：进页 idle、改字段 pending、提交中 saving、
+  // 成功后 saved + 本地时刻。不拿服务端 updated_at 冒充「刚保存过」。
+  const saveState = saving ? "saving" : dirty ? "pending" : savedAt !== null ? "saved" : "idle";
+
   /** 保存：diffData 只提交变更字段（partial 浅合并）；成功后重拉（服务端权威） */
   async function handleSave() {
     if (!detail || !form || saving) return;
@@ -275,6 +282,7 @@ export default function EntityDetail({
     try {
       await updateEntity(entityType, id, { data: changed });
       useUiStore.getState().showToast("已保存");
+      setSavedAt(new Date());
       await loadDetail();
       onSaved?.();
     } catch (err) {
@@ -468,6 +476,7 @@ export default function EntityDetail({
                 >
                   变更记录 {detail.deltaCount} 条
                 </RefChip>
+                <SaveStatus state={saveState} savedAt={savedAt} />
               </div>
             ) : undefined
           }
@@ -492,17 +501,21 @@ export default function EntityDetail({
           description={
             /* 元信息行（文字与「变更记录 N 条」入口同用 muted-foreground，双主题一致） */
             detail ? (
-              <p className="text-xs text-muted-foreground">
-                创建于 {formatTimestamp(detail.createdAt)} · 更新于{" "}
-                {formatTimestamp(detail.updatedAt)} ·{" "}
+              <div className="flex min-w-0 items-center gap-2 text-xs text-muted-foreground">
+                <span className="min-w-0 truncate">
+                  创建于 {formatTimestamp(detail.createdAt)} · 更新于{" "}
+                  {formatTimestamp(detail.updatedAt)}
+                </span>
                 <RefChip
                   onClick={() => setDeltaOpen((v) => !v)}
                   title="展开状态预览：计算该实体在任意大纲节点处的累积状态"
                   tone="muted"
+                  className="shrink-0"
                 >
                   变更记录 {detail.deltaCount} 条
                 </RefChip>
-              </p>
+                <SaveStatus state={saveState} savedAt={savedAt} />
+              </div>
             ) : undefined
           }
         />

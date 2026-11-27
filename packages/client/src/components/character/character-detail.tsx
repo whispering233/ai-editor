@@ -29,6 +29,7 @@ import { partitionCharacterRelations } from "../../lib/character-relations";
 import { EmptyState } from "../ui/empty-state";
 import { ErrorBanner } from "../ui/error-banner";
 import { PageHeader } from "../ui/page-header";
+import { SaveStatus, type SaveState } from "../ui/save-status";
 import { SectionCard } from "../ui/section-card";
 import { TagsEditor } from "../ui/tags-editor";
 import { navigate } from "../../hooks/use-route";
@@ -619,6 +620,9 @@ export interface CharacterDetailViewProps {
   /** 基础信息必填判据（仅 tab 1 内联展示；tab 2 只读不校验） */
   basicsErrors: CharacterBasicsErrors;
   saving: boolean;
+  /** 保存态（单源 = `ui/save-status`）：容器派生，展示层不重算；缺省 = `idle`（不渲染） */
+  saveState?: SaveState;
+  savedAt?: Date | null;
   saveError: string | null;
   onSave: () => void;
   onDelete: () => void;
@@ -651,6 +655,8 @@ export function CharacterDetailView({
   onTabChange,
   basicsErrors,
   saving,
+  saveState = "idle",
+  savedAt = null,
   saveError,
   onSave,
   onDelete,
@@ -693,9 +699,12 @@ export function CharacterDetailView({
         }
         description={
           /* 元信息行：只留时间戳——「变更记录 N 条」按钮已取消（入口被 tab 2 吸收） */
-          <p className="text-xs text-muted-foreground">
-            创建于 {formatTimestamp(detail.createdAt)} · 更新于 {formatTimestamp(detail.updatedAt)}
-          </p>
+          <div className="flex min-w-0 items-center gap-2 text-xs text-muted-foreground">
+            <span className="min-w-0 truncate">
+              创建于 {formatTimestamp(detail.createdAt)} · 更新于 {formatTimestamp(detail.updatedAt)}
+            </span>
+            <SaveStatus state={saveState} savedAt={savedAt} />
+          </div>
         }
       />
 
@@ -789,6 +798,8 @@ export function CharacterDetail({ id, onSaved }: { id: string; onSaved?: () => v
     description: null,
   });
   const [saving, setSaving] = useState(false);
+  /** 最近一次保存**完成**的本地时刻（`save-status` 的 `saved` 态；进页恒 null = idle） */
+  const [savedAt, setSavedAt] = useState<Date | null>(null);
   const [saveError, setSaveError] = useState<string | null>(null);
   /** 用户手动切换的 tab（null = 尚未切换 → 用默认判据） */
   const [userTab, setUserTab] = useState<CharacterViewTab | null>(null);
@@ -840,6 +851,14 @@ export function CharacterDetail({ id, onSaved }: { id: string; onSaved?: () => v
   // 进度节点只列章（状态按章序前缀累积，场景/卷只是某章的别名——见 DESIGN.md `character-workbench`）
   const chapterNodes = useMemo(() => chapterNodeOptions(outline), [outline]);
 
+  // 保存态四态（单源 = components/ui/save-status）：进页 idle、改字段 pending、提交中 saving、
+  // 成功后 saved + 本地时刻。dirty = data 差异 ∪ 姓名差异（与保存提交面同一口径）。
+  const dirty =
+    detail !== null &&
+    form !== null &&
+    (diffData(detail.data, form) !== null || formName.trim() !== detail.name);
+  const saveState = saving ? "saving" : dirty ? "pending" : savedAt !== null ? "saved" : "idle";
+
   async function handleSave() {
     if (!detail || !form || saving) return;
     // 基础信息必填（**仅前端**）：先拦下空姓名/空描述，避免无谓的服务端往返
@@ -861,6 +880,7 @@ export function CharacterDetail({ id, onSaved }: { id: string; onSaved?: () => v
         ...(changed ? { data: changed } : {}),
       });
       useUiStore.getState().showToast("已保存");
+      setSavedAt(new Date());
       await loadDetail();
       onSaved?.();
     } catch (err) {
@@ -963,6 +983,8 @@ export function CharacterDetail({ id, onSaved }: { id: string; onSaved?: () => v
       tab={userTab ?? tabState.tab}
       onTabChange={setUserTab}
       basicsErrors={basicsErrors}
+      saveState={saveState}
+      savedAt={savedAt}
       positionState={tabState.positionState}
       saving={saving}
       saveError={saveError}
