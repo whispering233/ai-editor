@@ -61,20 +61,19 @@
 
 ---
 
-## 卡 4 · 在途加载计数（`active-loads`）
+## 卡 4 · 在途读计数（`active-loads`）
 
-**目标**：刷新按钮有真实 loading 且不可连点；有数据时重载有可见线索。
+**目标**：刷新按钮有真实 loading 且不可连点；搜索 / 翻页 / 重载也能被看见。
 
 ### 改动面
-- `stores/ui.ts`：`activeLoads` 计数（注册 / 变更 / 注销，按 token 去重）。
-- 新增 `hooks/use-report-loading.ts`。
-- 16 个 `useDataRefresh` 订阅点各加一行（上报各自的 `loading`）。
-- `components/main-panel/MainToolbar.tsx`：刷新按钮订阅总数（`loading` + `disabled`）。
-- 5 个列表 / 树面板：`loading && data !== null` 时内容区顶部 2px primary 条。
+- `lib/inflight.ts`（`beginRead` / `endRead` / 订阅）+ `hooks/use-inflight-reads.ts`。
+- `lib/api.ts` 的 `apiFetch`：`GET` 时计入（`finally` 释放），写操作不计。
+- `components/main-panel/MainToolbar.tsx`：刷新按钮 `loading={inflightReads > 0}`（antd 自动吞点击）。
+- **不做页面级顶条**：GET 计数已覆盖刷新 / 搜索 / 翻页，页面再养一套 `loading` 就是第二套真相（原计划的 5 处 2px 顶条据此取消）。
 
 ### 完成判据
-- 一个 commit、`git status` 干净；client 全测绿。
-- 像素核对（浅 / 深两态）：点刷新 → 按钮转圈且不可点；列表在「已有数据」时出现 2px 条，首拉仍是骨架、不叠加。
+- 一个 commit、`git status` 干净；client 全测绿（含 `lib/inflight.test.ts` 三条）。
+- 像素核对（浅 / 深）：点刷新 → 按钮转圈且不可点；搜索 / 翻页也能看到在途；保存正文时刷新按钮**不**转圈。
 
 **依赖**：无 · **视觉**：有
 

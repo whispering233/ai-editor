@@ -39,6 +39,7 @@ import type {
   WritingStatsRes,
 } from "@whispering233/ai-editor-shared";
 import type { EntityType, HookStatus } from "@whispering233/ai-editor-shared";
+import { beginRead, endRead } from "./inflight";
 import type { ConfigFileName } from "@whispering233/ai-editor-shared/schemas";
 import type { FocusContext } from "./focus";
 
@@ -123,8 +124,22 @@ function isRawBody(body: unknown): body is FormData | undefined {
  * 通用 fetch 封装：拼 /api/v1 前缀、JSON 序列化、解析统一响应包裹
  * 成功返回 data；失败抛 ApiError（code 为服务端 ErrorCode；网络层/解析失败为 CLIENT_NETWORK_ERROR）
  * body 为 FormData / Blob 时原样上传（见 isRawBody）；其余 body（JSON）语义不变
+ *
+ * **GET 计入在途读计数**（`lib/inflight.ts`）：刷新按钮的 loading 与「点了没反应」就靠它，
+ * 且只数读——写操作有自己的 `saving` / `busy`（混进来会让刷新按钮在保存时也转圈）。
  */
 export async function apiFetch<T>(path: string, options: ApiFetchOptions = {}): Promise<T> {
+  if ((options.method ?? "GET") !== "GET") return apiFetchInner<T>(path, options);
+  beginRead();
+  try {
+    return await apiFetchInner<T>(path, options);
+  } finally {
+    endRead();
+  }
+}
+
+/** 真正的请求实现（在途读计数包装见 `apiFetch`） */
+async function apiFetchInner<T>(path: string, options: ApiFetchOptions = {}): Promise<T> {
   const { method = "GET", body, query, headers, signal } = options;
 
   let res: Response;

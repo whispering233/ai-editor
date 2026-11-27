@@ -7,12 +7,15 @@
 // 窄屏（<1024px）：右栏是抽屉，开关 = `MessageOutlined`；此态没有顶带开关，故恒 `pl-4` / `pr-4`。
 // 刷新按钮：MainToolbar 是中栏统一头部（全 tab 常驻），在此放刷新 = 一个入口刷所有数据页——
 // 点击调 ui store notifyDataChanged（1），各数据页订阅后重拉。
+// **在途态 = 真实的 GET 计数**（`lib/inflight.ts`，只数读）：按钮转圈 + antd 自动吞掉点击
+// ⇒ 「点了没反应 → 连点」不再发生；不另养一套 per-page 布尔（16 个订阅点里有一半拿不出干净 flag）。
 // 实体列表错误横幅内的「重试」按钮保留：那是错误态行内重试（错误时用户不一定会想到顶部刷新），
 // 与全局刷新不构成重复（不同状态上下文、不同语义）
 import { Button } from "antd";
 import { MessageOutlined, ReloadOutlined } from "@ant-design/icons";
 import { cn } from "../../lib/utils";
 import { useUiStore } from "../../stores/ui";
+import { useInflightReads } from "../../hooks/use-inflight-reads";
 
 export function MainToolbar({
   chatOpen,
@@ -32,6 +35,7 @@ export function MainToolbar({
   chatCollapsed: boolean;
 }) {
   const notifyDataChanged = useUiStore((s) => s.notifyDataChanged);
+  const inflightReads = useInflightReads();
 
   return (
     <div
@@ -48,6 +52,7 @@ export function MainToolbar({
         size="small"
         className="ml-auto shrink-0"
         onClick={notifyDataChanged}
+        loading={inflightReads > 0}
         icon={<ReloadOutlined className="text-base" />}
         aria-label="刷新数据"
         title="刷新数据"

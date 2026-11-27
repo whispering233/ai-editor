@@ -565,7 +565,7 @@ components:
 - **不属于本控件的三种错误面**（形态与语义都不同，不得迁入）：① `ErrorBoundary` 的整页崩溃兜底（最后一道防线，不属于页内条）；② `FeedbackHost` 的全局错误横幅（`fixed` 顶中 + 阴影，数据源是 ui store 的 `error`）；③ `compute-preview` 的「状态冲突」警示块（带图标 + 条目列表的警示列表，不是一句话 + 重试）。
 - 与 `save-status` 的分工：自动保存失败 = `save-status` 回 `idle` + 本控件（含重试），不静默。
 
-**`active-loads`（在途加载计数，2026-11）** — **唯一实现 = `hooks/use-report-loading.ts` + `stores/ui.ts` 的 `activeLoads`**。各页把**已有的** `loading` 报上来（挂载注册 / 变化更新 / 卸载注销），`MainToolbar` 的刷新按钮订阅总数 ⇒ 在途 `loading` + 禁用（修掉「点了没反应 → 连点」）。**只统计读**（拉数据）：保存 / 导出 / 备份 / 云推拉各有自己的 `saving` / `busy`，混进来会让刷新按钮在保存时也转圈。页面侧「有数据时重载」的可见线索 = `loading && data !== null` 时内容区顶部 2px `{colors.primary}` 条——**只用于列表 / 树面板**，不替换骨架（骨架仍只在首拉出现）。
+**`active-loads`（在途读计数，2026-11）** — **唯一实现 = `lib/inflight.ts`**（`beginRead` / `endRead` / `subscribeActiveReads`），**生产方唯一 = `lib/api.ts` 的 `apiFetch`（仅 `GET` 计数）**，消费方唯一 = `MainToolbar` 的刷新按钮（在途 `loading` + antd 自动吞掉点击）。**只数读**：保存 / 导出 / 备份 / 云推拉各有自己的 `saving` / `busy`，混进来会让刷新按钮在保存时也转圈。**不在页面里再养一套 `loading` 上报**：GET 就是「读」的唯一定义，一处接入覆盖刷新 / 搜索 / 翻页 / 切筛选 / 详情重载；页面级布尔会立即漂移（16 个数据订阅点里有一半拿不出干净的 flag）。骨架仍只在首拉出现（`data === null`），重载不替换骨架。
 
 **`long-task`（长任务反馈，2026-11）** — 导出 / 导入 / 备份 / 云推拉四处都是**单次请求、无服务端进度**，统一三件：① 在途文案带对象与动词（「正在导出《书名》…」）；② 超过 `LONG_TASK_ELAPSED_HINT_MS` 追加已用时（`hooks/use-elapsed-seconds.ts`）；③ 在途禁连点、禁关闭，失败 toast 带对象名。**不做百分比、不做阶段动画**——客户端没有中间态可观测，造假进度第二次就会被识破；要真进度就得把端点改成任务化 + 轮询（单独立项）。
 
