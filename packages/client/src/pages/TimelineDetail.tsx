@@ -28,6 +28,7 @@ import { PageHeader } from "@/components/ui/page-header";
 import { EmptyState } from "@/components/ui/empty-state";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { RefChip } from "@/components/ui/ref-chip";
+import { SkeletonBlock } from "@/components/ui/skeleton-block";
 import { skeletonClass } from "@/lib/styles";
 import { cn } from "@/lib/utils";
 import {
@@ -355,16 +356,8 @@ export default function TimelineDetail({ id }: { id: string }) {
       {/* 加载骨架 */}
       {loading && !detail && (
         <div className="flex flex-col gap-4">
-          <div className="space-y-3 rounded-md border border-border p-4">
-            {Array.from({ length: 5 }, (_, i) => (
-              <div key={i} className={cn(skeletonClass, "h-9")} />
-            ))}
-          </div>
-          <div className="space-y-3 rounded-md border border-border p-4">
-            {Array.from({ length: 3 }, (_, i) => (
-              <div key={i} className={cn(skeletonClass, "h-9")} />
-            ))}
-          </div>
+          <SkeletonBlock rows={5} />
+          <SkeletonBlock />
         </div>
       )}
 

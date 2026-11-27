@@ -6,53 +6,8 @@
 
 ## 并行 / 串行判定
 
-- **剩余两张卡串行**（在 main 单写者执行，不开 worktree——本机 worktree 无 `node_modules` / `dist`，`pnpm -r exec` 会拒跑）。
-- 依据：`pages/EntityDetail.tsx` 与 `pages/TimelineDetail.tsx` 在**两张卡里都出现**，`design-discipline.test.ts` 也都出现。并行必然冲突，且冲突点全在「同类串的第 N 份复制」上，最容易合出错。
-
----
-
-## 卡 2 · `skeleton-block`：卡形加载占位
-
-**目标**：把 4 处同形复制的「描边卡 + N 行灰条」收成一个组件，并把「骨架圆角 = 该页加载后真实卡的圆角」这根耦合写进代码注释。
-
-**涉及文件**
-
-- 新增 `packages/client/src/components/ui/skeleton-block.tsx`
-- 迁移 `4` 处：`pages/EntityDetail.tsx:516/521`、`pages/TimelineDetail.tsx:357/362`
-- **不收** `character-detail.tsx:924/929`：那里骨架是两列假卡、加载后是 tabs + 单卡（8px），形态本就不一致（已登记 `backlog.md`）
-- 守卫 `packages/client/src/design-discipline.test.ts`
-
-**实现骨架**
-
-```tsx
-// components/ui/skeleton-block.tsx
-interface SkeletonBlockProps {
-  rows?: number;      // 缺省 3
-  className?: string; // 网格占位等由调用点给
-}
-// 内部：space-y-3 rounded-md border border-border p-4 + N × <div className={cn(skeletonClass, "h-9")} />
-// rounded-md(6px) 必须与它模拟的真实卡同值；那批手写卡迁到 card(8px) 时这里同卡改（见 backlog.md 同名条目）
-```
-
-**不变式**
-
-- **只接 `rows` 一个参数**。不加 `rowHeight` / `withTitle`——行内与列表骨架（`h-4`~`h-20`、带宽度、`bg-muted/60` 的那几十处）形状各异，继续直接用 `skeletonClass` 拼。
-- 行样式单源仍是 `lib/styles.ts` 的 `skeletonClass`；本组件**不复制** `animate-pulse rounded bg-muted`。
-- 圆角**有意保持 6px**（与 `EntityDetail` / `TimelineDetail` 加载后的手写 6px 卡一致，零像素漂移）。**不要顺手改成 8px**——那会让骨架与旁边的 6px 卡错档；改档必须与那 4 处手写卡迁 `SectionCard` 同卡做。
-
-**守卫**
-
-- 规则 `skeleton-block-shell`：家族串 `space-y-3 rounded-md border border-border p-4` 只允许出现在 `components/ui/skeleton-block.tsx`。
-- 同样补自检样例。
-
-**验收**
-
-- [ ] `pnpm typecheck` / `pnpm lint` / `pnpm --filter @whispering233/ai-editor-client test` 全绿
-- [ ] SSR 断言：`rows` 缺省 3 行、`rows={5}` 5 行、每行都带 `skeletonClass` 的类
-- [ ] 像素：`#/setting/<id>`、`#/timeline/<id>` 各看一次骨架**与加载完成后卡边缘是否对齐**（整页重载后立即截图，或限速网络）
-- [ ] `git status` 干净 + `git log` 含本卡 commit
-
-**回滚**：单 commit revert。
+- **只剩一张卡**（在 main 单写者执行，不开 worktree——本机 worktree 无 `node_modules` / `dist`，`pnpm -r exec` 会拒跑）。
+- 依据：前一卡与它共享 `EntityDetail.tsx` / `TimelineDetail.tsx` / `design-discipline.test.ts`，冲突点全在「同类串的第 N 份复制」上，最容易合出错。
 
 ---
 

@@ -157,6 +157,14 @@ const RULES: Rule[] = [
     violationsIn: (line) => /rounded-(?:sm|md) border border-border px-1\.5 py-0\.5/.test(line),
     allow: (file) => file === "components/ui/ref-chip.tsx",
   },
+  {
+    // 卡形加载占位（`DESIGN.md` §Components `skeleton-block`）：壳串只允许出现在唯一实现里。
+    // 人物页那两处是**有意不收**的例外（它是两列假卡、加载后是 tabs + 单卡，形态本就不一致，
+    // 已登记 `backlog.md`）——它一旦改成真卡形态，就从白名单里拿掉。
+    id: "skeleton-block-shell",
+    violationsIn: (line) => /space-y-3 rounded-md border border-border p-4/.test(line),
+    allow: (file) => file === "components/ui/skeleton-block.tsx" || file === "components/character/character-detail.tsx",
+  },
 ];
 
 /** 动态拼接的 Tailwind 类名（`className={`bg-tag-${tint}`}`）：Tailwind 只在源码里扫**字面量**类名，
@@ -410,6 +418,7 @@ describe("守卫规则自检（规则必须能识别违规样例，否则规则�
       "primary-bg-token": `styles={{ content: { background: token.colorPrimaryBg } }}`,
       "dropdown-menu-selectable": `menu={{ items, selectable: true, selectedKeys: [id] }}`,
       "ref-chip-shell": `<button className="rounded-md border border-border px-1.5 py-0.5 text-xs" />`,
+      "skeleton-block-shell": `<div className="space-y-3 rounded-md border border-border p-4" />`,
     };
     for (const rule of RULES) {
       const sample = samples[rule.id];
@@ -437,6 +446,22 @@ describe("守卫规则自检（规则必须能识别违规样例，否则规则�
     ).toBe(false);
     // 唯一实现自身豁免；调用点不豁免
     expect(rule?.allow?.("components/ui/ref-chip.tsx")).toBe(true);
+    expect(rule?.allow?.("pages/EntityDetail.tsx")).toBe(false);
+  });
+
+  it("skeleton-block-shell 命中手写壳串、放过组件自身与人物页例外", () => {
+    const rule = RULES.find((item) => item.id === "skeleton-block-shell");
+    expect(rule).toBeDefined();
+    expect(
+      rule?.violationsIn(`<div className="space-y-3 rounded-md border border-border p-4">`),
+    ).toBe(true);
+    // 只差一个属性就不算同一个壳（行距 / 内边距 / 圆角任一不同即另一种形态）
+    expect(
+      rule?.violationsIn(`<div className="space-y-2 rounded-md border border-border p-4">`),
+    ).toBe(false);
+    expect(rule?.allow?.("components/ui/skeleton-block.tsx")).toBe(true);
+    // 人物页例外：有意不收（见 backlog.md），改形态后必须从白名单拿掉
+    expect(rule?.allow?.("components/character/character-detail.tsx")).toBe(true);
     expect(rule?.allow?.("pages/EntityDetail.tsx")).toBe(false);
   });
 
