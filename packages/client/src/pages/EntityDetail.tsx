@@ -10,7 +10,7 @@
 import { useEffect, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import { DeleteOutlined, SaveOutlined } from "@ant-design/icons";
-import { formatMonthDay, formatTimestamp, MAX_ENTITY_LIST_LIMIT } from "@whispering233/ai-editor-shared";
+import { formatMonthDay, formatTimestamp, ENTITY_TYPE_LABELS, MAX_ENTITY_LIST_LIMIT } from "@whispering233/ai-editor-shared";
 import type { EntityType } from "@whispering233/ai-editor-shared";
 import { ConfirmDialog } from "../components/outline/dialogs";
 import { CreateRelationDialog } from "../components/entity/create-relation-dialog";
@@ -20,6 +20,7 @@ import { TypeChip } from "../components/ui/tag-chip";
 import { RefChip } from "../components/ui/ref-chip";
 import { ComputePreview } from "../components/delta/compute-preview";
 import { entityListHost } from "../lib/entity-paths";
+import { useUnsavedGuard } from "../hooks/use-unsaved-guard";
 import { Button, Input, Select } from "antd";
 import { PageHeader } from "@/components/ui/page-header";
 import { PanelHeader } from "@/components/ui/panel-header";
@@ -136,7 +137,8 @@ export default function EntityDetail({
   /** 保存成功回调（可选，附加）：人物工作台用它刷新左栏列表的姓名/角色定位——
    * 不传则行为与本卡前完全一致（其他宿主无感） */
   onSaved?: () => void;
-  /** 未保存状态上报宿主（可选）：detail 与表单有差异即为 dirty；宿主据此做切行 / 导航守卫 */
+  /** 未保存状态上报宿主（可选）：detail 与表单有差异即 dirty；宿主仅用它做自身行为
+   * （如设定工作台在 dirty 时不重置表单）——**守卫由本组件自己注册**，不再交宿主 */
   onDirtyChange?: (dirty: boolean) => void;
 }) {
   const entityType = type as EntityType;
@@ -228,7 +230,7 @@ export default function EntityDetail({
   // 表单以服务端权威为准整体重置（AI 改动的字段随之同步，本地未保存编辑被覆盖属预期语义）
   useDataRefresh(() => void loadDetail());
 
-  // 未保存状态上报宿主（设定工作台：切行 / 返回条 / 新建导航前确认）；
+  // 未保存状态上报宿主（设定工作台：dirty 时不重置表单）；
   // 只在值真正变化时回调（不要让每次渲染都通知宿主），卸载时清掉宿主标记（含 StrictMode 重挂）
   const dirty = detail !== null && form !== null && diffData(detail.data, form) !== null;
   const lastDirtyRef = useRef<boolean | null>(null);
@@ -248,6 +250,17 @@ export default function EntityDetail({
     },
     [],
   );
+
+  /** 未保存守卫：**叶子自注册**（持有脏表单的组件是唯一注册者，壳不得代注册）
+   * ——本组件既服务三条独立路由，也内嵌在设定工作台里，两种宿主的离开动作都归一到 confirmLeave */
+  async function confirmDiscard(): Promise<boolean> {
+    if (!dirty) return true;
+    return useUiStore.getState().confirm({
+      title: "放弃未保存的修改？",
+      description: `当前${ENTITY_TYPE_LABELS[entityType]}的修改尚未保存，离开后将丢失`,
+    });
+  }
+  useUnsavedGuard(dirty, confirmDiscard);
 
   /** 保存：diffData 只提交变更字段（partial 浅合并）；成功后重拉（服务端权威） */
   async function handleSave() {

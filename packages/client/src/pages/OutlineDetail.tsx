@@ -58,6 +58,7 @@ import { shouldCommitSummary, shouldCommitTitle } from "../lib/outline-tree";
 import { formatTextLength } from "../lib/manuscript";
 import { useSaveShortcut } from "../lib/save-shortcut";
 import { useDataRefresh } from "../hooks/use-data-refresh";
+import { useUnsavedGuard } from "../hooks/use-unsaved-guard";
 import { isCurrentPositionHost, setCurrentPosition } from "../lib/current-position";
 import {
   deductionMarkTitle,
@@ -102,8 +103,8 @@ function normalizeDefaultStatus(
 /** 可嵌入（中栏分栏壳的右列）：节点由壳 `findNode` 派生传入（本组件不自拉大纲）；
  * `leading` = 页头标题行最左的槽（壳注入 rail 展开钮）；`headerActions` = 追加到操作组末尾
  * （壳注入右侧详情收起钮）；`onReload` = 保存后由壳收敛整树；
- * `onDirtyChange` = 未保存状态上报给壳（rail 切换 / 返回条 / 新建导航前确认）；
  * `onNavigate` = 壳的离开守卫（写正文前确认，见下），不给则退回裸 `href` 跳转。
+ * **未保存守卫由本组件自注册**（叶子自注册，壳不得代注册）。
  * 页头常驻、内容区独立滚动（DESIGN.md §Layout「页头常驻」）。 */
 export default function OutlineDetail({
   node,
@@ -111,7 +112,6 @@ export default function OutlineDetail({
   onReload,
   leading,
   headerActions,
-  onDirtyChange,
   onNavigate,
 }: {
   node: OutlineNode;
@@ -119,7 +119,6 @@ export default function OutlineDetail({
   onReload: () => Promise<void>;
   leading?: ReactNode;
   headerActions?: ReactNode;
-  onDirtyChange?: (dirty: boolean) => void;
   onNavigate?: (path: string) => void | Promise<void>;
 }) {
   const outline = useProjectStore((s) => s.outline);
@@ -209,15 +208,18 @@ export default function OutlineDetail({
     setBaseline(node);
   }, [node]);
 
-  // 未保存状态上报壳（rail 切换 / 空白区清选中 / 窄屏返回条 / 新建导航前确认）
+  // 未保存判定（与保存用的归一同一口径：末尾空行不算 dirty）
   const dirty = isOutlineDetailDirty(baseline, titleValue, summaryValue, dataForm);
-  useEffect(() => {
-    onDirtyChange?.(dirty);
-  }, [dirty, onDirtyChange]);
-  // 详情被壳卸载（选中节点消失 / 切到空态）时清掉壳里的 detailDirty，避免残留脏标记卡住导航
-  useEffect(() => () => {
-    onDirtyChange?.(false);
-  }, [onDirtyChange]);
+
+  /** 未保存守卫：**叶子自注册**（持有脏表单的组件是唯一注册者，壳不得代注册） */
+  async function confirmDiscard(): Promise<boolean> {
+    if (!dirty) return true;
+    return useUiStore.getState().confirm({
+      title: "放弃未保存的修改？",
+      description: "当前节点的修改尚未保存，切换后将丢失",
+    });
+  }
+  useUnsavedGuard(dirty, confirmDiscard);
 
   /** 保存：diff 只提交变更字段（title/summary/data 一次提交，服务端部分更新 + data 浅合并） */
   async function handleSave() {

@@ -19,7 +19,9 @@
 // 时间点/事件列表预拉（选择器选项 + 当前位置）；拉取失败 → 选择器重试（不阻塞详情主体）
 // - 元信息行不展示「变更记录 N 条」入口：事件不产生 Delta，信息层级仅
 // createdAt/updatedAt
-// - 未保存离开守卫：EntityDetail 无此模式，不做（避免过度设计）
+// - 未保存离开守卫：**已撤销「不做」**。当初的理由（机制不存在、要手搭确认框）已不成立；
+// 事件正文同样是「长表单 + 显式保存」，丢稿代价 > 接线成本。dirty 判定**直接复用保存谓词**
+// （`buildEventDetailPatch(...) !== null`）——不另算一套，两端口径不可能分叉。
 import { useEffect, useState } from "react";
 import { Button, Input, Select } from "antd";
 import { formatTimestamp, MAX_ENTITY_LIST_LIMIT } from "@whispering233/ai-editor-shared";
@@ -60,6 +62,7 @@ import {
 } from "../lib/timeline-detail";
 import { flattenTree } from "../lib/outline-tree";
 import { relationTypeLabel } from "../lib/entity-detail";
+import { useUnsavedGuard } from "../hooks/use-unsaved-guard";
 import { ConfirmDialog } from "../components/outline/dialogs";
 import { TagSuggest } from "../components/timeline/TagSuggest";
 import { navigate } from "../hooks/use-route";
@@ -175,6 +178,23 @@ export default function TimelineDetail({ id }: { id: string }) {
       void useProjectStore.getState().loadOutline();
     }
   }, []);
+
+  /** 未保存判定：**直接复用保存谓词**（`buildEventDetailPatch` 返回 null = 无变更）——
+   * 不另算一套，保存说「没有变更」的时刻守卫也必然认为不脏。 */
+  const dirty =
+    detail !== null &&
+    form !== null &&
+    buildEventDetailPatch({ name: detail.name, data: detail.data }, form) !== null;
+
+  /** 未保存守卫：**叶子自注册**（持有脏表单的组件是唯一注册者，壳不得代注册） */
+  async function confirmDiscard(): Promise<boolean> {
+    if (!dirty) return true;
+    return useUiStore.getState().confirm({
+      title: "放弃未保存的修改？",
+      description: "当前事件的修改尚未保存，离开后将丢失",
+    });
+  }
+  useUnsavedGuard(dirty, confirmDiscard);
 
   /** 保存：buildEventDetailPatch 只提交变更字段（partial 浅合并，与 C3 编辑对话框同语义）；成功后重拉 */
   async function handleSave() {

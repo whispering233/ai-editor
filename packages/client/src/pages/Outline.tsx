@@ -111,7 +111,7 @@ import { tagTintClass } from "../lib/tag-tint";
 import { outlineTagsFromData, previewOutlineTags } from "../lib/outline-tags";
 import { focusNewItem } from "../lib/new-item-focus";
 import { useSaveShortcut } from "../lib/save-shortcut";
-import { useBackGuard } from "../hooks/use-back-guard";
+import { confirmLeave } from "../lib/leave-guard";
 import { navigate } from "../hooks/use-route";
 import { useOutlineLoader } from "../hooks/use-outline-loader";
 import { useDataRefresh } from "../hooks/use-data-refresh";
@@ -197,8 +197,6 @@ export default function Outline({ nodeId }: { nodeId?: string }) {
   // 数据变更信号（AI 提案确认写库 / MainToolbar 刷新按钮）：壳重拉树（rail 隐藏时也得刷）；
   // 详情只重载关系 / 变更记录，不另发 GET（DESIGN.md `outline-page`「数据与刷新」）
   useDataRefresh(() => void reload());
-  // 详情表单未保存状态（rail 切换 / 空白区 / 窄屏返回条 / 新建导航前 confirm）
-  const [detailDirty, setDetailDirty] = useState(false);
   const isDesktop = useMediaQuery("(min-width: 1024px)");
   const {
     layout: railLayout,
@@ -223,18 +221,9 @@ export default function Outline({ nodeId }: { nodeId?: string }) {
     toggleRailCollapse();
   }, [focusTarget, outline, railCollapsed, toggleRailCollapse]);
   const noProject = config === null && !configLoading;
-  // 切节点（含回 `#/outline`）清零 dirty：新节点尚未编辑
-  useEffect(() => setDetailDirty(false), [nodeId]);
-  /** 未保存守卫：true = 可以离开（无修改或用户确认放弃）；取消后留在原处、表单不清 */
-  async function confirmDiscard(): Promise<boolean> {
-    if (!detailDirty) return true;
-    return useUiStore.getState().confirm({
-      title: "放弃未保存的修改？",
-      description: "当前节点的修改尚未保存，切换后将丢失",
-    });
-  }
-  // 浏览器后退也走同一句确认（哨兵历史条目，见 hooks/use-back-guard）
-  useBackGuard(detailDirty, confirmDiscard);
+  /** 未保存守卫：**注册者是详情叶子**（`OutlineDetail` 自注册）；壳的所有离开动作都走同一入口
+   * `confirmLeave`——它派发到那个注册，且与浏览器后退共享同一个在途确认（只弹一个框）。 */
+  const confirmDiscard = confirmLeave;
 
   /** 切换右侧详情收起态：收起前过未保存守卫（dirty 才弹，取消不收起）；展开无守卫 */
   function toggleDetailWithGuard() {
@@ -392,7 +381,6 @@ export default function Outline({ nodeId }: { nodeId?: string }) {
         onReload={reload}
         leading={railCollapsed ? railToggle : undefined}
         headerActions={!railCollapsed ? detailToggle : undefined}
-        onDirtyChange={setDetailDirty}
         onNavigate={async (path) => {
           if (await confirmDiscard()) navigate(path);
         }}

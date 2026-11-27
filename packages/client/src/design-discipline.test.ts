@@ -205,14 +205,12 @@ const ERROR_BANNER_ALLOW = [
   "components/delta/compute-preview.tsx",
 ];
 
-/** 离开闸门的调用点白名单：闸门自身 + 两个薄接线层 + **尚未迁移**的页面壳。
- * 后两项是收口途中的临时豁免（壳改完后必须从本表删掉，否则守卫形同废止）。 */
+/** 离开闸门的调用点白名单：只剩闸门自身 + 两个薄接线层。
+ * 页面级调用点一律经 `useUnsavedGuard`（叶子自注册）——任何新页面想绕开都进不来。 */
 const UNSAVED_GUARD_ALLOW = [
   "hooks/use-unsaved-guard.ts",
   "hooks/use-leave-guard.ts",
   "hooks/use-back-guard.ts",
-  "pages/Outline.tsx",
-  "pages/SettingWorkbench.tsx",
 ];
 
 /** 旧两 hook 的直接调用数（逐行扫描用；命中样例见「守卫规则自检」）。

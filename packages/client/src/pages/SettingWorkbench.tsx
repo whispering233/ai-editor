@@ -27,7 +27,7 @@ import {
 } from "../hooks/use-setting-rail";
 import { useDataRefresh } from "../hooks/use-data-refresh";
 import { navigate } from "../hooks/use-route";
-import { useBackGuard } from "../hooks/use-back-guard";
+import { confirmLeave } from "../lib/leave-guard";
 import { cn } from "../lib/utils";
 import EntityDetail from "./EntityDetail";
 import { useUiStore } from "../stores/ui";
@@ -65,16 +65,10 @@ export default function SettingWorkbench({ id }: { id?: string }) {
   // 左栏已收起时详情列必须留着（两档收起各靠对侧那一栏的按钮，rail 不在时置回可见防空白页）。
   const detailHidden = isDesktop && !railCollapsed && layout.detailCollapsed;
 
-  /** 未保存守卫：true = 可以离开（无修改或用户确认放弃）；取消后留在原处、表单不清 */
-  async function confirmDiscard(): Promise<boolean> {
-    if (!detailDirty) return true;
-    return useUiStore.getState().confirm({
-      title: "放弃未保存的修改？",
-      description: "当前设定的修改尚未保存，切换后将丢失",
-    });
-  }
-  // 浏览器后退也走同一句确认（哨兵历史条目，见 hooks/use-back-guard）
-  useBackGuard(detailDirty, confirmDiscard);
+  /** 未保存守卫：**注册者是详情叶子**（`EntityDetail` 自注册）；壳的所有离开动作都走同一入口
+   * `confirmLeave`——它派发到那个注册，且与浏览器后退共享同一个在途确认。
+   * `detailDirty` 仅用于自身行为（dirty 时不重置表单），**不再交宿主注册守卫**。 */
+  const confirmDiscard = confirmLeave;
 
   /** 选中切换（rail `onSelect`）：同 id 幂等；dirty 先确认。null = 清选中回 `#/setting` */
   function selectNode(next: string | null) {
