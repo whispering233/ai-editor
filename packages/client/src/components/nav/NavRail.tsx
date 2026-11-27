@@ -38,6 +38,7 @@ import { cloudBadgeTone, useCloudStore } from "../../stores/cloud";
 import type { Route } from "../../hooks/use-route";
 import { navigate, useHashRoute } from "../../hooks/use-route";
 import { useTheme } from "../../hooks/use-theme";
+import { useElapsedSeconds, longTaskElapsedLabel } from "../../hooks/use-elapsed-seconds";
 import { SIDEBAR_MIN_WIDTH } from "../../hooks/use-panels";
 import { useProjectStore } from "../../stores/project";
 import { useUiStore } from "../../stores/ui";
@@ -71,6 +72,10 @@ export function NavRail({
   const cloudBusy = useCloudStore((s) => s.busy);
   const syncNow = useCloudStore((s) => s.syncNow);
   const badgeTone = cloudBadgeTone(cloudStatus);
+  // 长任务反馈：左栏只有图标/文字按钮，没有可放正文字的位置 ⇒ 已用时进 `title`
+  // （不新增浮层、不改布局；阀值之前为 null）
+  const backupElapsed = longTaskElapsedLabel(useElapsedSeconds(backingUp));
+  const cloudElapsed = longTaskElapsedLabel(useElapsedSeconds(cloudBusy !== null));
 
   // 「打开项目时那次检查」已上移到 `AppShell`（卡 C）：左栏收起时 NavRail 不挂载，
   // 检查与清空都不能只挂在这里（自动推送会改服务端同步状态，收起左栏时也得能复查）。
@@ -198,6 +203,7 @@ export function NavRail({
           disabled={config === null}
           loading={backingUp}
           onClick={() => void handleBackupNow()}
+          title={backingUp ? `正在备份…${backupElapsed !== null ? " " + backupElapsed : ""}` : "立即备份"}
         >
           <span className="min-w-0 flex-1 truncate text-left">立即备份</span>
         </Button>
@@ -209,7 +215,11 @@ export function NavRail({
           disabled={config === null}
           loading={cloudBusy !== null}
           onClick={() => void syncNow()}
-          title="同步云端（推送 / 拉取）"
+          title={
+            cloudBusy !== null
+              ? `正在同步云端…${cloudElapsed !== null ? " " + cloudElapsed : ""}`
+              : "同步云端（推送 / 拉取）"
+          }
         >
           <span className="min-w-0 flex-1 truncate text-left">同步云端</span>
           {badgeTone !== null && (

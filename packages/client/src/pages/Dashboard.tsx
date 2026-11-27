@@ -78,6 +78,7 @@ import {
 import { useChatStore } from "../stores/chat";
 import { useCloudStore } from "../stores/cloud";
 import { useDataRefresh } from "../hooks/use-data-refresh";
+import { useElapsedSeconds, longTaskElapsedLabel } from "../hooks/use-elapsed-seconds";
 import { useUiStore } from "../stores/ui";
 import { SaveError } from "@/components/ui/save-error";
 
@@ -165,6 +166,8 @@ export default function Dashboard({ mode }: { mode: DashboardMode }) {
   const [importName, setImportName] = useState("");
   const [importError, setImportError] = useState<string | null>(null);
   const [importing, setImporting] = useState(false);
+  // 导入也是单次请求：只能给「在跑 + 跑了多久」（阀值之前不显）
+  const importElapsedHint = longTaskElapsedLabel(useElapsedSeconds(importing));
   const [importConflict, setImportConflict] = useState(false);
   const [importConflictBase, setImportConflictBase] = useState("");
   // 导出清单选类型框（先弹框选「项目压缩文件 / 小说文档 / 纯文本」，不再点一下直接下载）
@@ -1036,6 +1039,12 @@ export default function Dashboard({ mode }: { mode: DashboardMode }) {
                 </p>
               )}
               {importError && <SaveError>{importError}</SaveError>}
+              {importing && (
+                <p className="text-xs text-muted-foreground tabular-nums">
+                  正在导入{importFile !== null ? `《${importFile.name}》` : ""}…
+                  {importElapsedHint !== null ? ` ${importElapsedHint}` : ""}
+                </p>
+              )}
             </form>
             <DialogFooter>
               <Button onClick={closeImportDialog} disabled={importing}>

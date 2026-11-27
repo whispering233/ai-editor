@@ -12,6 +12,7 @@
 // 分层：容器 `ExportBookDialog`（自持选中态）+ 内容体 `ExportBookFormBody`（portal 不能在 SSR
 // 渲染，仓内无 jsdom ⇒ 拆出本层供 `renderToString` 走查，同 `character-create-dialog` 先例）。
 import { useEffect, useState } from "react";
+import { useElapsedSeconds, longTaskElapsedLabel } from "../../hooks/use-elapsed-seconds";
 import { Button, Checkbox, Radio } from "antd";
 import type { NovelTxtLayout, WorkspaceKind } from "@whispering233/ai-editor-shared";
 import {
@@ -84,6 +85,8 @@ export interface ExportBookFormBodyProps {
   onWebnovelChange: (webnovel: boolean) => void;
   /** 导出在途：单选项与 `[取消]` 禁用、`[导出]` loading（防连点） */
   exporting: boolean;
+  /** 已用时文案（容器派生；阀值之前为 null = 不渲染） */
+  elapsedHint?: string | null;
   onExport: () => void;
   onCancel: () => void;
 }
@@ -97,6 +100,7 @@ export function ExportBookFormBody({
   webnovel,
   onWebnovelChange,
   exporting,
+  elapsedHint = null,
   onExport,
   onCancel,
 }: ExportBookFormBodyProps) {
@@ -130,6 +134,11 @@ export function ExportBookFormBody({
         </Checkbox>
       )}
       <DialogFooter>
+        {exporting && (
+          <p className="mr-auto text-xs text-muted-foreground tabular-nums">
+            正在导出《{name}》…{elapsedHint !== null ? ` ${elapsedHint}` : ""}
+          </p>
+        )}
         <Button onClick={onCancel} disabled={exporting}>
           取消
         </Button>
@@ -166,6 +175,8 @@ export function ExportBookDialog({
 }: ExportBookDialogProps) {
   const [kind, setKind] = useState<ExportBookKind>(DEFAULT_EXPORT_BOOK_KIND);
   const [webnovel, setWebnovel] = useState(false);
+  // 长任务反馈：只给「在跑 + 跑了多久」（无服务端进度，不编阶段与百分比）
+  const elapsedHint = longTaskElapsedLabel(useElapsedSeconds(exporting));
 
   // 打开即重置（上次选的类型与排版勾选都不带到下一次）
   useEffect(() => {
@@ -196,6 +207,7 @@ export function ExportBookDialog({
           webnovel={webnovel}
           onWebnovelChange={setWebnovel}
           exporting={exporting}
+          elapsedHint={elapsedHint}
           onExport={() => onExport(kind, kind === "txt" && webnovel ? "webnovel" : "preserve")}
           onCancel={close}
         />
