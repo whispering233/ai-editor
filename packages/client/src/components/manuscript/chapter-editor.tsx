@@ -70,7 +70,8 @@ import {
 } from "../../lib/document-io";
 import { findNode, numberOutline } from "../../lib/outline-tree";
 import { useSaveShortcut } from "../../lib/save-shortcut";
-import { errorBannerClass, skeletonClass } from "../../lib/styles";
+import { skeletonClass } from "../../lib/styles";
+import { ErrorBanner } from "@/components/ui/error-banner";
 import { canRequestChapterSummary, CHAPTER_SUMMARY_MESSAGE } from "../../lib/writing-summary";
 import { navigate } from "../../hooks/use-route";
 import { useChatStore } from "../../stores/chat";
@@ -573,12 +574,11 @@ export function ChapterEditor({
 
       {/* 保存失败（可见、不静默）：错误条 + 重试（重发失败内容） */}
       {saveError !== null && (
-        <div className={cn(errorBannerClass, "mb-3 flex items-center gap-3")}>
-          <span className="min-w-0 flex-1">{saveError}</span>
-          <Button size="small" onClick={() => void saveContent(latestRef.current ?? "")}>
-            重试
-          </Button>
-        </div>
+        <ErrorBanner
+          className="mb-3"
+          message={saveError}
+          onRetry={() => void saveContent(latestRef.current ?? "")}
+        />
       )}
 
       {/* 内层滚动容器：编辑器与大纲兜底提示都在里面（页头与错误条之上已留在外层，不随内容滚动） */}

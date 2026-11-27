@@ -114,7 +114,7 @@
 
 **判据**：
 
-- `grep -rn 'errorBannerClass' packages/client/src` 零命中。
+- `grep -rn 'errorBannerClass' packages/client/src` 零**代码**命中（唯一命中是 `error-banner.tsx` 文件头注释，说明它为什么被收口——注释不算消费者）。
 - `grep -rn 'border-destructive/30 bg-destructive/10' packages/client/src` **只允许** `components/ui/error-banner.tsx`。**明确豁免的三处**（形态与语义都不同，在 `DESIGN.md` 已点名排除）：`feedback/ErrorBoundary.tsx`（整页崩溃兜底）、`feedback/FeedbackHost.tsx`（全局 `fixed` 错误横幅）、`delta/compute-preview.tsx`（带图标与条目列表的「状态冲突」警示块）。
 - 4 条 SSR 断言全绿。
 - **浏览器像素核对**（必做，测试替代不了）：① 一个内联态（写作页保存失败或 rail 刷新失败）；② 一个 `stack` 态（人物 rail 整栏错误 / 参考资料整页错误）；③ 全局确认框里的错误行（`ConfirmDialog` 的 onConfirm 失败态）未被波及。

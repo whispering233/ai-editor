@@ -62,7 +62,8 @@ import OutlineDetail from "./OutlineDetail";
 import { RowContextMenu } from "@/components/entity/row-context-menu";
 import { ContextMenuItem } from "@/components/ui/context-menu";
 import { EmptyState } from "@/components/ui/empty-state";
-import { errorBannerClass, skeletonClass } from "@/lib/styles";
+import { skeletonClass } from "@/lib/styles";
+import { ErrorBanner } from "@/components/ui/error-banner";
 import {
   ApiError,
   createOutlineNode,
@@ -318,12 +319,11 @@ export default function Outline({ nodeId }: { nodeId?: string }) {
           {outlineError === null ? (
             detailSkeleton
           ) : (
-            <div className={cn(errorBannerClass, "flex shrink-0 items-center gap-3")}>
-              <span className="min-w-0 flex-1">大纲加载失败，详情暂不可用</span>
-              <Button size="small" onClick={retryOutline}>
-                重试
-              </Button>
-            </div>
+            <ErrorBanner
+              className="shrink-0"
+              message="大纲加载失败，详情暂不可用"
+              onRetry={retryOutline}
+            />
           )}
         </div>
       </section>
@@ -1523,7 +1523,7 @@ function OutlineRail({
         }}
       >
         {/* 页级错误横幅（destructive token 类） */}
-        {error && <div className={cn(errorBannerClass, "mb-2")}>{error}</div>}
+        {error && <ErrorBanner className="mb-2" message={error} />}
 
         {noProject ? (
         /* 未打开项目：引导回首页（侧栏无项目可点的现状接受项，S1.6 文档已说明） */

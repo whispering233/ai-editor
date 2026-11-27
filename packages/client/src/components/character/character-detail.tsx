@@ -27,6 +27,7 @@ import { PanelTree } from "./panel-tree";
 import { CharacterRelations } from "./character-relations";
 import { partitionCharacterRelations } from "../../lib/character-relations";
 import { EmptyState } from "../ui/empty-state";
+import { ErrorBanner } from "../ui/error-banner";
 import { PageHeader } from "../ui/page-header";
 import { SectionCard } from "../ui/section-card";
 import { TagsEditor } from "../ui/tags-editor";
@@ -574,9 +575,7 @@ function CharacterCurrentTab({
       )}
 
       {error !== null && (
-        <div className="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
-          {error}
-        </div>
+        <ErrorBanner message={error} />
       )}
 
       {computing && result === null && (

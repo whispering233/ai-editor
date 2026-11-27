@@ -35,7 +35,8 @@ import { navigate } from "../hooks/use-route";
 import { useSaveShortcut } from "../lib/save-shortcut";
 import { useUiStore } from "../stores/ui";
 import { cn } from "../lib/utils";
-import { errorBannerClass, skeletonClass } from "../lib/styles";
+import { skeletonClass } from "../lib/styles";
+import { ErrorBanner } from "@/components/ui/error-banner";
 import { Button, Dropdown, Input } from "antd";
 import { SaveStatus, type SaveState } from "../components/ui/save-status";
 import { PageTitle } from "../components/ui/page-title";
@@ -380,7 +381,7 @@ export default function ReferenceDetail({ id, draft = false }: { id?: string; dr
   if (!draft && error !== null) {
     return (
       <div className="flex h-full flex-col items-center justify-center gap-3">
-        <p className={cn(errorBannerClass)}>{error}</p>
+        <ErrorBanner message={error} />
         <Button onClick={() => setReloadTick((t) => t + 1)}>重试</Button>
         <Button onClick={() => navigate("#/references")}>返回列表</Button>
       </div>
@@ -519,12 +520,7 @@ export default function ReferenceDetail({ id, draft = false }: { id?: string; dr
 
       {/* 正文保存失败（可见、不静默）：错误条 + 重试（重发失败时的那份内容/动作） */}
       {saveError !== null && (
-        <div className={cn(errorBannerClass, "mb-3 flex items-center gap-3")}>
-          <span className="min-w-0 flex-1">{saveError}</span>
-          <Button size="small" onClick={() => retryRef.current?.()}>
-            重试
-          </Button>
-        </div>
+        <ErrorBanner className="mb-3" message={saveError} onRetry={() => retryRef.current?.()} />
       )}
 
       {/* 表单区（编辑态 = 详情页即编辑器；分类/标签/URL + 正文块编辑器）。

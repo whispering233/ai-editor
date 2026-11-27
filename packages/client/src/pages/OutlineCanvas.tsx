@@ -46,7 +46,7 @@ import {
   type NodeTypes,
   type Viewport,
 } from "@xyflow/react";
-import { Button, ConfigProvider } from "antd";
+import { ConfigProvider } from "antd";
 import { EmptyState } from "../components/ui/empty-state";
 import { ChapterCard, type ChapterCardNode } from "../components/outline-canvas/ChapterCard";
 import { CanvasFilterControl } from "../components/outline-canvas/CanvasFilterControl";
@@ -96,7 +96,8 @@ import {
   PLOT_EDGE_DIM_OPACITY,
   PLOT_EDGE_RELATION_TYPE,
 } from "../lib/outline-canvas-edges";
-import { errorBannerClass, skeletonClass } from "../lib/styles";
+import { skeletonClass } from "../lib/styles";
+import { ErrorBanner } from "@/components/ui/error-banner";
 import { cn } from "../lib/utils";
 import { useProjectStore } from "../stores/project";
 import { useUiStore } from "../stores/ui";
@@ -379,12 +380,11 @@ function CanvasFlow({ projectId, cards, marks, readingId, deductionIds }: Canvas
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       {plotEdgesError && (
-        <div className={cn(errorBannerClass, "m-3 mb-0 flex items-center gap-3")}>
-          <span className="min-w-0 flex-1">连线加载失败，画布上的连线可能不完整</span>
-          <Button size="small" onClick={() => void loadPlotEdges()}>
-            重试
-          </Button>
-        </div>
+        <ErrorBanner
+          className="m-3 mb-0"
+          message="连线加载失败，画布上的连线可能不完整"
+          onRetry={() => void loadPlotEdges()}
+        />
       )}
       <div className={cn("relative min-h-0 flex-1", LOD_CLASS[lod])}>
         <ReactFlow
@@ -543,12 +543,7 @@ export default function OutlineCanvas() {
             ))}
           </div>
         ) : (
-          <div className={cn(errorBannerClass, "flex items-center gap-3")}>
-            <span className="min-w-0 flex-1">大纲加载失败，画布暂不可用</span>
-            <Button size="small" onClick={retryOutline}>
-              重试
-            </Button>
-          </div>
+          <ErrorBanner message="大纲加载失败，画布暂不可用" onRetry={retryOutline} />
         )}
       </div>
     );

@@ -30,7 +30,8 @@ import {
   type ExpectedHookItem,
   type WrittenUnresolvedHookItem,
 } from "../lib/api";
-import { errorBannerClass, skeletonClass } from "../lib/styles";
+import { skeletonClass } from "../lib/styles";
+import { ErrorBanner } from "@/components/ui/error-banner";
 import { cn } from "../lib/utils";
 import { shouldRefreshProgress, writingProgressMeta } from "../lib/writing-progress";
 import {
@@ -248,12 +249,7 @@ export default function Writing({ chapterId }: { chapterId?: string }) {
   // 卷章导航栏收起 / 展开入口：左栏收起时在正文列页头标题行最左（`PanelHeader` `leading`）。
   // 两栏都开时它在 rail 页头（见上）；同一页只渲染一枚左钮。
   const outlineFailureBanner = (
-    <div className={cn(errorBannerClass, "flex shrink-0 items-center gap-3")}>
-      <span className="min-w-0 flex-1">大纲加载失败，章节目录暂不可用</span>
-      <Button size="small" onClick={retry}>
-        重试
-      </Button>
-    </div>
+    <ErrorBanner className="shrink-0" message="大纲加载失败，章节目录暂不可用" onRetry={retry} />
   );
 
   let bodyContent: ReactNode = null;
@@ -302,10 +298,10 @@ export default function Writing({ chapterId }: { chapterId?: string }) {
             className="mb-4 -mx-6"
             insetClassName="px-6"
           />
-          <div className={cn(errorBannerClass, "flex items-center gap-3")}>
-            <span className="min-w-0 flex-1">章节不存在或已删除</span>
-            <Button href="#/writing">返回章节目录</Button>
-          </div>
+          <ErrorBanner
+            message="章节不存在或已删除"
+            actions={<Button href="#/writing">返回章节目录</Button>}
+          />
         </section>
       );
     } else {

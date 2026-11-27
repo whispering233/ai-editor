@@ -4,9 +4,10 @@
 // 选中 = {colors.surface-muted} 灰面（`bg-accent` = antd colorFillTertiary，与 menu-item-selected 同语言）+ 文字不变色。
 // 纯展示组件（数据/请求由页面持有）——便于用 react-dom/server 直渲染富数据走查（仓内无 jsdom）。
 import type { ReactNode } from "react";
-import { Button, Input, Select } from "antd";
+import { Input, Select } from "antd";
 import { SearchOutlined } from "@ant-design/icons";
-import { errorBannerClass, skeletonClass } from "@/lib/styles";
+import { skeletonClass } from "@/lib/styles";
+import { ErrorBanner } from "@/components/ui/error-banner";
 import { cn } from "../../lib/utils";
 import { RAIL_SORT_OPTIONS, type CharacterRailItem } from "../../lib/character-workbench";
 
@@ -85,14 +86,7 @@ export function CharacterRail({
 
       {/* 列表区（独立滚动） */}
       <div className="min-h-0 flex-1 overflow-y-auto p-2">
-        {error !== null && (
-          <div className="space-y-2">
-            <p className={errorBannerClass}>{error}</p>
-            <Button block onClick={onRetry}>
-              重试
-            </Button>
-          </div>
-        )}
+        {error !== null && <ErrorBanner layout="stack" message={error} onRetry={onRetry} />}
 
         {error === null && loading && items.length === 0 && (
           <div className="space-y-1.5">

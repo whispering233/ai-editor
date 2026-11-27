@@ -42,8 +42,7 @@ import {
 } from "../lib/practice";
 import { formatTextLength } from "../lib/manuscript";
 import { useSaveShortcut } from "../lib/save-shortcut";
-import { errorBannerClass } from "../lib/styles";
-import { cn } from "../lib/utils";
+import { ErrorBanner } from "@/components/ui/error-banner";
 import { PageHeader } from "@/components/ui/page-header";
 import { SaveStatus, type SaveState } from "@/components/ui/save-status";
 import { SectionCard } from "@/components/ui/section-card";
@@ -223,12 +222,7 @@ export function PracticeSampleSections({
         {/* 上限提示：数字由常量插值（数值单源，禁复述） */}
         <p className="mt-1 text-xs text-muted-foreground">最多 {MAX_PRACTICE_DRAFT_CHARS} 字</p>
         {saveError !== null && (
-          <div className={cn(errorBannerClass, "mt-2 flex items-center gap-3")}>
-            <span className="min-w-0 flex-1">{saveError}</span>
-            <Button size="small" onClick={onSave}>
-              重试
-            </Button>
-          </div>
+          <ErrorBanner className="mt-2" message={saveError} onRetry={onSave} />
         )}
       </SectionCard>
 

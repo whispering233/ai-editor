@@ -17,6 +17,7 @@ import { Alert, Button, Skeleton, Typography } from "antd";
 import { PageHeader } from "@/components/ui/page-header";
 import { TypeChip, type TypeChipProps } from "@/components/ui/tag-chip";
 import { EmptyState } from "@/components/ui/empty-state";
+import { ErrorBanner } from "@/components/ui/error-banner";
 import { DeleteOutlined, RedoOutlined, ReloadOutlined } from "@ant-design/icons";
 import { ConfirmDialog } from "../components/outline/dialogs";
 import {
@@ -352,14 +353,19 @@ export default function Trash() {
                     </div>
                     {/* 409 祖先冲突：行内提示 + 还原祖先快捷按钮（还原成功自动重试当前节点） */}
                     {ancestorConflict?.node.id === node.id && (
-                      <div className="mt-2 flex flex-wrap items-center gap-2 rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm">
-                        <Typography.Text type="danger">
-                          上级节点《{ancestorConflict.ancestorName}》也在回收站，请先还原上级
-                        </Typography.Text>
-                        <Button size="small" danger onClick={() => void handleRestoreAncestor()}>
-                          还原上级《{ancestorConflict.ancestorName}》
-                        </Button>
-                      </div>
+                      <ErrorBanner
+                        className="mt-2 flex-wrap"
+                        message={
+                          <Typography.Text type="danger">
+                            上级节点《{ancestorConflict.ancestorName}》也在回收站，请先还原上级
+                          </Typography.Text>
+                        }
+                        actions={
+                          <Button size="small" danger onClick={() => void handleRestoreAncestor()}>
+                            还原上级《{ancestorConflict.ancestorName}》
+                          </Button>
+                        }
+                      />
                     )}
                   </li>
                 ))}

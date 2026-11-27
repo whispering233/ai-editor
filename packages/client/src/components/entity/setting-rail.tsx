@@ -45,7 +45,8 @@ import { DropIndicator } from "@/components/ui/drop-indicator";
 import { EmptyState } from "@/components/ui/empty-state";
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import { useSettingDescVisible } from "@/hooks/use-setting-desc";
-import { errorBannerClass, skeletonClass } from "@/lib/styles";
+import { skeletonClass } from "@/lib/styles";
+import { ErrorBanner } from "@/components/ui/error-banner";
 import {
   ApiError,
   createEntity,
@@ -977,12 +978,11 @@ export function SettingRail({
       <>
         {/* 重拉失败但保留旧树：顶部错误横幅（可重试） */}
         {failed && (
-          <div className={cn(errorBannerClass, "mb-2 flex items-center gap-2")}>
-            设定刷新失败，当前显示的是上次数据
-            <Button size="small" className="ml-auto" onClick={() => setTick((t) => t + 1)}>
-              重试
-            </Button>
-          </div>
+          <ErrorBanner
+            className="mb-2"
+            message="设定刷新失败，当前显示的是上次数据"
+            onRetry={() => setTick((t) => t + 1)}
+          />
         )}
 
         {/* root 级就地新建输入行（header「+ 新建」触发；无父设定） */}

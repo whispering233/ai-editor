@@ -30,7 +30,8 @@ import { MAX_ENTITY_LIST_LIMIT } from "@whispering233/ai-editor-shared";
 import type { EntitySummary } from "@whispering233/ai-editor-shared";
 import { PageHeader } from "@/components/ui/page-header";
 import { EmptyState } from "@/components/ui/empty-state";
-import { errorBannerClass, skeletonClass } from "@/lib/styles";
+import { skeletonClass } from "@/lib/styles";
+import { ErrorBanner } from "@/components/ui/error-banner";
 import {
   Dialog,
   DialogContent,
@@ -557,14 +558,15 @@ export default function Timeline() {
       <div className="min-h-0 flex-1 overflow-y-auto">
         {/* 错误横幅（时间点/事件列表请求失败 → 重试全部） */}
         {error !== null && (
-          <div className={cn(errorBannerClass, "mb-3 flex items-center gap-2")}>
-            {error === CLIENT_NETWORK_ERROR
-              ? "无法连接服务，请确认 ai-editor 服务已启动。"
-              : "时间轴加载失败，请重试。"}
-            <Button size="small" className="ml-auto" onClick={() => setReloadTick((t) => t + 1)}>
-              重试
-            </Button>
-          </div>
+          <ErrorBanner
+            className="mb-3"
+            message={
+              error === CLIENT_NETWORK_ERROR
+                ? "无法连接服务，请确认 ai-editor 服务已启动。"
+                : "时间轴加载失败，请重试。"
+            }
+            onRetry={() => setReloadTick((t) => t + 1)}
+          />
         )}
 
         {/* 加载骨架（行级 animate-pulse bg-muted，状态） */}

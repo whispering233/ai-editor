@@ -84,6 +84,7 @@
 
 ### 前端
 
+- **错误条单源 = `components/ui/error-banner.tsx`**（`row` / `stack` 两布局；`onRetry` 缺省时不渲染按钮，非重试动作走 `actions`；**外边距一律由调用点 `className` 传**）。`lib/styles.ts` 的 `errorBannerClass` 已随收口删除，不得再起第二份手写错误条；`ErrorBoundary` 整页兜底 / `FeedbackHost` 全局横额 / `compute-preview` 的「状态冲突」警示块不属本控件。
 - **保存态文案单源 = `components/ui/save-status.tsx`**（`编辑中… / 保存中… / 已保存 · HH:MM` 四态；输入即 pending）：章正文 / 参考资料 / 练习 / 自由练习四处只传状态与时刻，不各写一份 span。手动保存（按钮 / `Ctrl/Cmd+S`）成功 `showToast("已保存", "success", "save")`，自动保存**不弹**；存档三条提示用**同一个 `key: "save"`** 升级同一条（`stores/ui.ts` 的第三参 → `message.open`），否则一次快捷键会叠两条。
 - **每日目标与连续天数**：口径单源 = `client/src/lib/writing-goal.ts`（严格连续 / 写作日集合 / **今天未达标不算断签** / 空集合按全勾），组件不得另写一遍；目标与写作日是**本机偏好**（`ai-editor:writing-goal:{projectId}`，按书隔离，不进备份 / 云端 / 项目文件），**不新增表与端点**。`GET /writing-stats` 在写作页是第二个消费点，**只允许两个触发点**（进页 + 保存后节流，窗口 = `WRITING_PROGRESS_REFRESH_MS`，基准必须是「保存触发的刷新时刻」——拿进页那次请求当基准会把进页后的保存全吞掉）；达成反馈只做内联（数字主色 + `✓`），不弹 toast / 不发系统通知。
 - **本机配置文件表单写入只有一条路** = `PUT /settings/config-file/:name`（表单只负责拼文本，不自建写入 / 不新增 typed 端点）；jsonc 解析与注释计数单源 = shared `utils/jsonc.ts`（与 pi 读口径同语义，`"disabled"` 等 pi 合法但表单不表达的写法一律判解析失败并指路 JSON，不静默改写）。

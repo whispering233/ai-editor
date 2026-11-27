@@ -31,7 +31,8 @@ import { Button, Input, Select } from "antd";
 import { TypeChip } from "@/components/ui/tag-chip";
 import { PageHeader } from "@/components/ui/page-header";
 import { EmptyState } from "@/components/ui/empty-state";
-import { errorBannerClass, skeletonClass } from "@/lib/styles";
+import { skeletonClass } from "@/lib/styles";
+import { ErrorBanner } from "@/components/ui/error-banner";
 import { SuggestionDatalist } from "@/components/ui/suggestion-datalist";
 import {
   Dialog,
@@ -478,14 +479,15 @@ export default function HookPanel() {
 
       {/* 错误横幅（列表请求失败 → 重试） */}
       {error !== null && (
-        <div className={cn(errorBannerClass, "mb-3 flex items-center gap-2")}>
-          {error === CLIENT_NETWORK_ERROR
-            ? "无法连接服务，请确认 ai-editor 服务已启动。"
-            : "伏笔池加载失败，请重试。"}
-          <Button size="small" className="ml-auto" onClick={() => setReloadTick((t) => t + 1)}>
-            重试
-          </Button>
-        </div>
+        <ErrorBanner
+          className="mb-3"
+          message={
+            error === CLIENT_NETWORK_ERROR
+              ? "无法连接服务，请确认 ai-editor 服务已启动。"
+              : "伏笔池加载失败，请重试。"
+          }
+          onRetry={() => setReloadTick((t) => t + 1)}
+        />
       )}
 
       {/* 加载骨架（分组骨架—— 状态） */}

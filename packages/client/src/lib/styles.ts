@@ -9,9 +9,5 @@
  * - 只允许 token 类（bg-card / text-muted-foreground 等），禁止硬编码色类（zinc/white 等）
  */
 
-/** 错误横幅容器（bg-destructive/10 border-destructive/30 text-destructive）；间距/布局（mb-3 / flex 等）由调用点追加 */
-export const errorBannerClass =
-  "rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive";
-
 /** 骨架占位（区块级 animate-pulse bg-muted）；⚠ radius 可覆盖——rounded-lg / rounded-md 排序在 rounded 之后 */
 export const skeletonClass = "animate-pulse rounded bg-muted";

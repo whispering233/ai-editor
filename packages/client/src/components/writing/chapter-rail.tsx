@@ -10,13 +10,13 @@
 // 行几何与大纲树同密度：32px 行高、24px 折叠箭头盒、编号徽标 `min-w-14`（对齐口径见 DESIGN.md
 // §大纲页「缩进列对齐」）；章行是 `<a href="#/writing/:id">`，点击直接进正文，不渲染「写正文」按钮。
 import { Fragment, useEffect, useRef, type ReactNode } from "react";
-import { Button } from "antd";
 import { RightOutlined } from "@ant-design/icons";
 import type { ExpectedHookItem, WrittenUnresolvedHookItem } from "../../lib/api";
 import { entityDetailPath } from "../../lib/entity-paths";
 import { HOOK_STATUS_LABEL } from "../../lib/entity-list";
 import { formatTextLength } from "../../lib/manuscript";
-import { errorBannerClass, skeletonClass } from "../../lib/styles";
+import { skeletonClass } from "../../lib/styles";
+import { ErrorBanner } from "@/components/ui/error-banner";
 import { cn } from "../../lib/utils";
 import type { WritingRailRow } from "../../lib/writing";
 import { PanelHeader } from "../ui/panel-header";
@@ -121,14 +121,7 @@ export function ChapterRail({
       {/* 行区：独立纵向滚动；p-2 = 8px */}
       <div className="min-h-0 flex-1 overflow-y-auto p-2">
         {error !== null ? (
-          <div className="space-y-2">
-            <p className={errorBannerClass}>{error}</p>
-            {onRetry !== undefined && (
-              <Button block size="small" onClick={onRetry}>
-                重试
-              </Button>
-            )}
-          </div>
+          <ErrorBanner layout="stack" message={error} onRetry={onRetry} />
         ) : loading ? (
           <div className="space-y-1.5">
             {[0, 1, 2, 3, 4, 5].map((i) => (
