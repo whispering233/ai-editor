@@ -2,23 +2,7 @@
 
 只放当前 / 进行中的任务卡，完成后清卡（历史见 `CHANGELOG.md`）；未排期项进 `backlog.md`；执行纪律见 `AGENTS.md`「协作流程」。
 
-当前批次：**A 组 · UI/UX 交互修复**（契约已进 `docs/ui/DESIGN.md` / `docs/api/80-api-chat.md`）。顺序 A3 → A2 → A4（A1 已交付），一卡一 commit，串行单写者（本机 worktree 无 `node_modules`，不并行）。
-
----
-
-## 卡 A3 · 大纲页错误条生命周期
-
-**为什么**：`pages/Outline.tsx` 是全仓唯一 `setError(null)` 计数为 0 的错误态文件（其余 20 个都在成功路径回清）⇒ 一次网络抖动后 rail 顶红条常驻到离开页面。
-
-#### 改动面
-- `pages/Outline.tsx`：5 个写操作（`:780` / `:785` / `:850` / `:983` / `:1027` 所在 try）在 `try` 开头 `setError(null)`、失败再 set。
-- `:1083` 的 `OUTLINE_NODE_NOT_FOUND` 分支改走 `showToast(..., "error")`（终态错误：无重试、错误条无关闭钮，挂横幅只会污染下一次操作），仍 `afterTreeChanged()`。
-
-**完成判据（硬）**：本卡新 commit + `git status` 干净 + `pnpm --filter @whispering233/ai-editor-client test` 绿。
-
-**验证**：现有 outline 用例绿；浏览器：制造一次 500 → 红条出现 → 再保存成功 → 红条消失；删除一个已被并发删掉的节点 → 得到 toast（不是常驻横幅）。
-
-**风险 / 边界**：清点必须在每个写操作的 `try` 开头，**不要**放进 `afterTreeChanged()`（它也是 NOT_FOUND 分支的重拉入口，会吞提示）。`outlineError`（树加载失败，store 状态，自带重试）不是同一条，不动。
+当前批次：**A 组 · UI/UX 交互修复**（契约已进 `docs/ui/DESIGN.md` / `docs/api/80-api-chat.md`）。顺序 A2 → A4（A1 / A3 已交付），一卡一 commit，串行单写者（本机 worktree 无 `node_modules`，不并行）。
 
 ---
 
