@@ -555,7 +555,7 @@ components:
 - **`showCloseButton` 保留**（无调用点显式传值，但关闭钮必须继续自绘、且 §设置页「AI 模型」引用该行为）；`DialogOverlay` / `DialogPortal` / `DialogTrigger` / `DialogClose` 四个导出删除（换芯前已无外部使用者，但 Content 内部仍在用 Overlay/Close 的等价物，不得连内部实现一起删）。body 滚动锁交回 antd（`scrollLock`），自绘那套删掉以免两套锁互盖。
 - 全局确认框（`ui.confirm()` → `FeedbackHost` → `outline/dialogs.tsx` 的 `ConfirmDialog`）**也走本组件** ⇒ 换芯会连带改变它的外观，核像素时必须包含它。
 
-**`error-banner`（页内 / 栏内错误条，收口）** — **唯一实现 = `components/ui/error-banner.tsx`**。此前的形态是「常量只给壳子、几何由 12 个文件各自拼」：`gap-2` 与 `gap-3` 并存、消息 `ml-auto` 与按钮 `min-w-0 flex-1` 两种布局、按钮位置两种对齐。
+**`error-banner`（页内 / 栏内错误条，收口）** — **唯一实现 = `components/ui/error-banner.tsx`**。此前的形态是「常量只给壳子、几何由 14 个文件 18 处各自拼」：`gap-2` 与 `gap-3` 并存、消息 `ml-auto` 与按钮 `min-w-0 flex-1` 两种布局、按钮位置两种对齐。
 
 - 两种布局：`row`（默认，一行说明 + 右端 24px 按钮——内联保存失败，以及 `ReferenceDetail` 那种整页错误态）与 `stack`（说明 + 垂直排列的 `block` 按钮——两个 rail 的列表刷新失败：人物 rail、写作页卷章栏）。
 - **外边距不进组件**：`mb-*` / `mt-*` / `m-*` 由调用点 `className` 传（同 `lib/styles.ts` 已定的「易变属性由调用点决定」——常量一旦含间距类，调用点无法用排序更早的类覆盖）。

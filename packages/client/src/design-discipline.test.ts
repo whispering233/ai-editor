@@ -11,8 +11,9 @@
 // 4. ad-hoc-font-size   字号只有四档（20/16/14/12），手写 px/rem 字号禁
 // 5. primary-bg-token   `colorPrimaryBg` 一类「主色浅底」在深墨 seed 下派生成中灰，禁作底色
 // 6. dropdown-menu-selectable  调用点不得另起一套下拉选中态（`selectable` 命中）
-// 另 5 条独立守卫（不在 `RULES` 表内，写法各异）：antd-root-override / cssvar-scope /
-// no-dynamic-class / button-variant-color / danger-color-variant。
+// 另 8 条独立守卫（不在 `RULES` 表内，写法各异）：antd-root-override / cssvar-scope /
+// no-dynamic-class / button-variant-color / danger-color-variant / dead-token /
+// error-banner-shell / dialog-width-prop。
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join, relative, sep } from "node:path";
 import { fileURLToPath } from "node:url";

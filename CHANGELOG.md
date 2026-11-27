@@ -9,6 +9,22 @@
 
 ## [Unreleased]
 
+### Added
+
+- **三条源码守卫**：`dead-token`（`index.css` 里声明了却没人消费的样式变量直接失败）、`error-banner-shell`（禁止第二份手写错误条）、`dialog-width-prop`（`DialogContent` 不得用 `max-w-*`——antd 的无层样式会把它压掉）。
+
+### Changed
+
+- **受控弹窗换芯 antd `Modal`**：焦点陷阱与「`Esc` 只关最顶层」改由 antd 提供（此前 `Tab` 会跑到弹窗背后的页面，详情抽屉 + 确认框叠层时按一次 `Esc` 会把两层一起关掉）；关闭后焦点回到打开它的控件（antd 的 `focusTriggerAfterClose` 在本仓取不到触发器，改由 `components/ui/dialog.tsx` 自己记录）。外观、调用点 API 与四条关闭路径（右上角 / `Esc` / 遮罩 / 取消）不变；**弹窗宽度改走 `DialogContent` 的 `width` 档位**（`sm` 384 / `md` 448 / `lg` 512 / `xl` 576 / `2xl` 672）。
+- **错误条收口**：页内 / 栏内的「错误说明 + 重试 / 动作」统一走 `components/ui/error-banner.tsx`（`row` / `stack` 两布局，外边距仍由调用点给），不再各页自拼几何。人物 rail 与写作页卷章栏的重试按钮随之从 32px 移到条内并降为 24px。
+- **骨架占位收口**：手写的 `animate-pulse rounded bg-muted` 统一改用 `lib/styles.ts` 的 `skeletonClass`。
+
+### Removed
+
+- **12 个无消费者的样式变量**：`index.css` 里 shadcn 模板残留的 `--sidebar-*` / `--secondary*` / `--card-foreground` 及其 `:root` 映射（左栏本就用 `bg-background` + `border-border`），构建产物 CSS 少约 0.5 KB。
+- **弹窗四个零使用的导出**：`DialogOverlay` / `DialogPortal` / `DialogTrigger` / `DialogClose`（换芯后遮罩由 antd `mask` 负责，关闭钮在 `DialogContent` 内部自绘）。
+- `lib/styles.ts` 的 `errorBannerClass`（唯一消费者已变成 `ErrorBanner` 组件）。
+
 ## [v0.0.73] - 2026-11-26
 
 ### Added

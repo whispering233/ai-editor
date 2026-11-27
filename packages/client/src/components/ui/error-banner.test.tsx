@@ -1,5 +1,5 @@
 // 错误条唯一实现（DESIGN.md §Components `error-banner`）的渲染契约。
-// 收口前 12 个文件各自拼几何：「有没有重试按钮」「按钮在消息前还是后」「gap 是 2 还是 3」逐页不同。
+// 收口前 14 个文件 18 处各自拼几何：「有没有重试按钮」「按钮在消息前还是后」「gap 是 2 还是 3」逐页不同。
 // 本文件锁四条：按钮存在性、按钮位于消息之后、actions 插槽、stack 的 block 按钮。
 import { describe, expect, it } from "vitest";
 import { renderToString } from "react-dom/server";

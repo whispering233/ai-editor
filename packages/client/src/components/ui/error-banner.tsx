@@ -1,6 +1,6 @@
 // 错误条唯一实现（DESIGN.md §Components `error-banner`）。
 //
-// 为什么收口：此前 `lib/styles.ts` 的 `errorBannerClass` 只给壳子，几何由 12 个文件各自拼——
+// 为什么收口：此前 `lib/styles.ts` 的 `errorBannerClass` 只给壳子，几何由 14 个文件 18 处各自拼——
 // `gap-2` 与 `gap-3` 并存、消息 `ml-auto` 与按钮 `min-w-0 flex-1` 两种布局、重试按钮位置两种对齐。
 // 壳类串只在这里出现一次；页面 / 栏内错误条一律走本组件。
 //
@@ -26,7 +26,6 @@ const SHELL =
 export interface ErrorBannerProps {
   message: ReactNode;
   onRetry?: () => void;
-  retryLabel?: string;
   /** 额外动作（非重试语义的按钮），尺寸由调用点给 */
   actions?: ReactNode;
   layout?: "row" | "stack";
@@ -37,7 +36,6 @@ export interface ErrorBannerProps {
 export function ErrorBanner({
   message,
   onRetry,
-  retryLabel = "重试",
   actions,
   layout = "row",
   className,
@@ -50,7 +48,7 @@ export function ErrorBanner({
           <div className="flex flex-col gap-2">
             {onRetry !== undefined && (
               <Button size="small" block onClick={onRetry}>
-                {retryLabel}
+                重试
               </Button>
             )}
             {actions}
@@ -64,7 +62,7 @@ export function ErrorBanner({
       <span className="min-w-0 flex-1">{message}</span>
       {onRetry !== undefined && (
         <Button size="small" onClick={onRetry}>
-          {retryLabel}
+          重试
         </Button>
       )}
       {actions}
