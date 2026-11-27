@@ -8,6 +8,7 @@ import { useState } from "react";
 import { Button } from "antd";
 import type { OutlineNodeType } from "../../lib/api";
 import { ApiError } from "../../lib/api";
+import { canCloseConfirm } from "../../lib/confirm-dialog";
 import {
   Dialog,
   DialogContent,
@@ -62,7 +63,13 @@ export function ConfirmDialog({
   }
 
   return (
-    <Dialog open onOpenChange={(v) => !v && onClose()}>
+    <Dialog
+      open
+      // 在途不可关：Esc / 遮罩 / 关闭钮都不生效（判定单源 = lib/confirm-dialog 的 canCloseConfirm）
+      onOpenChange={(v) => {
+        if (canCloseConfirm(submitting, v)) onClose();
+      }}
+    >
       <DialogContent width="md">
         <DialogHeader>
           <DialogTitle>{title}</DialogTitle>
