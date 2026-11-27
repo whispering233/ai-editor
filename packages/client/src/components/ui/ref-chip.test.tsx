@@ -32,12 +32,14 @@ describe("RefChip · 元素语义", () => {
 });
 
 describe("RefChip · 几何与语义色", () => {
-  it("壳串走 4px 小内衬档（不是按钮的 6px）+ hairline 描边", () => {
+  it("壳串走 4px 小内衬档（不是按钮的 6px）+ hairline 描边，且为行内盒（不撑满整行）", () => {
     const html = renderToString(<RefChip onClick={() => {}}>x</RefChip>);
     expect(html).toContain("rounded-sm");
     expect(html).toContain("border-border");
     // 4px 档由 index.css 的 --radius-sm 承担；这里只钉类名，钉像素值会与 token 漂移
     expect(html).not.toContain("rounded-md");
+    // `inline-flex`：块级 `flex` 会把「依赖: …」这类文字 chip 撑成整行宽的描边条
+    expect(html).toContain("inline-flex");
   });
 
   it("三档语义色（缺省墨字 / muted hover 转墨 / primary）", () => {

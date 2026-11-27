@@ -6,69 +6,8 @@
 
 ## 并行 / 串行判定
 
-- **三张卡全部串行**（在 main 单写者执行，不开 worktree——本机 worktree 无 `node_modules` / `dist`，`pnpm -r exec` 会拒跑）。
-- 依据：`pages/EntityDetail.tsx` 与 `pages/TimelineDetail.tsx` 在**三张卡里都出现**，`design-discipline.test.ts` 在卡 1 / 卡 2 都出现。并行必然冲突，且合并冲突点全在「同类串的第 N 份复制」上，最容易合出错。
-
----
-
-## 卡 1 · `ref-chip`：可点的内联引用
-
-**目标**：补上第三种 chip（`tag` = 用户数据 / `type-badge` = 枚举结构 / **`ref-chip` = 可点**），把手写 8 处的「描边小按钮」收成一份实现，并让「带未保存守卫的引用跳转」有可表达的形态。
-
-**涉及文件**
-
-- 新增 `packages/client/src/components/ui/ref-chip.tsx`
-- 迁移 `8` 处调用点：
-  - `pages/EntityDetail.tsx:619`（上级设定 chip，导航）、`:640`（子设定 chip，导航）、`:458` / `:493`（「变更记录 N 条」toggle，动作）
-  - `pages/TimelineDetail.tsx:514`（挂载节点 chip，导航 + `truncate`）
-  - `pages/HookPanel.tsx:905`（「依赖: …」展开链，动作 + 图标）
-  - `components/ui/tags-editor.tsx:124`（追加既有标签，动作）
-  - `components/timeline/TimelineEvent.tsx:248`（展开 / 收起，动作 + `text-primary`）
-- 守卫 `packages/client/src/design-discipline.test.ts`
-
-**实现骨架**（API 已在设计阶段定稿，不得顺手扩参）
-
-```tsx
-// components/ui/ref-chip.tsx
-type RefChipTone = "default" | "muted" | "primary";
-
-interface RefChipProps {
-  children: ReactNode;
-  to?: string;                 // 渲染 <a href={`#${to}`}>，保住中键 / ⌘ 新标签页
-  onClick?: (e: MouseEvent) => void; // 无 to 时渲染 <button>；与 to 共存时由调用点 preventDefault + 守卫后再 navigate
-  tone?: RefChipTone;          // default = 墨字 / muted = 灰字 hover 转墨 / primary = 主色
-  ariaExpanded?: boolean;      // 展开类动作用，缺省不渲染
-  className?: string;          // ml-1 / shrink-0 / min-w-0 / truncate / text-left / text-xs 由调用点给
-  title?: string;
-}
-// 固定内部类：inline-flex items-center gap-1 rounded-sm border border-border px-1.5 py-0.5
-//             hover:bg-muted focus-visible:outline-1 focus-visible:outline-offset-1 focus-visible:outline-primary
-```
-
-**不变式**
-
-- **不设字号**：跟父级走（正文行 14px / 元信息行 12px）。给组件加 `text-xs` 会把 `EntityDetail` / `TimelineDetail` 的引用 chip 从 14px 降到 12px。
-- **圆角 = `rounded-sm`（4px）**：DESIGN.md §Shapes 把 4px 定给「小内衬块」；6px 是按钮档。这是**可见像素变化**（7 处 6px → 4px），验收必须看图。
-- **不许用 `TypeChip` 加 `onClick` 实现**：`type-badge` 是静态枚举形态，加 hover/焦点会污染「描边 = 类型」的信号。
-- **`to` 与 `onClick` 必须可共存**：仓内已有正确写法 `SettingWorkbench.tsx:216`（`<a href>` + `preventDefault` + `confirmDiscard().then(navigate)`）。只允许二选一的 API 会把「带守卫的引用跳转」逼回手写——正是本次要消掉的那种复制。（本卡**不改行为**：`EntityDetail` 的上级 / 子设定 chip 仍裸跳，绕过 `confirmDiscard` 的存量缺陷已单独登记 `backlog.md`。）
-- 调用点**不得**自拼 `border border-border px-1.5 py-0.5`（守卫会红）。
-
-**守卫（追加到 `design-discipline.test.ts` 的 `RULES`，与既有 9 条同构：正则 + `allow` 白名单 + 自检样例）**
-
-- 规则 `ref-chip-shell`：家族串 `rounded-(?:sm|md) border border-border px-1\.5 py-0\.5` 只允许出现在 `components/ui/ref-chip.tsx`。**不要写成 `rounded-*`**——那是「`rounded` + 零个或多个连字符」，会漏掉全部 `rounded-md` 站点，却命中 `Dashboard.tsx:834/975` 那两个**不迁移**的静态胶囊（裸 `rounded`）。
-- 白名单照抄 `error-banner-shell`（`ERROR_BANNER_ALLOW` + `RULES` 的 `allow`）。`RULES` 现 6 条 + 8 条独立守卫，**不要把条数写进任何契约文档**（数值单源）。
-- 同时在「守卫规则自检」块补一条命中样例（命中违规行、放过 `ref-chip.tsx` 自身）——规则不能识别违规就等于没有。
-
-**验收（硬判据，缺一不 PASS）**
-
-- [ ] `pnpm typecheck` / `pnpm lint` 全绿
-- [ ] `pnpm -r build`（改过 shared 不需要，但守卫测试读源码，先跑一次确认）
-- [ ] `pnpm --filter @whispering233/ai-editor-client test` 全绿（filter 必须逐字等于包名）
-- [ ] SSR 断言：`to` 渲染出 `<a href="#/…">`、只给 `onClick` 渲染出 `<button`、`tone` 三档各渲染出对应字色类
-- [ ] 浏览器核一次像素（**核前整页重载**）：`#/setting/<id>` 的上级 / 子设定 chip、`#/timeline/<id>` 的挂载节点 chip、`#/hooks` 的「依赖:」chip——看圆角 4px、hover 面、Tab 键焦点环
-- [ ] `git status` 干净 + `git log` 含本卡 commit（中文 conventional commit）
-
-**回滚**：单 commit revert（组件与 7 处迁移在同一 commit，避免「组件留着没人用」）。
+- **剩余两张卡串行**（在 main 单写者执行，不开 worktree——本机 worktree 无 `node_modules` / `dist`，`pnpm -r exec` 会拒跑）。
+- 依据：`pages/EntityDetail.tsx` 与 `pages/TimelineDetail.tsx` 在**两张卡里都出现**，`design-discipline.test.ts` 也都出现。并行必然冲突，且冲突点全在「同类串的第 N 份复制」上，最容易合出错。
 
 ---
 
