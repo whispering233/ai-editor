@@ -169,6 +169,21 @@ components:
     textColor: "{colors.tertiary}"
     rounded: "{rounded.md}"
     typography: "{typography.body}"
+  # 受控弹窗（换芯 antd Modal，见 §Components `dialog`）：内边距/圆角钉回换芯前的值——
+  # antd 默认 contentPadding 是 20/24，不钉会让 DialogFooter 的 -mx-4 -mb-4 错位。
+  # **宽度不进 token**：按调用点分档（sm 384 / md 448 / lg 512 / xl 576 / 2xl 672），走 DialogContent 的 width prop。
+  dialog:
+    backgroundColor: "{colors.canvas}"
+    textColor: "{colors.primary}"
+    rounded: "{rounded.md}"
+    padding: "{spacing.md}"
+  # 错误条（唯一实现 components/ui/error-banner.tsx，见 §Components `error-banner`）：
+  # 底色 = error 10% 染色（透明度不在白名单）⇒ 只登记文字/圆角/内边距；字号跟 body（14px）不外推 caption。
+  error-banner:
+    textColor: "{colors.error}"
+    rounded: "{rounded.sm}"
+    padding: "{spacing.xs} {spacing.sm}"
+    typography: "{typography.body}"
   data-row:
     backgroundColor: "{colors.canvas}"
     textColor: "{colors.primary}"
@@ -495,7 +510,7 @@ components:
 
 ## Components
 
-分层原则：**能用 antd 组件的地方不造第二套**（按钮/输入框/卡片/空态/提示全部用 antd），自绘只保留 antd 语义不匹配的浮层（右键菜单/受控 Dialog/轻量 Popover）与业务组件。
+分层原则：**能用 antd 组件的地方不造第二套**（按钮/输入框/卡片/空态/提示全部用 antd），自绘只保留 antd 语义不匹配的浮层（右键菜单 / 轻量 Popover）与业务组件。**受控弹窗已换芯 antd `Modal`（2026-11）**——`components/ui/dialog.tsx` 只保留 API 壳与几何钉子，焦点与叠层语义交给 antd，见 `dialog`。
 
 **描边与阴影的契约（prose 承载）**：DESIGN.md 规范的组件子 token 白名单只有 `backgroundColor/textColor/typography/rounded/padding/size/height/width`，`border`/`shadow` 写进 frontmatter 会被 lint 判为非法键——因此描边与阴影在这一节用文字定稿，也是实现时的唯一依据：
 
@@ -505,7 +520,7 @@ components:
 | main-toolbar（中栏工具栏） | 底部 1px `{colors.hairline}` | 无 |
 | tabs（二级 tab 导航条） | 底部 1px `{colors.hairline}`（即页头分割线）+ 选中项 2px `{colors.primary}` 指示条 | 无 |
 | page-header（页头分割线，无 tab 时） | 底部 1px `{colors.hairline}` | 无 |
-| card / dropdown-panel / toast | 1px `{colors.hairline}` | 仅浮层（dropdown-panel / toast）：`0 8px 24px rgba(15, 15, 15, 0.10)`；card 无 |
+| card / dropdown-panel / toast / dialog | 1px `{colors.hairline}` | 浮层（dropdown-panel / toast / dialog）：`0 8px 24px rgba(15, 15, 15, 0.10)`；card 无 |
 | proposal-card | 1px `{colors.primary}` 25% | 无 |
 | input / select / button-default / search-input | 1px `{colors.hairline-strong}` | 无 |
 | 拖拽插入线（drag-indicator） | 无 | 无（实线 `{colors.primary}` 3px + 两端 8px 圆点） |
@@ -521,6 +536,32 @@ components:
 **`section-title`** — 区块标题，`level={5}`（16px/600）。区块容器用 `card`：1px `{colors.hairline}` + `{rounded.md}` + `{spacing.md}` 内边距，**不带表头底色**（antd Card 默认行为，不用 `headerBg`）。
 **`caption-text`** — metadata/表头/说明，`Typography.Text type="secondary"`（12px `{colors.tertiary}`）。
 **`empty-state`** — 空态：虚线 `{colors.hairline}` 描边 + `{rounded.md}` + 居中 `{colors.tertiary}` 说明 + 可选主操作。antd `Empty` 的插图与外层组件统一（不再各页自画虚线框）。
+
+### 浮层与反馈
+
+**`dialog`（受控弹窗，换芯 antd `Modal`）** — **唯一实现 = `components/ui/dialog.tsx`**，内部壳是 antd `Modal`（`footer={null}` / `closable={false}`——右上关闭钮仍由我们自绘，四条关闭路径见 §设置页「AI 模型」的 `showCloseButton` 写法），**导出 API 与换芯前一致**（`Dialog` + `DialogContent` / `DialogHeader` / `DialogTitle` / `DialogDescription` / `DialogFooter`），**23 个调用点的 JSX 结构不变**。
+
+换芯买到的三件事与它们的**适用范围**：
+
+- **焦点陷阱**（`focusable.trap`）与**关闭后焦点归还触发元素**（`focusable.focusTriggerAfterClose`）：此前自绘实现里一无所有（Tab 会跑到背后页面、关窗后焦点回 `body`）。
+- **`Esc` 只关最顶层 —— 仅限 antd portal 栈内的浮层**（rc-dialog 的 `onEsc({ top })`：`@rc-component/dialog/es/DialogWrap.js` 把 `top` 交给 `@rc-component/portal` 的栈）。**自绘 `popover` / 右键菜单仍是各自的 `window` `keydown`**，而 `stopPropagation` 拦不住同一 target 上的其他监听 ⇒ **弹窗 + Popover（或右键菜单）同时打开时，按一次 `Esc` 仍会关掉两个**。这是已知残留，收口前不得把本条目当成全局承诺。
+
+**几何与内容层的钉子**（不钉就是静默错位）：
+
+- **内边距 16px 挂在 `styles.container`**（antd 默认 `contentPadding` = 20/24、`bodyPadding` = 0）：`DialogFooter` 的 `-mx-4 -mb-4` 依赖这个 16；不钉会让页脚缩进 4~8px。
+- **内容层是 `grid` + `gap 16`**（`styles.body`）：标题 / 说明 / 页脚三段的间距全靠 `DialogContent` 原来那串 `grid gap-4`，antd 的 body 没有 gap ⇒ 不搬过去，全局确认框的三段会贴死。`max-height: calc(100vh - 4rem)` + `overflow-y: auto` 同样跟到 body。
+- **描边 1px `{colors.hairline}`、阴影、遮罩全部走 CSS 变量**：`--ant-color-border-secondary` / `--float-shadow` / `--modal-mask`（后两个定义在 `index.css`，与 `--tag-*` / `--heat-*` 同口径）——**色值不得写进 `dialog.tsx`**：`design-discipline.test.ts` 的 `hardcoded-color` 守卫只放行 `AntdProvider.tsx`，写进 tsx 会红。遮罩 = `--modal-mask` + `backdrop-filter: blur(2px)`（**不是 antd 默认的 45% 黑**）。
+- **宽度只能用 `DialogContent` 的 `width` prop，Tailwind `max-w-*` 一律禁用**：antd 样式是无层注入，`.ant-modal` 自带的 `max-width: calc(100vw - 32px)` 会压掉 `@layer utilities` 里的 `max-w-*`（与 `ant-btn` 注入 `position: relative` 同一根因）。档位常量 = `DIALOG_WIDTHS`（sm 384 / md 448 / lg 512 / xl 576 / 2xl 672，纯函数可单测）。
+- **`showCloseButton` 保留**（无调用点显式传值，但关闭钮必须继续自绘、且 §设置页「AI 模型」引用该行为）；`DialogOverlay` / `DialogPortal` / `DialogTrigger` / `DialogClose` 四个导出删除（换芯前已无外部使用者，但 Content 内部仍在用 Overlay/Close 的等价物，不得连内部实现一起删）。body 滚动锁交回 antd（`scrollLock`），自绘那套删掉以免两套锁互盖。
+- 全局确认框（`ui.confirm()` → `FeedbackHost` → `outline/dialogs.tsx` 的 `ConfirmDialog`）**也走本组件** ⇒ 换芯会连带改变它的外观，核像素时必须包含它。
+
+**`error-banner`（页内 / 栏内错误条，收口）** — **唯一实现 = `components/ui/error-banner.tsx`**。此前的形态是「常量只给壳子、几何由 12 个文件各自拼」：`gap-2` 与 `gap-3` 并存、消息 `ml-auto` 与按钮 `min-w-0 flex-1` 两种布局、按钮位置两种对齐。
+
+- 两种布局：`row`（默认，一行说明 + 右端 24px 小按钮——内联保存失败 / rail 刷新失败）与 `stack`（说明 + 垂直排列的 `block` 按钮——rail 与整页错误态）。
+- **外边距不进组件**：`mb-*` / `mt-*` / `m-*` 由调用点 `className` 传（同 `lib/styles.ts` 已定的「易变属性由调用点决定」——常量一旦含间距类，调用点无法用排序更早的类覆盖）。
+- `onRetry` 缺省时**不渲染**重试按钮；额外动作（「返回列表」/「返回章节目录」/「还原上级」）走 `actions` 插槽。
+- **不属于本控件的三种错误面**（形态与语义都不同，不得迁入）：① `ErrorBoundary` 的整页崩溃兜底（最后一道防线，不属于页内条）；② `FeedbackHost` 的全局错误横幅（`fixed` 顶中 + 阴影，数据源是 ui store 的 `error`）；③ `compute-preview` 的「状态冲突」警示块（带图标 + 条目列表的警示列表，不是一句话 + 重试）。
+- 与 `save-status` 的分工：自动保存失败 = `save-status` 回 `idle` + 本控件（含重试），不静默。
 
 ### 写作面（工具条 / 专注模式）
 
@@ -930,7 +971,7 @@ components:
 - **不要用 Tailwind 类去覆盖 antd 组件根元素上 antd 自己声明的属性**（`width` / `height` / `padding` / `margin` / `font-size` / `color` / `background` / `border` / `border-radius` / `display`）：antd 样式是运行时注入的**无层 CSS**，而 Tailwind 工具类在 `@layer utilities`——按 CSS 级联规范**无层胜出**，此类覆盖会静默失效（历史上满仓 `!` 就是这么来的）。正确做法：宽度/伸缩用**外层容器**承载；具体尺寸用组件 `size`；状态面用组件 `variant`（如 `variant="filled"` = `colorFillTertiary` = `{colors.surface-muted}`）或组件 token
 - **不要让 `:root` 的语义变量失去 `--ant-*` 来源**：`cssVar.key` 与 `index.html` 的 `<html class>` 必须同值（见 §Colors 踩坑段），否则全站语义色集体失效
 - 不用阴影、渐变、彩色 focus 环、卡片 hover 抬升
-- 不引入第二套组件系统（图标只有 `@ant-design/icons`、提示只有 antd `message`、按钮/输入只有 antd）；自绘只限 antd 无对应语义的浮层、业务组件与 `app-mark` / `panel-toggle-icon`（品牌标记与面板开关图标；后者只服务面板开关，不扩散到树行 / accordion / 章节导航）
+- 不引入第二套组件系统（图标只有 `@ant-design/icons`、提示只有 antd `message`、按钮/输入只有 antd）；自绘只限 antd 无对应语义的浮层（右键菜单 / 轻量 Popover）、业务组件与 `app-mark` / `panel-toggle-icon`（品牌标记与面板开关图标；后者只服务面板开关，不扩散到树行 / accordion / 章节导航）。**弹窗不再是自绘例外**：受控弹窗已换芯 antd `Modal`（见 §Components `dialog`）
 - 不用胶囊形按钮；不把彩色用于大面背景或正文（**唯一例外 = 用户自选的写作面纸张**：2 档低饱和纸色，默认仍为 `{colors.canvas}`）
 
 ## Known Gaps
