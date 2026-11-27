@@ -54,6 +54,28 @@ function Dialog({
   return <DialogContext.Provider value={value}>{children}</DialogContext.Provider>;
 }
 
+// 关闭后焦点归还：antd 的 `focusTriggerAfterClose` 在本仓实测拿不到触发器——模态内容在它的
+// effect 跑之前就已获得焦点，它存进 ref 的是模态内元素，关闭后焦点落回 body。这里改记
+// 「最后一个在弹窗外获得焦点的元素」（document 级 focusin，一次注册，与弹窗数量无关）。
+let lastFocusOutsideDialog: HTMLElement | null = null;
+if (typeof document !== "undefined") {
+  document.addEventListener(
+    "focusin",
+    (event) => {
+      const target = event.target;
+      if (!(target instanceof HTMLElement)) return;
+      if (target.closest(".ant-modal")) return; // 弹窗内部（含 close 钮）不算触发器
+      lastFocusOutsideDialog = target;
+    },
+    true,
+  );
+}
+
+function restoreFocusOutsideDialog() {
+  const target = lastFocusOutsideDialog;
+  if (target !== null && target.isConnected) target.focus({ preventScroll: true });
+}
+
 /** 关闭钮（内部用：Content 右上 + Footer 的 showCloseButton；不对外导出） */
 function DialogClose({ children, ...props }: React.ComponentProps<"button">) {
   const ctx = React.useContext(DialogContext);
@@ -69,12 +91,14 @@ const CONTAINER_STYLE: React.CSSProperties = {
   padding: 16,
   border: "1px solid var(--ant-color-border-secondary)",
   boxShadow: "var(--float-shadow)",
+  // 滚动放在容器上而不是 body：body 一旦是滚动容器，页脚的 `-mx-4 -mb-4` 只能抵到内容盒，
+  // 底部会多出一条 16px 白边（实测），换芯前那条通栏页脚就没了
+  maxHeight: "calc(100vh - 4rem)",
+  overflowY: "auto",
 };
 const BODY_STYLE: React.CSSProperties = {
   display: "grid",
   gap: 16,
-  maxHeight: "calc(100vh - 4rem)",
-  overflowY: "auto",
   padding: 0,
 };
 const MASK_STYLE: React.CSSProperties = {
@@ -92,11 +116,15 @@ function DialogContent({
   width?: DialogWidth;
 }) {
   const ctx = React.useContext(DialogContext);
+  // 调用点有两种形态：`<Dialog open>` 常挂（关闭走 open=false）与 `{open && <Dialog open>}`
+  // （关闭=整棵子树卸载）。后者不会触发 Modal 的 afterClose ⇒ 卸载也要归还一次焦点。
+  React.useEffect(() => () => restoreFocusOutsideDialog(), []);
   if (ctx === null) return null;
   return (
     <Modal
       open={ctx.open}
       onCancel={ctx.close}
+      afterClose={restoreFocusOutsideDialog}
       footer={null}
       closable={false}
       centered

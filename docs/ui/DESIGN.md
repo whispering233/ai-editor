@@ -543,13 +543,14 @@ components:
 
 换芯买到的三件事与它们的**适用范围**：
 
-- **焦点陷阱**（`focusable.trap`）与**关闭后焦点归还触发元素**（`focusable.focusTriggerAfterClose`）：此前自绘实现里一无所有（Tab 会跑到背后页面、关窗后焦点回 `body`）。
+- **焦点陷阱**（`focusable.trap`）：浏览器实测 30 次 `Tab` 不出 `.ant-modal-wrap`（折返边界会有一帧落在 `body`，是 antd lock-focus 哨兵的正常行为）。
+- **关闭后焦点归还**在 antd 侧**不生效**：模态内容的聚焦早于它保存 `activeElement` 的 effect ⇒ 它存进 ref 的是模态内元素，关闭后焦点落回 `body`。因此本组件自己记——document 级 `focusin` 记住「最后一个在弹窗外获得焦点的元素」，在 `afterClose` **与卸载时各归还一次**（调用点有 `<Dialog open>` 常挂 与 `{open && <Dialog open>}` 两种形态，后者关闭 = 整棵子树卸载，不会触发 `afterClose`）。
 - **`Esc` 只关最顶层 —— 仅限 antd portal 栈内的浮层**（rc-dialog 的 `onEsc({ top })`：`@rc-component/dialog/es/DialogWrap.js` 把 `top` 交给 `@rc-component/portal` 的栈）。**自绘 `popover` / 右键菜单仍是各自的 `window` `keydown`**，而 `stopPropagation` 拦不住同一 target 上的其他监听 ⇒ **弹窗 + Popover（或右键菜单）同时打开时，按一次 `Esc` 仍会关掉两个**。这是已知残留，收口前不得把本条目当成全局承诺。
 
 **几何与内容层的钉子**（不钉就是静默错位）：
 
 - **内边距 16px 挂在 `styles.container`**（antd 默认 `contentPadding` = 20/24、`bodyPadding` = 0）：`DialogFooter` 的 `-mx-4 -mb-4` 依赖这个 16；不钉会让页脚缩进 4~8px。
-- **内容层是 `grid` + `gap 16`**（`styles.body`）：标题 / 说明 / 页脚三段的间距全靠 `DialogContent` 原来那串 `grid gap-4`，antd 的 body 没有 gap ⇒ 不搬过去，全局确认框的三段会贴死。`max-height: calc(100vh - 4rem)` + `overflow-y: auto` 同样跟到 body。
+- **内容层是 `grid` + `gap 16`**（`styles.body`）：标题 / 说明 / 页脚三段的间距全靠 `DialogContent` 原来那串 `grid gap-4`，antd 的 body 没有 gap ⇒ 不搬过去，全局确认框的三段会贴死。**滚动容器是 `.ant-modal-container` 而不是 body**：body 一旦 `overflow-y: auto`，页脚的 `-mx-4 -mb-4` 只能抵到内容盒，底部会多出一条 16px 白边（实测），通栏页脚就没了；挂到 container 上页脚才贴底（实测缝隙 = 0.667px 边框）。
 - **描边 1px `{colors.hairline}`、阴影、遮罩全部走 CSS 变量**：`--ant-color-border-secondary` / `--float-shadow` / `--modal-mask`（后两个定义在 `index.css`，与 `--tag-*` / `--heat-*` 同口径）——**色值不得写进 `dialog.tsx`**：`design-discipline.test.ts` 的 `hardcoded-color` 守卫只放行 `AntdProvider.tsx`，写进 tsx 会红。遮罩 = `--modal-mask` + `backdrop-filter: blur(2px)`（**不是 antd 默认的 45% 黑**）。
 - **宽度只能用 `DialogContent` 的 `width` prop，Tailwind `max-w-*` 一律禁用**：antd 样式是无层注入，`.ant-modal` 自带的 `max-width: calc(100vw - 32px)` 会压掉 `@layer utilities` 里的 `max-w-*`（与 `ant-btn` 注入 `position: relative` 同一根因）。档位常量 = `DIALOG_WIDTHS`（sm 384 / md 448 / lg 512 / xl 576 / 2xl 672，纯函数可单测）。
 - **`showCloseButton` 保留**（无调用点显式传值，但关闭钮必须继续自绘、且 §设置页「AI 模型」引用该行为）；`DialogOverlay` / `DialogPortal` / `DialogTrigger` / `DialogClose` 四个导出删除（换芯前已无外部使用者，但 Content 内部仍在用 Overlay/Close 的等价物，不得连内部实现一起删）。body 滚动锁交回 antd（`scrollLock`），自绘那套删掉以免两套锁互盖。
