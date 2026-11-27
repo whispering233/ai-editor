@@ -19,5 +19,5 @@ export function FieldError({
   as?: "p" | "span";
 }): ReactElement {
   const Tag = as;
-  return <Tag className={cn("text-xs text-destructive", className)}>{children}</Tag>;
+  return <Tag className={cn("text-xs text-error-text", className)}>{children}</Tag>;
 }

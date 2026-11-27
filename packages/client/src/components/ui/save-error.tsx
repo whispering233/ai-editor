@@ -16,5 +16,5 @@ export function SaveError({
   children: ReactNode;
   className?: string;
 }): ReactElement {
-  return <p className={cn("text-sm text-destructive", className)}>{children}</p>;
+  return <p className={cn("text-sm text-error-text", className)}>{children}</p>;
 }

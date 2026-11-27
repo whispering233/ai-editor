@@ -320,6 +320,7 @@ components:
 - **Link (#0075de)**：**正文 / 富文本内**链接专用（由块编辑器渲染；`colorLink` token 仍登记给 antd 组件）——与 primary 分工明确：**正文链接是蓝的，界面操作的按钮是墨的**。**UI 文案里的行内可点文本不走本条**（见 §Components `inline-link`）。
 - **Character Role (#b4551f 浅色 / #ef8354 深色)**：人物页左栏「角色定位」字色（`{typography.caption}` 小字）。**两态不同值**：原橙 `#ef8354` 当作文字压在白底上只有 2.61:1（12px 小字远低于 4.5:1），所以浅色态用同色相加深的 `#b4551f`（on 白 4.93:1 / on 选中灰面 4.60:1），深色态用原橙（on 深面板 6.24:1）。色相一致（H22 / H18），肉眼是同一个橙的深浅。
 - **Success (#1aae39) / Warning (#dd5b00) / Error (#e03131)**：语义三色，只用于状态（成功提示、校验失败、危险操作确认）。
+- **Error text（#c02828 浅色 / #f06a63 深色，2026-11）**：错误**文案**专用色（`--error-text`，只由 `components/ui/field-error.tsx` 与 `save-error.tsx` 经 `text-error-text` 消费）。**与 Error 分工**：`colorError` 管危险按钮 / 警告图标等**面与图标**；把 12px 小字直接写成 `text-destructive` 时实测不达标（浅色灰底 4.14:1、深色容器底 3.61:1，均低于 WCAG AA 小字号 4.5:1）⇒ 文案单开一对值：浅 `#c02828`（白底 5.87 / 灰底 5.39）、深 `#f06a63`（容器 5.39 / 布局 5.82 / 首帧兜底底 6.09）。**不新增语义**（仍是错误，只是给它一个可读的深/浅档）；值只定义在 `index.css`，`components/antd-tokens.test.ts` 直读该文件断言两态 × 各底色的对比度。
 
 ### 标签色（tint 系，Notion database property 的回声）
 

@@ -10,6 +10,7 @@
 // 这类「测试全绿但像素全错」的 token 派生坑和 `cssvar-scope` / `button-variant-color` 同类，
 // 必须在 token 层（而非元素层）拦——故断言派生后的**对比度**而不是某个具体色值。
 // 第二个同源坑（Alert info 面，`colorInfoBg`）见下面第一条用例：坑形一样、面不同。
+import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { theme } from "antd";
 import { COMPONENT_TOKENS_DARK, COMPONENT_TOKENS_LIGHT, DARK_TOKEN, LIGHT_TOKEN } from "./AntdProvider";
@@ -153,6 +154,47 @@ describe("行高/缩进列几何（大纲页缩进列对齐依赖的 antd 值）
       const token = theme.getDesignToken(config);
       expect(token.controlHeightSM, `${name} controlHeightSM`).toBe(SMALL_ICON_ONLY_WIDTH_PX);
       expect(token.controlHeight * 0.75, `${name} controlHeight×0.75`).toBe(SMALL_ICON_ONLY_WIDTH_PX);
+    }
+  });
+});
+
+describe("错误文案色（field-error / save-error）的对比度", () => {
+  // 为什么需要它：两个错误 primitive 用 `text-error-text`，色值定义在 `index.css` 的 `--error-text`
+  // （浅 / 深两态各一份，**不另存于 TS**）。antd 的 `colorError`（#e03131）在浅色 layout 底上只有
+  // 4.14:1、深色容器底 3.61:1——均低于 WCAG AA 小字号 4.5:1，而错误文案恰是 12px 小字。
+  // 归并成两个 primitive 后它是唯一落点 ⇒ 在这里把「两态 × 各底色」钉住（改色必须同步本断言）。
+  const CSS = readFileSync(new URL("../index.css", import.meta.url), "utf8").replace(
+    /\/\*[\s\S]*?\*\//g,
+    "",
+  );
+  const hexes = [...CSS.matchAll(/--error-text:\s*(#[0-9a-f]{6})/gi)].map((m) => m[1]!);
+
+  /** 两个不透明色的 WCAG 对比度（本用例的两端都是实色，不需要 `over` 合成） */
+  function solidContrast(fg: string, bg: string): number {
+    const [fr, fgG, fb] = parseColor(fg);
+    const [br, bgG, bb] = parseColor(bg);
+    const a = luminance([fr!, fgG!, fb!]);
+    const b = luminance([br!, bgG!, bb!]);
+    const [hi, lo] = a > b ? [a, b] : [b, a];
+    return (hi + 0.05) / (lo + 0.05);
+  }
+
+  it("index.css 里正好一对（浅色在前、深色在后），且两态不同值", () => {
+    expect(hexes, `index.css 的 --error-text：${hexes.join(" / ")}`).toHaveLength(2);
+    expect(hexes[0]).not.toBe(hexes[1]);
+  });
+
+  it("浅色态：白底（卡片）与灰底（页面）都 ≥ 4.5:1", () => {
+    const light = hexes[0]!;
+    for (const bg of ["#ffffff", "#f6f5f4"]) {
+      expect(solidContrast(light, bg), `${light} on ${bg}`).toBeGreaterThanOrEqual(4.5);
+    }
+  });
+
+  it("深色态：容器 / 布局 / 首帧兜底底都 ≥ 4.5:1", () => {
+    const dark = hexes[1]!;
+    for (const bg of ["#202020", "#191919", "#141414"]) {
+      expect(solidContrast(dark, bg), `${dark} on ${bg}`).toBeGreaterThanOrEqual(4.5);
     }
   });
 });

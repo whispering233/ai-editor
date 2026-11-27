@@ -64,6 +64,12 @@
   --color-type-badge-border: var(--type-badge-border);
   --color-type-badge-border-soft: var(--type-badge-border-soft);
   --color-character-role: var(--character-role);
+  /* 错误文案色（`field-error` / `save-error`）：不能直接用 `text-destructive`——antd 的 `colorError`
+     在浅色 layout 底（`#f6f5f4`）上只有 4.14:1、深色容器底上 3.61:1，均不达 WCAG AA 小字号 4.5:1。
+     本对值实测：浅 `#c02828` → 白底 5.87 / 灰底 5.39；深 `#f06a63` → 容器 5.39 / 布局 5.82 /
+     首帧底 6.09。**不改 `colorError` 本体**（它还管危险按钮与警告图标）。
+     对比度断言见 `components/antd-tokens.test.ts`（直读本文件的变量，不另存一份色值）*/
+  --color-error-text: var(--error-text);
 }
 
 /* 标签 tint 色值（浅色 = DESIGN.md §Colors 登记值；深色 = 同色相 20% 不透明度叠在深色面板上
@@ -86,6 +92,8 @@
   --type-badge-border-soft: #787671;
   /* 人物页左栏「角色定位」字色（浅色态加深到 4.93:1；深色态换回原橙 6.24:1）*/
   --character-role: #b4551f;
+  /* 错误文案色（深浅两态的分工见 `@theme inline` 的说明）*/
+  --error-text: #c02828;
   /* 写作面纸张（DESIGN.md §Colors「写作面偏好」，浅色 = 登记值 colors.paper-cream / paper-warm）——
      色值唯一定义处就在这里（同 --tag-* 口径）；CSS 侧只有 blocknote.css 消费（`--paper-bg` 的间接引用），
      变量本体由 use-writing-prefs 经 style 下传，
@@ -109,6 +117,8 @@
   --heat-3: #26a641;
   --heat-4: #39d353;
   --character-role: #ef8354;
+  /* 错误文案色（深色态）：容器底 #202020 上 5.39:1、布局底 #191919 上 5.82:1 */
+  --error-text: #f06a63;
   /* 章节层级徽标软灰：深底上浅灰（vs 深底 4.84:1）；浅色态见 :root */
   --type-badge-border-soft: rgba(255, 255, 255, 0.51);
   /* 纸张深色值 = 「暖色深色纸」推断值（DESIGN.md §Known gaps：「纸张深色值未与实机比对」）——
